@@ -70,3 +70,7 @@ Use `python3 scripts/agents.py install --target /path/to/project --module all --
 ## Write rollback (developer preview)
 
 Installer output is staged in the target directory and existing file bytes are captured before replacement. On a detected write exception the installer attempts to restore files that were replaced. This is not a guarantee against power loss, concurrent modifications, or hostile filesystem races; back up affected files before `--force`.
+
+## Preview changes before applying
+
+`python3 scripts/agents.py install --target /path/to/project --module java --tool all --diff` prints a unified diff for each generated adapter file without writing any files, including when the target already contains older agent definitions. Review the diff before selecting `--force`. This is a local filesystem preview, not proof that a host will recognize or execute the agent.
