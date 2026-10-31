@@ -7,7 +7,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-MODULES = {"java", "react", "shared"}
+MODULES = {"java", "spring", "react", "shared"}
 KEYS = {"name", "description", "scope"}
 SLUG = re.compile(r"^[a-z][a-z0-9-]{2,63}$")
 
