@@ -67,6 +67,14 @@ The cross-provider benchmark harness now records external Codex, Claude, Copilot
 
 All 22 specialists now include source-grounded review requirements: verified file locations, explicit static-versus-runtime evidence, root-cause deduplication, contract-aware severity, and minimal version-specific fixes. Automated tests check that these rules survive generation for all four hosts; **live model quality improvements remain unproven**. See [Agent quality standard](docs/agent-quality-standard.md).
 
+## Evidence audit (opt-in)
+
+All 22 agents now include an outcome-aware review protocol. The [review proof gate](docs/review-proof-gate.md) adds an independent CLI that checks structured findings against exact source lines, source hashes, contract references and duplicate root causes. These checks are **not proof of semantic correctness or model superiority**.
+
+```bash
+python3 scripts/audit_review_evidence.py --root /path/to/project --report /path/to/review.json
+```
+
 ## Documentation
 
 [Getting started](docs/getting-started.md) · [Workflows](docs/workflows.md) · [Architecture](docs/architecture.md) · [Pros & cons](docs/pros-cons.md) · [Evaluations](docs/evaluations.md) · [Benchmark protocol](docs/benchmark-protocol.md) · [Roadmap](docs/roadmap.md) · [Release gates](docs/release-gates.md) · [Host compatibility](docs/host-compatibility.md)
