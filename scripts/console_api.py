@@ -4,7 +4,6 @@
 Optionally accepts bounded local-only chat prompts; never commands or credentials.
 """
 import argparse
-import os
 from local_chat import installed_models, chat, MAX_REQUEST
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -65,7 +64,12 @@ def make_handler(records_dir=None, enable_chat=False):
                 elif path.path == "/api/agents":
                     payload = {"agents": agent_data(), "source": "repository"}
                 elif path.path == "/api/models":
-                    payload = {"models": installed_models() if enable_chat else [], "provider": "ollama-local", "chat_enabled": enable_chat}
+                    try:
+                        names = installed_models() if enable_chat else []
+                        available = enable_chat
+                    except (OSError, ValueError, KeyError, TypeError):
+                        names, available = [], False
+                    payload = {"models": names, "provider": "ollama-local", "chat_enabled": available}
                 elif path.path == "/api/benchmarks":
                     payload = benchmark_data(records_dir)
                 else:
