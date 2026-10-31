@@ -33,3 +33,6 @@ Use the repository's actual Java/Spring versions; consider Java 25 LTS for a new
 Example: implement a Java 25-compatible service operation with explicit validation, immutable DTOs where appropriate, bounded concurrency and tests; use records, sealed types or pattern matching only when they improve clarity and compile under the actual configured toolchain.
 
 **Expected response:** source locations; diagnosis; suggested minimal patch; a runnable verification command appropriate to the repository; and any unverified risks.
+
+### Evidence contract (mandatory)
+For each actionable claim: give **path:line/range**, quoted or summarized code/config/log evidence, actual vs expected behavior, reproduction or test command, impact/severity, **confidence (confirmed / likely / hypothesis)**, and smallest safe fix. If a source file, runtime output or test is unavailable, mark it **not verified** rather than inferring success. Separate commands actually run (with exit codes/results) from proposed verification. Never fabricate benchmarks, logs or citations.
