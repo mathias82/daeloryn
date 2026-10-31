@@ -145,7 +145,6 @@ function App() {
   async function send(event: React.FormEvent) {
     event.preventDefault();
     const text=draft.trim();
-    setRepositoryConfirmed(false);
     if (!text || sending) return;
     const stamp=Date.now(), targetSession=sessionId;
     const selectedModel=provider==='copilot'?copilotModel:model;
@@ -172,7 +171,7 @@ function App() {
             if (data && typeof data==='object' && 'repository' in data &&
                 data.repository && typeof data.repository==='object' &&
                 'name' in data.repository && typeof data.repository.name==='string')
-              setRepositoryRecommendation(data.repository.name);
+              setRepositoryRecommendation(previous=>repositoryConfirmed?previous:data.repository.name);
             else setRepositoryRecommendation('No unique repository match');
           } else setRepositoryRecommendation('Repository recommendation unavailable');
         } catch { setRepositoryRecommendation('Repository recommendation unavailable'); }
