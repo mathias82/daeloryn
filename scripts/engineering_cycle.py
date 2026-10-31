@@ -20,6 +20,7 @@ from engineering_context import pack
 from engineering_handoff import seal, current, fingerprint, validate_fix
 from engineering_telemetry import Telemetry
 from openai_artifact_adapter import invoke
+import engineering_repair
 from verify_implementation import digest, read_file, write_files, verify
 
 STAGES = ('review', 'implement', 'verify')
@@ -71,6 +72,7 @@ def connect(path):
                '(seq INTEGER PRIMARY KEY, run TEXT, stage TEXT, status TEXT, at INTEGER)')
     db.execute('CREATE TABLE IF NOT EXISTS engineering_provider_results '
                '(run TEXT, stage TEXT, attempt INTEGER, metadata TEXT, PRIMARY KEY(run,stage,attempt))')
+    engineering_repair.install(db)
     return db
 
 
@@ -79,7 +81,8 @@ def event(db, run, stage, status):
                (run, stage, status, time.time_ns()))
 
 
-def begin(db, trial, arm='daeloryn', model=None, max_bytes=196608, deduplicate=False):
+def begin(db, trial, arm='daeloryn', model=None, max_bytes=196608, deduplicate=False,
+          reviewer_agent='java-reviewer', developer_agent='java-developer'):
     if arm not in ('baseline', 'daeloryn'):
         raise ValueError('unknown trial arm')
     trial = Path(trial).resolve(strict=True)
@@ -93,11 +96,17 @@ def begin(db, trial, arm='daeloryn', model=None, max_bytes=196608, deduplicate=F
     for name, expected in files.items():
         if digest(read_file(trial / arm, name)) != expected:
             raise ValueError('trial arm already differs from pinned original: ' + name)
-    agents = {m['name']: digest(body.encode()) for m, body in catalog()
-              if m['name'] in ('java-reviewer', 'java-developer')}
+    definitions = {m['name']: body for m, body in catalog()}
+    if reviewer_agent not in definitions or developer_agent not in definitions:
+        raise ValueError('unknown reviewer/developer agent')
+    if 'reviewer' in developer_agent or 'architect' in developer_agent:
+        raise ValueError('read-only review/architecture agents cannot be repair executors')
+    agents = {name: digest(definitions[name].encode())
+              for name in (reviewer_agent, developer_agent)}
     config = {'trial': str(trial), 'arm': arm, 'model': model, 'max_bytes': max_bytes,
               'manifest_sha256': digest(manifest_bytes), 'agent_sha256': agents,
-              'deduplicate_context': bool(deduplicate)}
+              'deduplicate_context': bool(deduplicate),
+              'reviewer_agent': reviewer_agent, 'developer_agent': developer_agent}
     run = uuid.uuid4().hex
     db.execute('BEGIN IMMEDIATE')
     try:
@@ -127,7 +136,10 @@ def status(db, run):
     outcome = None
     if states['verify']['status'] == 'completed':
         outcome = artifact(db, run, 'verify')['status']
-    return {'run_id': run, 'stages': {stage: states[stage] for stage in STAGES},
+    repair_row = db.execute('SELECT state,result FROM engineering_repairs WHERE run=?', (run,)).fetchone()
+    repair_state = None if repair_row is None else {
+        'state': repair_row[0], 'outcome': json.loads(repair_row[1])['status'] if repair_row[1] else None}
+    return {'run_id': run, 'repair': repair_state, 'stages': {stage: states[stage] for stage in STAGES},
             'verification_outcome': outcome, 'accepted': outcome == 'passed'}
 
 
@@ -168,6 +180,8 @@ def claim(db, run, stage):
     try:
         for prerequisite in STAGES[:STAGES.index(stage)]:
             artifact(db, run, prerequisite)
+        if stage == 'verify':
+            engineering_repair.selection(db, run, None)
         row = db.execute('SELECT status,attempt FROM engineering_stages WHERE run=? AND stage=?',
                          (run, stage)).fetchone()
         if row is None or row[0] != 'pending' or row[1] >= 3:
@@ -234,7 +248,7 @@ def advance(db, run, stage, *, imported=None, execute_provider=False, execute_ch
         with telemetry.span(run, stage) as attributes:
             if stage == 'verify':
                 handoff = artifact(db, run, 'review')
-                submission = artifact(db, run, 'implement')
+                submission = engineering_repair.selection(db, run, artifact(db, run, 'implement'))
                 validated = validate_fix(root, handoff, submission, manifest['editable'])
                 if not validated['ready_for_verification']:
                     raise ValueError('unresolved/rejected findings require operator review; not accepted as complete')
@@ -256,13 +270,13 @@ def advance(db, run, stage, *, imported=None, execute_provider=False, execute_ch
                 attributes['exit_code'] = 0 if result['status'] == 'passed' else 1
             else:
                 task = REVIEW_TASK
-                agent = 'java-reviewer' if config['arm'] == 'daeloryn' else None
+                agent = config.get('reviewer_agent', 'java-reviewer') if config['arm'] == 'daeloryn' else None
                 if stage == 'implement':
                     handoff = artifact(db, run, 'review')
                     current(root, handoff)
                     task = FIX_TASK + '\n' + encoded({'review_sha256': fingerprint(handoff),
                         'review': handoff['review'], 'editable': manifest['editable']})
-                    agent = 'java-developer' if config['arm'] == 'daeloryn' else None
+                    agent = config.get('developer_agent', 'java-developer') if config['arm'] == 'daeloryn' else None
                 context = pack(root, manifest['source_sha256'], agent, task,
                                max_bytes=config['max_bytes'], deduplicate=config['deduplicate_context'])
                 attributes['input_sha256'] = context['context_sha256']
@@ -302,10 +316,20 @@ def main():
     p.add_argument('--arm', choices=('baseline', 'daeloryn'), default='daeloryn')
     p.add_argument('--model'); p.add_argument('--max-context-bytes', type=int, default=196608)
     p.add_argument('--deduplicate-context', action='store_true')
+    p.add_argument('--reviewer-agent', default='java-reviewer')
+    p.add_argument('--developer-agent', default='java-developer')
     p = sub.add_parser('status'); p.add_argument('--run', required=True)
     p = sub.add_parser('step'); p.add_argument('--run', required=True)
     p.add_argument('--stage', choices=STAGES, required=True)
     p.add_argument('--import-artifact', type=Path); p.add_argument('--trace', type=Path)
+    p.add_argument('--execute-provider', action='store_true')
+    p.add_argument('--execute-checks', action='store_true')
+    p.add_argument('--allow-host-execution', action='store_true'); p.add_argument('--sandbox-image')
+    p = sub.add_parser('repair'); p.add_argument('--run', required=True)
+    p.add_argument('--plan', type=Path, required=True)
+    p.add_argument('--max-repairs', type=int, default=3)
+    p.add_argument('--max-seconds', type=int, default=300)
+    p.add_argument('--max-output-tokens', type=int, default=4096)
     p.add_argument('--execute-provider', action='store_true')
     p.add_argument('--execute-checks', action='store_true')
     p.add_argument('--allow-host-execution', action='store_true'); p.add_argument('--sandbox-image')
@@ -316,9 +340,16 @@ def main():
     db = connect(args.db)
     try:
         if args.command == 'start':
-            result = {'run_id': begin(db, args.trial, args.arm, args.model, args.max_context_bytes, args.deduplicate_context)}
+            result = {'run_id': begin(db, args.trial, args.arm, args.model, args.max_context_bytes, args.deduplicate_context,
+                                      args.reviewer_agent, args.developer_agent)}
         elif args.command == 'status':
             result = status(db, args.run)
+        elif args.command == 'repair':
+            result = engineering_repair.run(db, args.run, json.loads(args.plan.read_text()),
+                max_repairs=args.max_repairs, max_seconds=args.max_seconds,
+                max_output_tokens=args.max_output_tokens, execute_provider=args.execute_provider,
+                execute_checks=args.execute_checks, allow_host=args.allow_host_execution,
+                sandbox_image=args.sandbox_image)
         elif args.command == 'recover':
             recover(db, args.run, args.stage, acknowledge_unknown=args.acknowledge_unknown_outcome)
             result = status(db, args.run)
@@ -332,6 +363,8 @@ def main():
             if telemetry.dropped:
                 sys.stderr.write('WARNING: telemetry delivery failed; business outcome preserved\n')
         print(json.dumps(result, indent=2))
+        if args.command == 'repair' and result['status'] != 'passed':
+            return 1
     except (ValueError, OSError, RuntimeError) as error:
         # Do not print untrusted provider error content or credentials.
         parser.exit(2, 'ERROR: ' + type(error).__name__ + '; inspect stage status and operator inputs\n')
@@ -340,4 +373,4 @@ def main():
 
 
 if __name__ == '__main__':
-    main()
+    sys.exit(main())

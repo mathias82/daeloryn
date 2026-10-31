@@ -41,3 +41,10 @@ The engineering cycle can transmit explicitly selected source to OpenAI only wit
 ## Compiler, mutation and contract checks
 
 Java impact analysis compiles only its trusted helper, disables project annotation processing and implicit source lookup, and analyzes selected source snapshots without generating/executing application bytecode. Mutation execution runs operator-selected evaluator commands/candidate code only with explicit opt-in; it retains the host/container boundaries documented for implementation verification. Contract checks are local, hash-pinned and do not fetch external references. The OpenAPI subset returns unknown for unsupported/security-changing constructs. Native Avro checking is an optional pinned dependency included in audit/SBOM workflows. None of these results grants deployment or authorization approval.
+
+
+### Optional automatic repair execution
+
+`engineering_cycle.py repair` can transmit the selected candidate, original review, and explicitly public visible tests to the data-only provider, and execute an operator-owned test argv in disposable copies. It requires provider/check opt-ins plus a reviewed digest-pinned container or explicit host execution. Protect the local SQLite database: it contains replacement code and visible-test provenance. The tool does not grant permissions, change host security policy, execute model-selected commands, or bypass the legacy approval service.
+
+Visible-suite inputs are pinned and cannot be replaced through model artifacts. Independent evaluator feedback is withheld. This separation depends on the operator choosing appropriate tests and commands; path/hash checks do not prove semantic secrecy, prevent malicious stdout forgery, or sandbox host processes. Timeouts/unknown provider outcomes stop without automatic retry. In-flight/unknown repair loops require reconciliation and a new run rather than an implicit retry. Existing container restrictions and explicit host-execution risks still apply. Security changes here are the addition of this opt-in execution path and its bounded scheduling/persistence; no production credentials or access policy are modified.

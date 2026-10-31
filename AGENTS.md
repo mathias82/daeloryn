@@ -1,6 +1,6 @@
 # Repository instructions
 
-This repository distributes agent definitions, a Python installer, evaluation utilities and a declarative workflow planner and local manual-handoff state machine; it does not automatically invoke AI agents or deploy software.
+This repository distributes agent definitions, a Python installer, evaluation utilities and a declarative workflow planner and local manual-handoff state machine; its optional local engineering-cycle CLI can invoke a data-only AI API and run explicitly authorized disposable checks. It does not deploy software or control existing IDE agent sessions.
 
 - Agent definitions live only in `agents/<module>/<name>.md`, using three-field YAML-style frontmatter: `name`, `description`, `scope`.
 - Keep agents original, actionable, concise and technology-specific; avoid copying third-party prompts.
