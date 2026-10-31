@@ -64,6 +64,21 @@ The command prints `PASS` or `FAIL`, exact source SHA-256 hashes and finding-spe
 
 **The audit does not prove semantic causality, security exploitability, that a build ran, or that a proposed patch works.** It rejects structural errors and mismatched actual source lines. A passing audit is **not** a quality score.
 
+### Pin the reviewed source revision
+
+For CI or later re-audits, add a top-level `source_sha256` object to the review report. Map every cited source and contract path to its lowercase SHA-256 digest, calculated from the **raw file bytes at review time**. Use canonical project-relative paths, for example `src/Example.java`. The audit output already contains this mapping for successfully located evidence; retain it only after verifying that this is the revision actually reviewed. Do not refresh hashes just to make a stale review pass.
+
+```bash
+python3 /path/to/daeloryn/scripts/audit_review_evidence.py \
+  --root /path/to/reviewed/project \
+  --report /path/to/review-report.json \
+  --require-source-hashes
+```
+
+Strict mode rejects a missing manifest. When a manifest is supplied, both modes reject missing cited hashes, mismatches and unused entries. Even a change outside a quoted line invalidates that file's pinned digest. Reports without a manifest remain supported in the default mode. Each resolved file is read once per audit so repeated citations use the same bytes.
+
+Digests detect revision mismatches; they do not authenticate the reviewer, establish when a review occurred, or prove its conclusions. Run against a stable checkout: this is not an atomic snapshot of a directory being concurrently modified. Runtime commands and exit codes are still self-reported, and this tool never executes report content. Malformed enum values are rejected as audit issues; invalid report-level schema or hash manifests produce a CLI usage error.
+
 ## 4. Prove the fix against failures, not just happy paths
 
 For each verified root cause, require these checks when applicable:

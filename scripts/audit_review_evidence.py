@@ -8,6 +8,7 @@ whether a contract is genuine or whether a test was really executed.
 import argparse
 import hashlib
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -20,21 +21,35 @@ def nonempty(value):
     return isinstance(value, str) and bool(value.strip())
 
 
-def audit(root, report):
+def audit(root, report, *, require_source_hashes=False):
     """Return a deterministic source-evidence audit; do not execute code."""
     root = Path(root).expanduser().resolve(strict=True)
     if not root.is_dir():
         raise ValueError("root must be a directory")
-    if not isinstance(report, dict) or report.get("schema_version") != 1:
+    if (not isinstance(report, dict)
+            or type(report.get("schema_version")) is not int
+            or report.get("schema_version") != 1):
         raise ValueError("report requires schema_version=1")
     findings = report.get("findings")
     if not isinstance(findings, list):
         raise ValueError("findings must be a list")
 
+    expected_hashes = report.get("source_sha256")
+    if require_source_hashes and expected_hashes is None:
+        raise ValueError("source_sha256 is required in snapshot mode")
+    if expected_hashes is not None:
+        if not isinstance(expected_hashes, dict) or not all(
+            nonempty(name) and isinstance(digest, str)
+            and re.fullmatch(r"[0-9a-f]{64}", digest)
+            for name, digest in expected_hashes.items()
+        ):
+            raise ValueError("source_sha256 must map source paths to lowercase SHA-256 digests")
+
     issues = []
     seen_ids = set()
     seen_causes = set()
     sources = {}
+    source_cache = {}
 
     def fail(fid, code, detail):
         issues.append({"finding": fid, "code": code, "detail": detail})
@@ -51,14 +66,17 @@ def audit(root, report):
         if path.is_absolute() or any(part in ("..", ".") for part in path.parts):
             fail(fid, "UNSAFE_PATH", name)
             return False
-        resolved = (root / path).resolve()
-        if not resolved.is_relative_to(root) or not resolved.is_file():
-            fail(fid, "UNAVAILABLE_SOURCE", name)
-            return False
         try:
-            data = resolved.read_bytes()
-            lines = data.decode("utf-8").splitlines()
-        except (OSError, UnicodeError):
+            resolved = (root / path).resolve()
+            if not resolved.is_relative_to(root) or not resolved.is_file():
+                fail(fid, "UNAVAILABLE_SOURCE", name)
+                return False
+            if resolved not in source_cache:
+                data = resolved.read_bytes()
+                source_cache[resolved] = (data.decode("utf-8").splitlines(),
+                                          hashlib.sha256(data).hexdigest())
+            lines, digest = source_cache[resolved]
+        except (OSError, UnicodeError, ValueError, RuntimeError):
             fail(fid, "UNREADABLE_SOURCE", name)
             return False
         if line < 1 or line > len(lines):
@@ -67,7 +85,15 @@ def audit(root, report):
         if "\n" in quote or "\r" in quote or quote.strip() not in lines[line - 1]:
             fail(fid, "QUOTE_NOT_ON_LINE", name + ":" + str(line))
             return False
-        sources[path.as_posix()] = hashlib.sha256(data).hexdigest()
+        canonical = path.as_posix()
+        sources[canonical] = digest
+        if expected_hashes is not None:
+            if canonical not in expected_hashes:
+                fail(fid, "MISSING_SOURCE_HASH", canonical)
+                return False
+            if expected_hashes[canonical] != digest:
+                fail(fid, "SOURCE_HASH_MISMATCH", canonical)
+                return False
         return True
 
     for index, finding in enumerate(findings):
@@ -85,11 +111,12 @@ def audit(root, report):
 
         disposition = finding.get("disposition")
         level = finding.get("evidence_level")
-        if disposition not in DISPOSITIONS:
+        if not isinstance(disposition, str) or disposition not in DISPOSITIONS:
             fail(fid, "INVALID_DISPOSITION", "use ACTIONABLE, CONDITIONAL or DISCARD")
             continue
-        if level not in LEVELS:
+        if not isinstance(level, str) or level not in LEVELS:
             fail(fid, "INVALID_LEVEL", "unsupported evidence level")
+            continue
         if disposition == "ACTIONABLE" and level not in {"STATICALLY VERIFIED", "RUNTIME REPRODUCED"}:
             fail(fid, "UNSUPPORTED_ACTIONABLE", "likely or contract-dependent is not verified")
         if disposition == "CONDITIONAL" and level not in {"LIKELY", "CONTRACT-DEPENDENT"}:
@@ -106,7 +133,7 @@ def audit(root, report):
                 seen_causes.add(normalized)
             evidence(fid, finding.get("source"), "source")
             basis = finding.get("invariant_basis")
-            if basis not in {"SOURCE_SEMANTICS", "DOCUMENTED_CONTRACT", "OBSERVED_RUNTIME"}:
+            if not isinstance(basis, str) or basis not in {"SOURCE_SEMANTICS", "DOCUMENTED_CONTRACT", "OBSERVED_RUNTIME"}:
                 fail(fid, "UNKNOWN_CONTRACT_BASIS", "declare how the invariant is evidenced")
             elif basis == "DOCUMENTED_CONTRACT":
                 evidence(fid, finding.get("contract_evidence"), "contract_evidence")
@@ -117,7 +144,7 @@ def audit(root, report):
                 run = finding.get("runtime_evidence")
                 if not isinstance(run, dict) or not all(
                     nonempty(run.get(key)) for key in ("command", "observed_output")
-                ) or not isinstance(run.get("exit_code"), int):
+                ) or type(run.get("exit_code")) is not int:
                     fail(fid, "MISSING_RUNTIME_RECORD", "provide actual command, output and exit code")
         elif disposition == "CONDITIONAL":
             if not nonempty(finding.get("missing_evidence")):
@@ -126,6 +153,10 @@ def audit(root, report):
                 evidence(fid, finding["source"], "source")
         elif finding.get("source") is not None:
             evidence(fid, finding["source"], "source")
+
+    if expected_hashes is not None:
+        for name in sorted(set(expected_hashes) - set(sources)):
+            fail("#report", "UNUSED_SOURCE_HASH", name)
 
     return {
         "schema_version": 1,
@@ -146,9 +177,12 @@ def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--root", type=Path, required=True, help="project checkout")
     parser.add_argument("--report", type=Path, required=True, help="structured review JSON")
+    parser.add_argument("--require-source-hashes", action="store_true",
+                        help="require pinned hashes for every cited source file")
     args = parser.parse_args()
     try:
-        result = audit(args.root, json.loads(args.report.read_text(encoding="utf-8")))
+        result = audit(args.root, json.loads(args.report.read_text(encoding="utf-8")),
+                       require_source_hashes=args.require_source_hashes)
     except (OSError, ValueError, json.JSONDecodeError) as exc:
         parser.error(str(exc))
     print(json.dumps(result, indent=2, sort_keys=True))
