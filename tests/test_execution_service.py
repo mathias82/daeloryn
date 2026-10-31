@@ -11,7 +11,7 @@ ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"scripts"))
 from execution_service import describe, complete_from_file, approve_verified, preview
 from secure_runtime import connect, create, advance, digest
-from agent_adapter import Invocation, prepare, execute
+from agent_adapter import Invocation, prepare, execute, execute_isolated
 
 class ServiceTests(unittest.TestCase):
     def test_plan_is_read_only(self):
@@ -53,6 +53,20 @@ class ServiceTests(unittest.TestCase):
             execute(request)
         with self.assertRaises(ValueError):
             prepare(Invocation("unknown","a","r","s","hello"))
+
+    def test_isolated_adapter_opt_in_and_no_implicit_completion(self):
+        request=Invocation("codex","java-reviewer","run-1","review","Review source")
+        image="example.invalid/agent@sha256:" + "a"*64
+        with self.assertRaises(ValueError):
+            execute_isolated(request,image)
+        with patch("sandbox_runner.run") as runner:
+            runner.return_value.returncode=0
+            runner.return_value.stdout="static review"
+            runner.return_value.stderr=""
+            result=execute_isolated(request,image,enabled=True)
+            runner.assert_called_once_with(image,"Review source",enabled=True,timeout=60)
+            self.assertFalse(result["completed_workflow_step"])
+            self.assertFalse(result["credentials_loaded"])
 
     def test_concurrent_completion_exactly_once(self):
         with tempfile.TemporaryDirectory() as temp:
