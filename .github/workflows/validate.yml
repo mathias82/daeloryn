@@ -15,5 +15,7 @@ jobs:
           python-version: '3.11'
       - name: Validate catalog
         run: python3 scripts/agents.py validate
+      - name: Validate platform benchmark reference data
+        run: python3 scripts/evaluate_platform.py
       - name: Run installer tests
         run: python3 -m unittest discover -s tests -v
