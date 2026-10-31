@@ -7,6 +7,7 @@ import argparse
 from copilot_chat import copilot_chat
 from copilot_auto import available_models, route_chat
 from agent_router import recommend
+from repository_router import discover, suggest
 from local_chat import installed_models, chat, MAX_REQUEST
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -43,7 +44,7 @@ def benchmark_data(records_dir=None):
     return matrix(records)
 
 
-def make_handler(records_dir=None, enable_chat=False, enable_copilot=False):
+def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repository_roots=()):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             host = self.headers.get("Host", "")
@@ -77,6 +78,9 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False):
                     except (RuntimeError, OSError, ValueError, TimeoutError):
                         self.reply(503, {"error": "Copilot model discovery unavailable"})
                         return
+                elif path.path == "/api/repositories":
+                    payload = {"repositories": discover(repository_roots), "source": "configured-local-checkouts",
+                               "execution_enabled": False}
                 elif path.path == "/api/agents":
                     payload = {"agents": agent_data(), "source": "repository"}
                 elif path.path == "/api/agent-routing":
@@ -108,6 +112,27 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False):
                                                   "http://127.0.0.1:" + str(self.server.server_port),
                                                   "http://localhost:" + str(self.server.server_port)):
                 self.reply(403, {"error": "untrusted request origin"})
+                return
+            if self.path == "/api/repository-routing":
+                if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                    self.reply(415, {"error": "JSON required"})
+                    return
+                length = self.headers.get("Content-Length", "")
+                if not length.isdigit() or not 0 < int(length) <= 4096:
+                    self.reply(413, {"error": "invalid request size"})
+                    return
+                try:
+                    payload = json.loads(self.rfile.read(int(length)))
+                    if not isinstance(payload, dict) or set(payload) != {"task"}:
+                        raise ValueError("task required")
+                    result = suggest(payload["task"], discover(repository_roots))
+                except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+                    self.reply(400, {"error": "invalid routing request"})
+                    return
+                except OSError:
+                    self.reply(503, {"error": "repository discovery unavailable"})
+                    return
+                self.reply(200, result)
                 return
             if self.path == "/api/agent-routing":
                 if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
@@ -205,12 +230,17 @@ def main():
     p.add_argument("--enable-copilot-chat", action="store_true", help="opt in to Copilot CLI inference")
     p.add_argument("--enable-local-chat", action="store_true", help="opt in to local Ollama inference")
     p.add_argument("--records-dir", type=Path)
+    p.add_argument("--repository-root", type=Path, action="append", default=[], help="trusted parent directory of local git checkouts (repeatable)")
     a = p.parse_args()
     if not 1024 <= a.port <= 65535:
         p.error("port must be 1024..65535")
     if a.records_dir is not None and (a.records_dir.is_symlink() or not a.records_dir.is_dir()):
         p.error("records-dir must be an existing real directory")
-    server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(a.records_dir, a.enable_local_chat, a.enable_copilot_chat))
+    try:
+        discover(a.repository_root)
+    except (OSError, ValueError) as exc:
+        p.error("invalid repository roots: " + str(exc))
+    server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(a.records_dir, a.enable_local_chat, a.enable_copilot_chat, a.repository_root))
     print("Daeloryn local console API listening on http://127.0.0.1:" + str(a.port), flush=True)
     try:
         server.serve_forever()
