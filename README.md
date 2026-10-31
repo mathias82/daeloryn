@@ -49,6 +49,10 @@ The new `scripts/execution_service.py` provides a common SQLite workflow CLI wit
 
 Unify the current components into a single execution service with **real AI-provider integrations**, **controlled credentials**, **isolated execution**, **externally enforced approvals**, and **auditable state transitions**. See the [roadmap](docs/roadmap.md).
 
+## Cross-stack evaluations
+
+An additional offline reference corpus covers **Java 25, Spring, React and Kubernetes**, with 4 unsafe fixtures and 8 expected findings. CI validates fixture labels and scoring tests; actual model accuracy has **not** been measured. [Evaluation protocol](docs/evaluations.md).
+
 ## Documentation
 
 [Getting started](docs/getting-started.md) · [Workflows](docs/workflows.md) · [Architecture](docs/architecture.md) · [Pros & cons](docs/pros-cons.md) · [Evaluations](docs/evaluations.md) · [Roadmap](docs/roadmap.md)
