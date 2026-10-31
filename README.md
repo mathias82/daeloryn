@@ -19,7 +19,7 @@ Collections of generic prompts are easy to publish and hard to verify. This repo
 | React | react-developer | TypeScript and accessible React implementation |
 | React | react-reviewer | Accessibility, correctness and browser security |
 | React | react-testing | Vitest, Testing Library and Playwright |
-| Shared | security-reviewer | Threat modeling and secure review across stacks |
+| Platform | kubernetes-engineer | Cluster workloads and troubleshooting |\n| Platform | docker-engineer | Reproducible, hardened images |\n| Platform | cicd-engineer | GitHub Actions, GitLab CI, Azure Pipelines |\n| Platform | gitops-engineer | Argo CD, Flux, Helm, Kustomize |\n| Platform | platform-security-engineer | Workload and supply-chain security |\n| Platform | reliability-engineer | SLOs, probes, rollouts, observability |\n| Shared | security-reviewer | Threat modeling and secure review across stacks |
 | Shared | integration-reviewer | REST/OpenAPI, authentication and end-to-end compatibility |
 
 Each file in `agents/<module>/*.md` is the canonical source. **Do not edit generated adapters**.
@@ -30,7 +30,7 @@ Requires **Python 3.11+**. Run from a clone of this repository:
 
 ```bash
 python3 scripts/agents.py validate
-python3 scripts/agents.py install --target /path/to/your/project --module java --tool codex\npython3 scripts/agents.py install --target /path/to/your/project --module spring --tool all
+python3 scripts/agents.py install --target /path/to/your/project --module java --tool codex\npython3 scripts/agents.py install --target /path/to/your/project --module spring --tool all\npython3 scripts/agents.py install --target /path/to/your/project --module platform --tool all
 python3 scripts/agents.py install --target /path/to/your/project --module react --tool claude
 python3 scripts/agents.py install --target /path/to/your/project --module shared --tool both
 python3 scripts/agents.py install --target /path/to/your/project --module all --tool copilot
@@ -63,7 +63,7 @@ python3 scripts/agents.py validate
 python3 -m unittest discover -s tests -v
 ```
 
-## Spring-specific design research\n\nThe Spring module uses our own original prompts, influenced by documented engineering gaps in [rrezartprebreza/spring-boot-skills](https://github.com/rrezartprebreza/spring-boot-skills), [Dancan254/spring-boot-skills](https://github.com/Dancan254/spring-boot-skills), [rynr/spring-skills](https://github.com/rynr/spring-skills), and [a-pavithraa/springboot-skills-marketplace](https://github.com/a-pavithraa/springboot-skills-marketplace). We use separate specialists rather than duplicating their skills; independent prompt-quality evaluations are still outstanding.\n\n## Roadmap
+## Spring-specific design research\n\nThe Spring module uses our own original prompts, influenced by documented engineering gaps in [rrezartprebreza/spring-boot-skills](https://github.com/rrezartprebreza/spring-boot-skills), [Dancan254/spring-boot-skills](https://github.com/Dancan254/spring-boot-skills), [rynr/spring-skills](https://github.com/rynr/spring-skills), and [a-pavithraa/springboot-skills-marketplace](https://github.com/a-pavithraa/springboot-skills-marketplace). We use separate specialists rather than duplicating their skills; independent prompt-quality evaluations are still outstanding.\n\n## Platform engineering rationale\n\nOur original agents emphasize operational evidence, deployment safety, build provenance, hardening and rollback. Design inputs include the [FluxCD official GitOps skills](https://github.com/fluxcd/agent-skills), [cloud-native agent skills](https://github.com/glapsfun/cnative-skills), and the [Kubernetes security checklist](https://kubernetes.io/docs/concepts/security/security-checklist/). No third-party agent instructions were copied.\n\n## Roadmap
 
 - [x] Canonical source and modular catalog
 - [x] Codex, Claude Code, GitHub Copilot and Gemini CLI adapters with safe overwrite behavior
