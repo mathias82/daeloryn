@@ -2,6 +2,7 @@
 import re
 from code_context import scan
 from architecture_inventory import inventory
+from review_action_plan import plan
 from agent_router import recommend
 
 RULES = (
@@ -27,10 +28,12 @@ def review(root, repository, task):
                                  "file": file["path"], "line": line,
                                  "evidence": message, "suggested_fix": remedy,
                                  "confidence": "pattern-match"})
-    return {"repository": repository, "findings": findings[:100],
+    result = {"repository": repository, "findings": findings[:100],
             "architecture": inventory(context),
             "agent_recommendation": recommend(task),
             "source_files_scanned": context["files_read"],
             "skipped": context["skipped"],
             "execution": "not_run", "changes_made": False,
             "limitations": "Pattern matches are review leads, not verified defects; no tests executed"}
+    result["remediation_plan"] = plan(result)
+    return result
