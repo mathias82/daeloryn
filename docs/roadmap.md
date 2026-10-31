@@ -32,6 +32,15 @@ Bring the current planning, state, approval and sandbox components under one ser
 
 The unified service is **not implemented yet**. Existing components are experimental and must not independently authorize production deployments.
 
+## Benchmark harness
+
+- [x] JSON recorder for externally obtained Codex, Claude, Copilot and Gemini outputs
+- [x] Source-line/quote evidence consistency audit and reproducible finding-ID scoring
+- [x] Summary that identifies missing providers rather than fabricating scores
+- [x] Documented blinded baseline-versus-specialist protocol and human evidence rubric
+- [ ] Actual provider runs on identical cases with provenance and independently reviewed evidence
+- [ ] Repeated experiments, time/token-cost measurements and held-out regression corpus
+
 ## Further work
 
 - Independent benchmarks with blinded reference labels and human adjudication
