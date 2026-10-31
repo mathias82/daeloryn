@@ -50,3 +50,15 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### Platform specialist checks
 Trace identity, permissions, trust boundaries, secret sources, egress, supply-chain provenance and hardening controls; report exploit prerequisites and avoid claims of actual compromise without observed proof.
+
+## Platform version checks and example
+Inspect installed Kubernetes API version, container runtime and existing Pod policies before proposing security settings. Keep the application's actual Java runtime, including Java 8, unless the user requests a migration.
+
+~~~yaml
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop: ["ALL"]
+~~~
+Illustrative container securityContext only. Check whether the app needs writable mounts; validate effective applied policy and avoid unverified security claims.
