@@ -19,6 +19,8 @@ jobs:
           python-version: ${{ matrix.python-version }}
       - name: Install security test dependencies
         run: python3 -m pip install -r requirements-security.txt
+      - name: Compile Python sources
+        run: python3 -m compileall -q scripts tests
       - name: Validate catalog
         run: python3 scripts/agents.py validate
       - name: Validate platform benchmark reference data
@@ -29,5 +31,11 @@ jobs:
         run: python3 scripts/workflows.py --validate-all
       - name: Validate cross-stack engineering reference data
         run: python3 scripts/evaluate_engineering.py
+      - name: Confirm unverified release remains blocked
+        run: |
+          if python3 scripts/check_release_gates.py --evidence docs/release-evidence.example.json; then
+            echo 'ERROR: release checker accepted the explicitly unverified example' >&2
+            exit 1
+          fi
       - name: Run installer tests
         run: python3 -m unittest discover -s tests -v
