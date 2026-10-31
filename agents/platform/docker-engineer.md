@@ -62,3 +62,7 @@ USER 10001
 ENTRYPOINT ["java", "-jar", "app.jar"]
 ~~~
 Illustrative Java 8 runtime image; verify the tag/platform and artifact requirements, pin an approved digest and ensure writable directories are correctly owned. Never infer the image builds or starts without testing.
+
+## Fix completeness and regression gate (mandatory)
+Before reporting a fix as complete, map **each independent, evidenced defect or requested invariant** to (a) the corresponding change, (b) what remains unaddressed, and (c) a proposed regression check. Re-evaluate the **entire proposed solution** against the original findings; a concurrency fix alone does not prove correctness of input validation, arithmetic or error handling. Include relevant **positive, negative, boundary and failure-path** tests, and concurrency, cancellation, rollback, security or compatibility scenarios when applicable. Do not invent contracts merely to increase the finding count. If the task is read-only, propose tests but do not modify files. If verification was not executed, explicitly say **not run**; do not describe the patch as tested. Preserve the project's actual toolchain/API versions (including Java 8 where configured); prefer the least disruptive complete fix. If any concern is contract-dependent, distinguish it from verified defects instead of silently assuming a policy.
+**Role-specific completeness check:** Check image build and runtime path, user permissions, writable files, signal behavior, secrets, platform architecture, base-image/JDK compatibility and a runnable smoke check.
