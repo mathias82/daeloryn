@@ -124,3 +124,23 @@ The Daeloryn agent selector is still **preview-only**. Model routing does not
 activate agent profiles or grant workspace access. CLI and SDK installation,
 authentication, model entitlements and real model inference must be validated
 on the operator's machine.
+
+## Local repository discovery (opt-in, advisory only)
+
+Start the console with a trusted local parent directory of Git checkouts:
+`python3 scripts/console_api.py --enable-copilot-chat --repository-root /path/to/workspaces`.
+Repeat `--repository-root` for additional directories (maximum 10).
+Without this option, no local repositories are exposed.
+
+`GET /api/repositories` lists up to 100 direct child directories with
+non-symlink `.git` directories and reports basic technology markers from
+file names only. `POST /api/repository-routing` accepts
+`{"task":"Review payments Java service"}` and returns a conservative
+suggestion. Ambiguous matches are not selected. Every suggestion requires
+explicit user confirmation. No cloning, repository contents reading, GitHub
+token use, remote GitHub API access, or agent execution occurs.
+
+The Chat UI can show local repositories and a suggested repository; the
+current Copilot chat adapter does **not** use the repository, even after UI
+selection. Do not treat the selector as authorization for filesystem access.
+Git worktrees with a `.git` file are intentionally excluded.
