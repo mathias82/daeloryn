@@ -35,7 +35,7 @@ def index(root, paths, release, classpath=()):
     java_version = version.stdout.splitlines()[0] if version.stdout else 'unknown'
     helper = ROOT / 'scripts/java/ImpactIndex.java'
     with tempfile.TemporaryDirectory(prefix='semantic-index-') as tmp:
-        snapshot = Path(tmp) / 'source'
+        snapshot = (Path(tmp) / 'source').resolve()
         write_files(snapshot,sources)
         compiler = [shutil.which('javac')] if shutil.which('javac') else [java, '-m', 'jdk.compiler/com.sun.tools.javac.Main']
         build = subprocess.run(compiler + ['-proc:none', '-d', tmp, str(helper)],

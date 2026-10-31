@@ -54,7 +54,7 @@ public final class ImpactIndex {
             final Trees trees = Trees.instance(task);
             final Elements elements = task.getElements();
             for (final CompilationUnitTree unit : units) {
-                final String path = root.relativize(Paths.get(unit.getSourceFile().toUri())).toString().replace('\\', '/');
+                final String path = root.relativize(Paths.get(unit.getSourceFile().toUri()).toRealPath()).toString().replace('\\', '/');
                 new TreePathScanner<Void, String>() {
                     private String define(Tree node) {
                         Element element = trees.getElement(getCurrentPath());

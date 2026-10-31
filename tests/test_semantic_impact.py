@@ -1,5 +1,7 @@
 """Real javac symbol resolution. Requires a JDK 17+ compiler (no source execution)."""
 import copy
+from contextlib import nullcontext
+from unittest.mock import patch
 from pathlib import Path
 import sys
 import tempfile
@@ -71,6 +73,18 @@ class SemanticImpactTests(unittest.TestCase):
             (root / 'Bad.java').write_text('public class Bad { int broken( }')
             result = index(root, ['Bad.java'], '8')
             self.assertEqual('incomplete', result['analysis_status'])
+
+    def test_symlinked_system_temp_directory_keeps_canonical_project_paths(self):
+        # macOS commonly exposes /var/folders through /private/var/folders.
+        with tempfile.TemporaryDirectory() as parent:
+            base=Path(parent)
+            real=base/'real-temp'; real.mkdir()
+            alias=base/'temp-alias'; alias.symlink_to(real,target_is_directory=True)
+            with patch('semantic_impact.tempfile.TemporaryDirectory',return_value=nullcontext(str(alias))):
+                result=index(self.root,list(self.files),'8')
+            self.assertEqual('complete',result['analysis_status'])
+            self.assertTrue(all(d['path'] in self.files for d in result['definitions']))
+            self.assertIn('app/Client.java',impact(result,['a/Price.java'])['potentially_affected'])
 
     def test_symlinks_invalid_release_and_unknown_changed_file_rejected(self):
         with tempfile.TemporaryDirectory() as tmp:
