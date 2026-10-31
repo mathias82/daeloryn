@@ -1,0 +1,49 @@
+import sys
+import tempfile
+import tomllib
+import unittest
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
+from agents import catalog, install
+
+class AgentTests(unittest.TestCase):
+    def test_catalog_is_unique_and_valid(self):
+        agents = catalog()
+        self.assertEqual(len(agents), 10)
+        self.assertEqual(len({a[0]["name"] for a in agents}), 10)
+
+    def test_install_java_codex(self):
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp)
+            self.assertEqual(install(target, "java", "codex"), 4)
+            result = target / ".codex/agents/java-developer.toml"
+            config = tomllib.loads(result.read_text())
+            self.assertEqual(config["name"], "java-developer")
+            self.assertIn("Spring Boot", config["developer_instructions"])
+
+    def test_install_react_claude(self):
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp)
+            self.assertEqual(install(target, "react", "claude"), 4)
+            self.assertTrue((target / ".claude/agents/react-reviewer.md").exists())
+
+    def test_no_overwrite_without_force(self):
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp)
+            install(target, "shared", "both")
+            with self.assertRaises(FileExistsError):
+                install(target, "shared", "both")
+            self.assertEqual(install(target, "shared", "both", force=True), 4)
+
+    def test_reject_symlink_destination(self):
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp)
+            other = Path(temp) / "outside"
+            other.mkdir()
+            (target / ".codex").symlink_to(other, target_is_directory=True)
+            with self.assertRaises(ValueError):
+                install(target, "java", "codex")
+
+if __name__ == "__main__":
+    unittest.main()
