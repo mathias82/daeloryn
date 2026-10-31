@@ -3,8 +3,8 @@
 Requires Python 3.11+ and a checkout of this repository.
 
 ```bash
-git clone https://github.com/mathias82/enterprise-engineering-agents.git
-cd enterprise-engineering-agents
+git clone https://github.com/mathias82/daeloryn.git
+cd daeloryn
 python3 scripts/agents.py validate
 python3 -m unittest discover -s tests -v
 ```
@@ -65,7 +65,7 @@ The installer also preflights every destination ancestor for symlinks, including
 
 ## Dry-run preview
 
-Use `python3 scripts/agents.py install --target /path/to/project --module all --tool all --dry-run` to run destination preflight and list intended files without writing any outputs. The installer is **not yet transactional** if an unexpected mid-write failure occurs; back up before using `--force`.
+Use `python3 scripts/agents.py install --target /path/to/project --module all --tool all --dry-run` to run destination preflight and list intended files without writing any outputs. The installer stages outputs and attempts rollback after detected write errors, but does not guarantee atomicity across files, crash recovery, or protection against concurrent filesystem changes. Back up existing files before using `--force`.
 
 ## Write rollback (developer preview)
 
