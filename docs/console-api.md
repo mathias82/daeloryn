@@ -161,3 +161,13 @@ repository access. The existing local checkout routing remains separate.
 Do not expose this loopback API via a public proxy: repository names may be
 sensitive. When `gh` is missing or authentication fails, the API returns
 503 without exposing CLI stderr.
+
+## Read-only local project fingerprint
+
+With one or more `--repository-root` options, POST
+`/api/project-analysis` with `{"repository":"checkout-name"}` to inspect
+top-level technology marker file **names** and direct child directory names.
+The checkout must resolve uniquely among configured roots and contain a
+non-symlink `.git` directory. No source file contents are read, no commands
+are executed, and no modifications are made. This endpoint does not yet
+support remote GitHub repositories, deep dependency inspection or agent execution.
