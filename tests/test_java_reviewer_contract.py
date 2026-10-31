@@ -10,17 +10,17 @@ class JavaReviewerContractTests(unittest.TestCase):
     def test_required_review_guardrails(self):
         instructions = REVIEWER.read_text(encoding="utf-8").lower()
         for phrase in (
-            "line accuracy",
+            "Target isolation and real source lines",
             "statically verified",
             "runtime reproduced",
-            "no duplicate inflation",
-            "contract-aware severity",
-            "java-version fidelity",
-            "fix consistency",
+            "One finding per independent root cause",
+            "Contract-sensitive claims and severity",
+            "Version-first review rules",
+            "Java semantics and fix integrity",
             "concurrenthashmap",
             "math.addexact",
             "semaphore",
-            "not verified / contract questions",
+            "Contract-dependent observations",
         ):
             with self.subTest(rule=phrase):
                 self.assertIn(phrase, instructions)
@@ -35,7 +35,7 @@ class JavaReviewerContractTests(unittest.TestCase):
             output = (Path(directory) / ".github" / "agents" / "java-reviewer.agent.md").read_text(encoding="utf-8")
             self.assertIn("Review accuracy protocol (mandatory)", output)
             self.assertIn("runtime reproduced", output)
-            self.assertIn("no duplicate inflation", output)
+            self.assertIn("One finding per independent root cause", output)
 
 
 if __name__ == "__main__":
