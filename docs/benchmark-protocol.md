@@ -121,3 +121,30 @@ reports only in private access-controlled storage, inspect/redact before
 sharing, and do not upload them as public CI artifacts. Timeouts leave
 remote outcomes unknown; do not automatically retry. This opt-in capture
 is a building block, not a completed four-provider unattended benchmark.
+
+## Full catalog coverage matrix and machine-readable dashboard
+
+```bash
+python3 scripts/benchmark_matrix.py --output /private/reports/coverage.json
+python3 scripts/benchmark_matrix.py /private/trials/*.json
+```
+
+The matrix is derived from the **current** agent catalog and four named
+providers, with separate baseline and specialist arms. For 22 agents this
+means 176 expected agent/provider/arm cells, not 176 completed experiments.
+Missing cells are explicit. Records must use schema version 1, kind
+`benchmark-trial`, and provide `agent`, `provider`, `arm`,
+`run_id`, and an evaluator `outcome` (one of the paired evaluator
+outcomes). Duplicates and unknown catalog entries are rejected.
+
+A record counts toward verified outcomes only if
+`model_identity_verified`, `agent_selection_verified`,
+`independent_checks_executed`, and `comparable` are all true.
+These are **attestations supplied by the trial operator**, not independently
+validated cryptographic proofs; preserve evidence and review externally.
+Do not synthesize benchmark-trial records from CLI exit codes alone.
+
+This is a coverage/reporting stage. Fully unattended, securely isolated
+provider execution across all 22 agents remains a separate integration task,
+requiring each provider's supported CLI/SDK contract, authorized credentials,
+per-agent benchmark tasks, trusted external isolation and human review.
