@@ -53,3 +53,13 @@ Every one of the **22** canonical agents contains a mandatory `Fix completeness 
 The [shared quality-rule worked examples](agent-rule-worked-examples.md) give before/after patterns for each of the six common evidence/quality rules. They are teaching materials, **not** proof that the models follow each rule. Specialty-specific rules still require the domain context and actual dependencies.
 
 Do not claim a fix is complete until its proposed patch is re-evaluated against **all independently supported defects**, conditional contract assumptions are called out, and missing/failed verification is explicitly recorded.
+
+## Evidence-gated recommendations across all 22 agents
+
+Every agent now contains a mandatory `Source-evidence gate for all recommendations`. An agent must inspect the user's **actual requested code, build/configuration or observed logs**, verify real file lines and relevant toolchain, and establish a credible trigger and violated invariant **before** claiming a defect or prescribing a defect fix. Generic hardening, style opinions, hypothetical risks, or assumptions about API requirements are **not confirmed findings**.
+
+Use `STATICALLY VERIFIED` only for demonstrated source semantics; this is not an executed reproduction. Use `RUNTIME REPRODUCED` only after a genuinely run test and observed output. Use `LIKELY` or `CONTRACT-DEPENDENT` where callers, reachability or policy remain unknown; list what evidence would settle it. The `java-reviewer` additionally uses an adversarial check that attempts to **falsify** each candidate finding, deduplicates root causes, and discards unsupported issues. Correct code paths must remain correct, without invented flaws.
+
+A user-requested new feature or architecture may be discussed as an **explicit design proposal**, even when there is no pre-existing code; proposals cannot be disguised as diagnosed bugs. All fixes must be checked against the actual source/version and all supported findings, with unexecuted checks marked `not run`.
+
+The `tests/test_source_evidence_gate.py` suite checks the 22 definitions and generated 88 host adapters for these instructions. **Passing those tests verifies only text and installation, not behavioral compliance or superior model quality.** External outputs still require blinded benchmarking and human verification of actual source-grounded claims.
