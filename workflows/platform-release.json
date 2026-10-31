@@ -36,6 +36,13 @@
       "depends_on": [
         "delivery"
       ]
+    },
+    {
+      "id": "release-review",
+      "agent": "reliability-engineer",
+      "depends_on": [
+        "approval"
+      ]
     }
   ]
 }
