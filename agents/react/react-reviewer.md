@@ -46,3 +46,18 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### React specialist checks
 Focus on real race conditions, stale state, React rendering semantics, escaping/XSS sinks, keyboard accessibility and route authorization. Confirm XSS reachability and prevent false positives from React's default escaping.
+
+## Version check and concrete request-race review
+Read package.json, lockfile and React version. Preserve the project's supported hooks and network APIs; don't assume a React 19 upgrade.
+
+~~~tsx
+useEffect(() => {
+  const controller = new AbortController();
+  fetch(url, { signal: controller.signal })
+    .then(r => r.json())
+    .then(setResults)
+    .catch(e => { if (e.name !== 'AbortError') setError(e); });
+  return () => controller.abort();
+}, [url]);
+~~~
+React 16.8+ illustrative component snippet. In real code check HTTP response statuses, browser support, network errors and whether the data library already cancels stale requests. Cite actual source lines before calling a race a defect.
