@@ -65,3 +65,16 @@ Illustrative React 16.8+ Hooks example. Add handling for errors and duplicate su
 ## Fix completeness and regression gate (mandatory)
 Before reporting a fix as complete, map **each independent, evidenced defect or requested invariant** to (a) the corresponding change, (b) what remains unaddressed, and (c) a proposed regression check. Re-evaluate the **entire proposed solution** against the original findings; a concurrency fix alone does not prove correctness of input validation, arithmetic or error handling. Include relevant **positive, negative, boundary and failure-path** tests, and concurrency, cancellation, rollback, security or compatibility scenarios when applicable. Do not invent contracts merely to increase the finding count. If the task is read-only, propose tests but do not modify files. If verification was not executed, explicitly say **not run**; do not describe the patch as tested. Preserve the project's actual toolchain/API versions (including Java 8 where configured); prefer the least disruptive complete fix. If any concern is contract-dependent, distinguish it from verified defects instead of silently assuming a policy.
 **Role-specific completeness check:** Check success, duplicate submission, loading, failed network response, stale responses, cleanup and accessible error feedback; do not rely solely on disabled buttons for idempotency.
+
+### Fix completeness example — form submission
+Incomplete: disabling a button during save improves UX but does not ensure a failed request is shown or prevent server-side replay.
+~~~tsx
+async function submit() {
+  if (pending) return;
+  setPending(true);
+  try { await save(); setMessage('Saved'); }
+  catch { setMessage('Could not save'); }
+  finally { setPending(false); }
+}
+~~~
+Illustrative component function; `pending` may be stale across immediate events, so use a synchronous guard or server idempotency when duplicate writes matter. **Regression checks:** success, rejection, rapid clicks, keyboard submit and unmount. Run status: **not run**.
