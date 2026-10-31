@@ -61,7 +61,13 @@ def encoded(value):
 
 def connect(path):
     path = Path(path).absolute()
-    if path.resolve() != path:
+    # Normalize macOS system aliases (for example /var -> /private/var)
+    # while rejecting a symlink at the database file itself.
+    parent = path.parent.resolve(strict=True)
+    if not parent.is_dir() or path.name in ('', '.', '..'):
+        raise ValueError('invalid database path')
+    path = parent / path.name
+    if path.is_symlink():
         raise ValueError('database symlink paths rejected')
     if not path.exists():
         try:
