@@ -6,6 +6,7 @@ Optionally accepts bounded local-only chat prompts; never commands or credential
 import argparse
 from copilot_chat import copilot_chat
 from copilot_auto import available_models, route_chat
+from agent_router import recommend
 from local_chat import installed_models, chat, MAX_REQUEST
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -78,6 +79,9 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False):
                         return
                 elif path.path == "/api/agents":
                     payload = {"agents": agent_data(), "source": "repository"}
+                elif path.path == "/api/agent-routing":
+                    self.reply(405, {"error": "POST required"})
+                    return
                 elif path.path == "/api/models":
                     try:
                         names = installed_models() if enable_chat else []
@@ -104,6 +108,24 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False):
                                                   "http://127.0.0.1:" + str(self.server.server_port),
                                                   "http://localhost:" + str(self.server.server_port)):
                 self.reply(403, {"error": "untrusted request origin"})
+                return
+            if self.path == "/api/agent-routing":
+                if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                    self.reply(415, {"error": "JSON required"})
+                    return
+                length = self.headers.get("Content-Length", "")
+                if not length.isdigit() or not 0 < int(length) <= 4096:
+                    self.reply(413, {"error": "invalid request size"})
+                    return
+                try:
+                    payload = json.loads(self.rfile.read(int(length)))
+                    if not isinstance(payload, dict) or set(payload) != {"task"}:
+                        raise ValueError("task required")
+                    result = recommend(payload["task"])
+                except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+                    self.reply(400, {"error": "invalid routing request"})
+                    return
+                self.reply(200, result)
                 return
             if self.path == "/api/copilot/chat":
                 if not enable_copilot:

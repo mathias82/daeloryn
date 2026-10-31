@@ -32,6 +32,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_console_api.py' -v
           python3 -m unittest discover -s tests -p 'test_copilot_chat.py' -v
           python3 -m unittest discover -s tests -p 'test_copilot_auto.py' -v
+          python3 -m unittest discover -s tests -p 'test_agent_router.py' -v
           python3 -m unittest discover -s tests -p 'test_copilot_console_api.py' -v
           python3 -m unittest discover -s tests -p 'test_local_chat.py' -v
   frontend:
