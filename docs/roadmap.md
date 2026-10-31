@@ -10,6 +10,8 @@
 
 ## Not yet complete
 
+- Real execution adapters, persisted step state, retry budgets and human approval enforcement for workflow orchestration
+
 - Reproducible end-to-end agent invocation tests in all four coding tools
 - Independent benchmark runs with hidden reference labels and human adjudication
 - More comprehensive Spring/Java/React regression fixtures
