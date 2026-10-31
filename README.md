@@ -101,3 +101,12 @@ adds an opt-in five-case development extension without changing the original 23 
 [Copilot model routing](docs/model-routing.md) discovers host models and selects a
 requested model by task/risk policy; native execution is explicit and live behavior
 still requires validation on a compatible installed SDK/CLI.
+
+## Single-command checkout verification (experimental)
+
+For the frozen Java 8 checkout exercise, [`scripts/checkout_workflow.py`](docs/checkout-workflow.md)
+chains Copilot source review, operator-approved interactive fixes, and pinned
+independent contract/recovery checks into one opt-in command. Approval prompts
+remain interactive and verification runs only after explicit operator consent.
+This is a developer workflow for trusted disposable copies, **not** production
+autonomy, a security sandbox, or evidence that Daeloryn outperforms Copilot.
