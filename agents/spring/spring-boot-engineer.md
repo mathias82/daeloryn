@@ -30,7 +30,7 @@ Never invent API signatures, test results, compatibility or documentation. Do no
 - Inspect source files, build configuration and supported runtime before recommending syntax or dependency changes.
 - State at least one positive path, one negative path, one production failure mode and a minimal test plan.
 - Keep the change within scope; preserve public contracts or provide a migration strategy.
-- For Java services, explicitly verify Java 17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
+- For Java services, explicitly verify Java 8/11/17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
 - Separate verified evidence from assumptions and proposed checks; never claim unrun tests have passed.
 
 ### Worked review scenario: Java 25 and Boot compatibility
@@ -53,3 +53,19 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### Spring specialist checks
 Check actual Spring Boot/JDK version, auto-configuration, configuration precedence and profiles, startup behavior, observability, migration compatibility and failure handling.
+
+
+## Version-first Spring and Java compatibility
+Inspect pom.xml/build.gradle (Java target, Spring Boot parent/BOM, dependencies), CI JDK and deployment runtime. Spring Boot 2.7 supports Java 8; Spring Boot 3.x requires Java 17+. Do not introduce Jakarta imports, records or virtual threads into a Java 8/Spring Boot 2.x project. Preserve the existing supported version unless an upgrade is requested.
+
+### Concrete example — Java 8 / Spring Boot 2.x controller
+~~~java
+@RestController
+class StatusController {
+    @GetMapping("/status")
+    public ResponseEntity<String> status() {
+        return ResponseEntity.ok("UP");
+    }
+}
+~~~
+Requires the project's Spring Web starter and imports. Check actual routing, status codes and error paths before modifying an existing controller. This is illustrative, not evidence of a deployed endpoint.
