@@ -49,17 +49,9 @@ The new `scripts/execution_service.py` provides a common SQLite workflow CLI wit
 
 Unify the current components into a single execution service with **real AI-provider integrations**, **controlled credentials**, **isolated execution**, **externally enforced approvals**, and **auditable state transitions**. See the [roadmap](docs/roadmap.md).
 
-## Editions
-
-**Community (MIT):** this public repository includes all published agents, installers, evaluation tools and experimental workflow components under the existing MIT terms. Commercial use and private forks are allowed with the required copyright and license notices.
-
-**Enterprise (planned, separately licensed):** a distinct private product is planned for managed multi-team orchestration, organization-scoped access controls, credential brokering, auditable approvals, commercial support and enterprise deployment options. These features are **not available as a production-grade product yet**. Existing MIT-licensed code remains MIT-licensed; the Enterprise offering does not revoke those rights.
-
-See [editions and licensing](docs/editions.md) for the proposed boundary.
-
 ## Documentation
 
-[Editions](docs/editions.md) · [Getting started](docs/getting-started.md) · [Workflows](docs/workflows.md) · [Architecture](docs/architecture.md) · [Pros & cons](docs/pros-cons.md) · [Evaluations](docs/evaluations.md) · [Roadmap](docs/roadmap.md)
+[Getting started](docs/getting-started.md) · [Workflows](docs/workflows.md) · [Architecture](docs/architecture.md) · [Pros & cons](docs/pros-cons.md) · [Evaluations](docs/evaluations.md) · [Roadmap](docs/roadmap.md)
 
 **Status:** developer preview. An opt-in offline container adapter is available for trusted, digest-pinned images; it does not provide hosted AI API connectivity. Static validation and synthetic evaluation tests exist, but production readiness and cross-provider runtime behavior are not verified.
 
