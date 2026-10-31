@@ -11,6 +11,7 @@ from repository_router import discover, suggest
 from github_repository_catalog import list_github_repositories
 from project_analysis import analyze_local
 from code_review import review
+from approved_copilot_review import prepare as prepare_ai_review, execute as execute_ai_review
 from local_chat import installed_models, chat, MAX_REQUEST
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -129,6 +130,40 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                                                   "http://127.0.0.1:" + str(self.server.server_port),
                                                   "http://localhost:" + str(self.server.server_port)):
                 self.reply(403, {"error": "untrusted request origin"})
+                return
+            if self.path in ("/api/copilot/review/prepare", "/api/copilot/review/execute"):
+                if not enable_copilot:
+                    self.reply(405, {"error": "Copilot disabled"})
+                    return
+                if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                    self.reply(415, {"error": "JSON required"})
+                    return
+                length = self.headers.get("Content-Length", "")
+                if not length.isdigit() or not 0 < int(length) <= 4096:
+                    self.reply(413, {"error": "invalid request size"})
+                    return
+                try:
+                    payload = json.loads(self.rfile.read(int(length)))
+                    is_execute = self.path.endswith("/execute")
+                    expected = {"repository", "task", "model", "approved_sha256"} if is_execute else {"repository", "task"}
+                    if not isinstance(payload, dict) or set(payload) != expected:
+                        raise ValueError("invalid review payload")
+                    matches = [root for root in repository_roots
+                               if any(r["name"] == payload["repository"] for r in discover([root]))]
+                    if len(matches) != 1:
+                        raise ValueError("repository must resolve uniquely")
+                    prepared = prepare_ai_review(matches[0], payload["repository"], payload["task"])
+                    if is_execute:
+                        result = execute_ai_review(prepared, payload["model"], payload["approved_sha256"])
+                    else:
+                        result = prepared
+                except (ValueError, TypeError, KeyError, json.JSONDecodeError, PermissionError, OSError):
+                    self.reply(400, {"error": "invalid review or approval; source may have changed"})
+                    return
+                except (RuntimeError, TimeoutError):
+                    self.reply(503, {"error": "Copilot review unavailable"})
+                    return
+                self.reply(200, result)
                 return
             if self.path == "/api/code-review":
                 if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
