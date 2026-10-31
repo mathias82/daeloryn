@@ -1,0 +1,5 @@
+# Local workflow run state and manually collected evidence
+.agent-runs/
+__pycache__/
+*.py[cod]
+.pytest_cache/
