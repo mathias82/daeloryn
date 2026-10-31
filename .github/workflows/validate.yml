@@ -23,5 +23,7 @@ jobs:
         run: python3 scripts/prepare_agent_cases.py docker-root > /dev/null
       - name: Validate orchestration DAGs
         run: python3 scripts/workflows.py --validate-all
+      - name: Validate cross-stack engineering reference data
+        run: python3 scripts/evaluate_engineering.py
       - name: Run installer tests
         run: python3 -m unittest discover -s tests -v
