@@ -54,10 +54,18 @@ def prepare(project, files, editable, suite, suite_files, checks, output,
             agent='java-developer'):
     project, suite = Path(project).resolve(strict=True), Path(suite).resolve(strict=True)
     output = Path(output).absolute()
-    if output.resolve() != output:
-        raise ValueError('output cannot use symlinks or noncanonical paths')
-    if output.exists():
+
+    # Normalize macOS system aliases such as /var -> /private/var.
+    # The output itself must be new; resolve the existing parent first.
+    parent = output.parent.resolve(strict=True)
+
+    if output.exists() or output.is_symlink():
         raise ValueError('output must be new')
+
+    if output.name in ('', '.', '..'):
+        raise ValueError('invalid output directory')
+
+    output = parent / output.name
     if any(output == root or root in output.parents or output in root.parents
            for root in (project, suite, ROOT)):
         raise ValueError('trial must be separate from project, suite and Daeloryn checkout')
