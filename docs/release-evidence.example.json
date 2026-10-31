@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "gates": {
+    "ci_matrix": {
+      "passed": false,
+      "evidence_url": ""
+    },
+    "installer_security": {
+      "passed": false,
+      "evidence_url": ""
+    },
+    "security_review": {
+      "passed": false,
+      "evidence_url": ""
+    },
+    "codex_host": {
+      "passed": false,
+      "evidence_url": ""
+    },
+    "claude_host": {
+      "passed": false,
+      "evidence_url": ""
+    },
+    "copilot_host": {
+      "passed": false,
+      "evidence_url": ""
+    },
+    "gemini_host": {
+      "passed": false,
+      "evidence_url": ""
+    },
+    "provider_benchmark": {
+      "passed": false,
+      "evidence_url": ""
+    },
+    "human_evidence_review": {
+      "passed": false,
+      "evidence_url": ""
+    },
+    "field_pilots": {
+      "passed": false,
+      "evidence_url": ""
+    },
+    "release_candidate_regression": {
+      "passed": false,
+      "evidence_url": ""
+    }
+  }
+}
