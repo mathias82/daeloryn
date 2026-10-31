@@ -50,3 +50,13 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### Platform specialist checks
 Ground reliability claims in actual SLOs, traces, logs and metrics when provided. Analyze timeouts, bounded retries, idempotency, queues, overload, failover, alerting and rollback without inventing incident observations.
+
+## Compatibility and concrete reliability example
+Check app runtime (including Java 8), actual metrics library, deployment topology and alert backend before recommending changes. Do not invent SLO baselines or infer Java 25/virtual-thread behavior from JVM metrics alone.
+
+~~~promql
+sum(rate(http_requests_total{status=~"5.."}[5m]))
+/
+sum(rate(http_requests_total[5m]))
+~~~
+Illustrative server-error ratio query **only if** that metric and label exist. Handle low/zero traffic before alerting; inspect instrumented metric names, route exclusions and real telemetry. A query is not an observed incident.
