@@ -51,7 +51,9 @@ def evaluate(project, ref='origin/benchmark/hard-java8-checkout-20261031',
     if not execute:
         return {**provenance, 'status': 'prepared_only_checks_not_run'}
     with tempfile.TemporaryDirectory(prefix='checkout-evaluation-') as tmp:
-        base = Path(tmp)
+        # Resolve the OS-owned temporary root (e.g. macOS /var -> /private/var)
+        # before creating the trial. Keep prepare's strict user-path checks.
+        base = Path(tmp).resolve(strict=True)
         write_files(base / 'original', sources)
         write_files(base / 'suite', suite)
         python = 'python3' if sandbox_image is not None else sys.executable

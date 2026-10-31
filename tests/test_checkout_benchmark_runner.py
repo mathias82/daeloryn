@@ -53,6 +53,23 @@ class CheckoutRunnerTests(unittest.TestCase):
         self.assertEqual('frozen-commit', result['benchmark_commit'])
         self.assertEqual(result['suite_sha256']['run_contract.py'], result['candidate']['suite_sha256']['run_contract.py'])
 
+    def test_symlinked_system_temp_root_preserves_evaluation_and_candidate(self):
+        # macOS commonly exposes /var/folders through /private/var/folders.
+        root = self.project.parent.resolve()
+        actual = root / 'physical-temp'
+        actual.mkdir()
+        alias = root / 'system-temp-alias'
+        alias.symlink_to(actual, target_is_directory=True)
+        source = self.project / 'src/main/java/Example.java'
+        source.write_text('corrected')
+        with patch('tempfile.tempdir', str(alias)):
+            result = evaluate(self.project, execute=True)
+        self.assertEqual('passed', result['candidate']['status'])
+        self.assertEqual('failed', result['original']['status'])
+        self.assertEqual('corrected', source.read_text())
+        self.assertEqual(b'original-build', (self.project / 'pom.xml').read_bytes())
+        self.assertEqual([], list(actual.iterdir()))
+
     def test_original_copy_fails_same_independent_suite(self):
         result = evaluate(self.project, execute=True)
         self.assertEqual('failed', result['status'])
