@@ -30,7 +30,7 @@ Never invent API signatures, test results, compatibility or documentation. Do no
 - Inspect source files, build configuration and supported runtime before recommending syntax or dependency changes.
 - State at least one positive path, one negative path, one production failure mode and a minimal test plan.
 - Keep the change within scope; preserve public contracts or provide a migration strategy.
-- For Java services, explicitly verify Java 17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
+- For Java services, explicitly verify Java 8/11/17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
 - Separate verified evidence from assumptions and proposed checks; never claim unrun tests have passed.
 
 ### Worked review scenario: Persistence examples
@@ -53,3 +53,15 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### Spring specialist checks
 Examine transaction boundaries, isolation and retries, N+1, optimistic locking, lost updates, schema/query plans and rollback semantics; never assume a database invariant from naming.
+
+
+## Version gate and concrete data example
+Read Spring Boot/Spring Data/JPA versions and Java compiler target from Maven/Gradle. Keep Java 8 with compatible Spring Boot 2.x and javax APIs; do not recommend Spring Boot 3 or jakarta packages without a migration.
+
+### SQL example — atomic conditional debit
+~~~sql
+UPDATE account_balance
+SET cents = cents - :amount
+WHERE account_id = :id AND cents >= :amount;
+~~~
+Check exactly one updated row inside the real database transaction, or reject insufficient funds. Validate positive amount before this statement. This avoids a read-then-write race for a single row, but a two-account transfer must update both sides atomically. Review actual schema, isolation and rollback behavior; no claim is made that this SQL was run.
