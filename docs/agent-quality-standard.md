@@ -71,3 +71,9 @@ All 22 definitions now include `Executable verification handoff` and `Production
 ## Code impact, invariant strength and cross-service contracts
 
 Every canonical agent now has a mandatory code-validation section and a unique specialty check. Java/Spring roles use compiler/type evidence where available; React/platform roles must use appropriate domain tooling rather than treating a Java graph as applicable. Missing source/classpath, runtime wiring, unsupported contract constructs and unexecuted checks remain explicit. Targeted mutation scoring requires a passing baseline and does not count compile errors/timeouts as kills. Static schemas cannot certify authorization or deployed consumer behavior. See [code change validation](code-change-validation.md) for executable tools, workflow, examples and limitations. The instruction/adapter tests verify 22 definitions/88 generated files, not model compliance.
+
+## Bounded repair feedback by role
+
+All 22 definitions carry the bounded repair/test feedback policy, propagated by the existing installer to all four hosts. Only authorized implementation tasks enter a repair cycle; read-only reviews and architecture proposals remain read-only. Platform/security tasks select applicable configuration and integration checks. Visible test feedback must not weaken assertions or expose frozen independent evaluator details, and unknown side effects require reconciliation before retry.
+
+This is a host-agent instruction policy. The optional `engineering_cycle.py` API adapter remains a single implementation artifact followed by independent verification; it does not yet implement an automatic visible-test repair scheduler. Instruction packaging checks cannot demonstrate behavioral compliance or comparative model quality.
