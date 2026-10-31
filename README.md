@@ -1,6 +1,6 @@
 # Enterprise Engineering Agents
 
-Original, modular, technology-aware engineering agents for **Codex**, **Claude Code**, and **GitHub Copilot** and **Gemini CLI**. No BMAD dependency.
+Original, modular, technology-aware engineering agents for **Codex**, **Claude Code**, **GitHub Copilot**, and **Gemini CLI**. No BMAD dependency.
 
 > Status: experimental v0.1.0. Definitions and installer are validated by CI; agent performance has not yet been benchmarked on production repositories.
 
@@ -15,11 +15,23 @@ Collections of generic prompts are easy to publish and hard to verify. This repo
 | Java | java-developer | Java 21 / Spring Boot implementation |
 | Java | java-reviewer | Independent correctness and performance review |
 | Java | java-testing | Unit, integration and contract tests |
-| Spring | spring-framework-expert | DI, AOP, proxying, transactions |\n| Spring | spring-boot-engineer | Spring Boot 3/4 version-aware implementation |\n| Spring | spring-security-engineer | OAuth2, JWT, authorization, CSRF |\n| Spring | spring-data-engineer | JPA, R2DBC, persistence, migrations |\n| Spring | spring-reactive-engineer | WebFlux, Reactor, nonblocking behavior |\n| Spring | spring-testing-engineer | Slice, integration and contract tests |\n| React | react-architect | UI boundaries, state and API design |
+| Spring | spring-framework-expert | DI, AOP, proxying, transactions |
+| Spring | spring-boot-engineer | Spring Boot 3/4 version-aware implementation |
+| Spring | spring-security-engineer | OAuth2, JWT, authorization, CSRF |
+| Spring | spring-data-engineer | JPA, R2DBC, persistence, migrations |
+| Spring | spring-reactive-engineer | WebFlux, Reactor, nonblocking behavior |
+| Spring | spring-testing-engineer | Slice, integration and contract tests |
+| React | react-architect | UI boundaries, state and API design |
 | React | react-developer | TypeScript and accessible React implementation |
 | React | react-reviewer | Accessibility, correctness and browser security |
 | React | react-testing | Vitest, Testing Library and Playwright |
-| Platform | kubernetes-engineer | Cluster workloads and troubleshooting |\n| Platform | docker-engineer | Reproducible, hardened images |\n| Platform | cicd-engineer | GitHub Actions, GitLab CI, Azure Pipelines |\n| Platform | gitops-engineer | Argo CD, Flux, Helm, Kustomize |\n| Platform | platform-security-engineer | Workload and supply-chain security |\n| Platform | reliability-engineer | SLOs, probes, rollouts, observability |\n| Shared | security-reviewer | Threat modeling and secure review across stacks |
+| Platform | kubernetes-engineer | Cluster workloads and troubleshooting |
+| Platform | docker-engineer | Reproducible, hardened images |
+| Platform | cicd-engineer | GitHub Actions, GitLab CI, Azure Pipelines |
+| Platform | gitops-engineer | Argo CD, Flux, Helm, Kustomize |
+| Platform | platform-security-engineer | Workload and supply-chain security |
+| Platform | reliability-engineer | SLOs, probes, rollouts, observability |
+| Shared | security-reviewer | Threat modeling and secure review across stacks |
 | Shared | integration-reviewer | REST/OpenAPI, authentication and end-to-end compatibility |
 
 Each file in `agents/<module>/*.md` is the canonical source. **Do not edit generated adapters**.
@@ -30,7 +42,9 @@ Requires **Python 3.11+**. Run from a clone of this repository:
 
 ```bash
 python3 scripts/agents.py validate
-python3 scripts/agents.py install --target /path/to/your/project --module java --tool codex\npython3 scripts/agents.py install --target /path/to/your/project --module spring --tool all\npython3 scripts/agents.py install --target /path/to/your/project --module platform --tool all
+python3 scripts/agents.py install --target /path/to/your/project --module java --tool codex
+python3 scripts/agents.py install --target /path/to/your/project --module spring --tool all
+python3 scripts/agents.py install --target /path/to/your/project --module platform --tool all
 python3 scripts/agents.py install --target /path/to/your/project --module react --tool claude
 python3 scripts/agents.py install --target /path/to/your/project --module shared --tool both
 python3 scripts/agents.py install --target /path/to/your/project --module all --tool copilot
@@ -63,12 +77,33 @@ python3 scripts/agents.py validate
 python3 -m unittest discover -s tests -v
 ```
 
-## Spring-specific design research\n\nThe Spring module uses our own original prompts, influenced by documented engineering gaps in [rrezartprebreza/spring-boot-skills](https://github.com/rrezartprebreza/spring-boot-skills), [Dancan254/spring-boot-skills](https://github.com/Dancan254/spring-boot-skills), [rynr/spring-skills](https://github.com/rynr/spring-skills), and [a-pavithraa/springboot-skills-marketplace](https://github.com/a-pavithraa/springboot-skills-marketplace). We use separate specialists rather than duplicating their skills; independent prompt-quality evaluations are still outstanding.\n\n## Platform engineering rationale\n\nOur original agents emphasize operational evidence, deployment safety, build provenance, hardening and rollback. Design inputs include the [FluxCD official GitOps skills](https://github.com/fluxcd/agent-skills), [cloud-native agent skills](https://github.com/glapsfun/cnative-skills), and the [Kubernetes security checklist](https://kubernetes.io/docs/concepts/security/security-checklist/). No third-party agent instructions were copied.\n\n## Roadmap
+## Spring-specific design research
+
+The Spring module uses our own original prompts, influenced by documented engineering gaps in [rrezartprebreza/spring-boot-skills](https://github.com/rrezartprebreza/spring-boot-skills), [Dancan254/spring-boot-skills](https://github.com/Dancan254/spring-boot-skills), [rynr/spring-skills](https://github.com/rynr/spring-skills), and [a-pavithraa/springboot-skills-marketplace](https://github.com/a-pavithraa/springboot-skills-marketplace). We use separate specialists rather than duplicating their skills; independent prompt-quality evaluations are still outstanding.
+
+## Platform engineering rationale
+
+Our original agents emphasize operational evidence, deployment safety, build provenance, hardening and rollback. Design inputs include the [FluxCD official GitOps skills](https://github.com/fluxcd/agent-skills), [cloud-native agent skills](https://github.com/glapsfun/cnative-skills), and the [Kubernetes security checklist](https://kubernetes.io/docs/concepts/security/security-checklist/). No third-party agent instructions were copied.
+
+## Platform evaluation harness
+
+The [platform fixtures](evaluations/platform/README.md) contain three **intentionally unsafe** examples: a Kubernetes Deployment, a Dockerfile, and a CI workflow. Seven expected findings are recorded in `cases.json`. The offline reference evaluator validates benchmark data; **this is not an LLM agent performance measurement**.
+
+```bash
+python3 scripts/evaluate_platform.py
+python3 -m unittest discover -s tests -v
+```
+
+To benchmark agent detection quality, responses will later need to be evaluated against hidden expected findings and scored for precision, recall, and false positives. Never deploy or execute the example configs.
+
+## Roadmap
 
 - [x] Canonical source and modular catalog
 - [x] Codex, Claude Code, GitHub Copilot and Gemini CLI adapters with safe overwrite behavior
 - [x] Security policy and cross-stack reviewer
 - [x] CI validation and installer tests
+- [x] Offline reference validation for 3 deliberately unsafe platform fixtures
+- [ ] Actual AI-agent scoring against hidden platform fixture labels
 - [ ] Real-world Java and React benchmark fixtures with known defects
 - [ ] Automated precision/recall scoring and regression baselines
 - [ ] Signed releases and published installer
