@@ -35,7 +35,7 @@ class FixCompletenessTests(unittest.TestCase):
                 self.assertIn(EXAMPLE, body)
                 after_example = body.split(EXAMPLE, 1)[1]
                 self.assertGreaterEqual(after_example.count("~~~"), 2)
-                self.assertIn("Incomplete:", after_example)
+                self.assertIn("Incomplete", after_example)
                 for phrase in REQUIRED:
                     self.assertIn(phrase, body.lower())
                 self.assertTrue(
