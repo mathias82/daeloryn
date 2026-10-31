@@ -10,6 +10,7 @@ import json
 import os
 from pathlib import Path
 import re
+import signal
 import subprocess
 import sys
 import tempfile
@@ -29,6 +30,8 @@ def capture(arm, provider, model, argv, timeout=900):
         raise ValueError("invalid model identifier")
     if type(timeout) is not int or not 1 <= timeout <= MAX_TIMEOUT:
         raise ValueError("timeout must be 1..3600")
+    if os.name != "posix":
+        raise ValueError("bounded provider capture requires POSIX")
     if not isinstance(argv, list) or not argv or not all(
             isinstance(x, str) and x and "\x00" not in x for x in argv):
         raise ValueError("explicit nonempty argv required")
@@ -37,13 +40,18 @@ def capture(arm, provider, model, argv, timeout=900):
     started = time.monotonic()
     with tempfile.TemporaryFile(mode="w+b") as stream:
         try:
-            result = subprocess.run(argv, cwd=arm, stdin=subprocess.DEVNULL,
-                                    stdout=stream, stderr=subprocess.STDOUT,
-                                    timeout=timeout, check=False)
-            status = "completed" if result.returncode == 0 else "failed"
-            code = result.returncode
-        except subprocess.TimeoutExpired:
-            status, code = "timeout_unknown_remote_outcome", None
+            if os.name != 'posix':
+                raise ValueError('bounded provider capture currently requires POSIX')
+            process = subprocess.Popen(argv, cwd=arm, stdin=subprocess.DEVNULL,
+                                       stdout=stream, stderr=subprocess.STDOUT,
+                                       start_new_session=True)
+            try:
+                code = process.wait(timeout=timeout)
+                status = 'completed' if code == 0 else 'failed'
+            except subprocess.TimeoutExpired:
+                os.killpg(process.pid, signal.SIGKILL)
+                process.wait()
+                status, code = 'timeout_unknown_remote_outcome', None
         except OSError:
             status, code = "launch_error", None
         stream.seek(0, 2)
