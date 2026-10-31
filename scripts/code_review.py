@@ -3,6 +3,7 @@ import re
 from code_context import scan
 from architecture_inventory import inventory
 from review_action_plan import plan
+from review_context_preflight import preflight
 from agent_router import recommend
 
 RULES = (
@@ -36,4 +37,5 @@ def review(root, repository, task):
             "execution": "not_run", "changes_made": False,
             "limitations": "Pattern matches are review leads, not verified defects; no tests executed"}
     result["remediation_plan"] = plan(result)
+    result["ai_context_preflight"] = preflight(root, repository)
     return result
