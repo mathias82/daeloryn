@@ -8,12 +8,12 @@ import json
 from code_context import scan
 from copilot_chat import copilot_chat, validate
 
-MAX_SOURCE_FILES = 8
-MAX_SOURCE_CHARS = 12000
-MAX_PROMPT_CHARS = 16000
+MAX_SOURCE_FILES = 4
+MAX_SOURCE_CHARS = 1700
+MAX_PROMPT_CHARS = 2900
 
 def prepare(root, repository, task):
-    if not isinstance(task, str) or not task.strip() or len(task) > 1500:
+    if not isinstance(task, str) or not task.strip() or len(task) > 300:
         raise ValueError("invalid review task")
     context = scan(root, repository)
     snippets = []
