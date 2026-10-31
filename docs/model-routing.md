@@ -78,13 +78,24 @@ commands, change directory outside the explicit project, commit or deploy.
 Native Copilot/agent tools can edit/run code under their existing permissions;
 this is not the data-only Responses adapter or a sandbox.
 
+The native Copilot CLI launch has a default 900-second (15-minute) session deadline.
+Override with `--timeout-seconds 120` (valid: 1–3600). The POSIX launcher uses
+a dedicated process group and attempts SIGTERM followed by SIGKILL on timeout
+or interruption. This is **best-effort local termination**, not verified cleanup
+of all descendants, cancellation of remote inference, rollback of edits, or a
+token/cost cap. A timeout reports `execution=timed_out`,
+`outcome=unknown` and never retries. Inspect host sessions, files and side
+effects before attempting another run. Non-POSIX hosts fail closed until a
+separately reviewed termination implementation exists.
+
 The printed selection is **requested**, not proof of the effective provider model.
 The router deliberately reports `actual_model=not_verified_by_router`: retain the
 native Copilot execution timeline/model record to verify it, particularly when
 agent profiles, personal overrides or host routing policies apply. CLI exit 0
 means that the host task completed, not that tests passed or code is accepted.
-There is no execution deadline/cost cap on a native CLI session in this utility;
-use a host/operator-controlled session budget. Repair stage budgets are separate.
+The default deadline limits local waiting time but does **not** guarantee a
+provider billing or token cap. Use independent host/provider budgets when available.
+Repair stage budgets are separate.
 A failed/interrupted launch is not automatically retried: edits or remote effects
 may already have occurred. Review/reconcile before a new attempt.
 
