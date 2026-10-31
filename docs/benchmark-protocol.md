@@ -78,3 +78,18 @@ Never run the unsafe fixtures in production or let tools deploy them. Treat fixt
 ## Next stage: working code, not only reviews
 
 Use the [implementation verification protocol](implementation-verification.md) for paired implementation trials. Both participants must implement fixes, then an independent evaluator runs the same frozen tests and quality checks on reconstructed copies. Preserve the dedicated `benchmark/hard-java8-checkout-20261031` fixture branch; its public case is a development benchmark, not an unseen holdout. Read-only review scores cannot establish implementation quality.
+
+## Strict evidence and corpus provenance (opt-in)
+
+For a complete recorded cross-stack review, add `--strict` to
+`scripts/record_benchmark.py`. This rejects missing cases and any finding
+whose claimed quote is not present at the cited source line. The recorder
+also embeds a SHA-256 fingerprint of the reference JSON, so
+`scripts/summarize_benchmarks.py` rejects comparisons across different
+reference corpora. Legacy records without fingerprints remain individually
+viewable; a summary mixing fingerprinted and unverified records fails.
+
+These are **structural integrity gates**, not proof that a model was called,
+that a quoted finding is semantically correct, or that a code patch passes
+tests. Human review and independently executed fix verification remain
+mandatory before publishing comparative results.
