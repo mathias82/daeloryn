@@ -34,7 +34,7 @@ class AgentTests(unittest.TestCase):
             self.assertEqual(install(target, "shared", "copilot"), 2)
             output = (target / ".github/agents/security-reviewer.agent.md").read_text()
             self.assertIn("description: ", output)
-            self.assertIn("Threat", output)
+            self.assertIn("name: security-reviewer", output)
 
     def test_install_gemini(self):
         with tempfile.TemporaryDirectory() as temp:
