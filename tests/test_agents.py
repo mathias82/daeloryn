@@ -2,6 +2,7 @@ import sys
 import tempfile
 import tomllib
 import unittest
+from unittest.mock import patch
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
@@ -94,6 +95,44 @@ class AgentTests(unittest.TestCase):
             self.assertEqual(install(target, "java", "all"), 16)
             self.assertTrue((target / ".github/agents/java-developer.agent.md").is_file())
             self.assertTrue((target / ".gemini/agents/java-developer.md").is_file())
+
+    def test_failed_write_restores_previous_contents(self):
+        import os
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp)
+            install(target, "shared", "both")
+            old = {p: p.read_bytes() for p in target.rglob("*") if p.is_file()}
+            real_replace = os.replace
+            attempts = [0]
+            def fail_on_second(src, dst):
+                if ".agent-stage-" in str(src):
+                    attempts[0] += 1
+                    if attempts[0] == 2:
+                        raise OSError("simulated second install failure")
+                return real_replace(src, dst)
+            with patch("agents.os.replace", side_effect=fail_on_second):
+                with self.assertRaisesRegex(OSError, "simulated"):
+                    install(target, "shared", "both", force=True)
+            self.assertEqual({p: p.read_bytes() for p in old}, old)
+            self.assertFalse(list(target.rglob(".agent-stage-*")))
+
+    def test_failed_write_removes_newly_created_files(self):
+        import os
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp)
+            real_replace = os.replace
+            attempts = [0]
+            def fail_on_second(src, dst):
+                if ".agent-stage-" in str(src):
+                    attempts[0] += 1
+                    if attempts[0] == 2:
+                        raise OSError("simulated write failure")
+                return real_replace(src, dst)
+            with patch("agents.os.replace", side_effect=fail_on_second):
+                with self.assertRaises(OSError):
+                    install(target, "shared", "both")
+            self.assertFalse(list(target.rglob("*.toml")))
+            self.assertFalse(list(target.rglob("*.md")))
 
     def test_dry_run_does_not_write(self):
         with tempfile.TemporaryDirectory() as temp:
