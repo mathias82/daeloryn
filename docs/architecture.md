@@ -1,6 +1,6 @@
 # Architecture and design
 
-The framework distributes focused, independent coding-agent definitions. It includes a deterministic workflow DAG planner, but **not** a live agent orchestration engine or hosted inference service.
+The framework distributes focused, independent coding-agent definitions. It includes a deterministic workflow DAG planner and a local manual-handoff execution state machine, but **not** automatic AI-agent execution or a hosted inference service.
 
 ```text
 agents/{java,spring,react,platform,shared}/*.md
@@ -33,4 +33,4 @@ Adapter file generation and static tests are not the same as full end-to-end val
 
 ## Workflow DAG planning
 
-Workflows are declarative JSON under `workflows/`. The dependency validator in `scripts/workflows.py` checks referenced agents, cycles, duplicate steps and dependency ordering. It emits waves eligible for parallel execution; it does not actually invoke agents or enforce approvals. See [workflows](workflows.md).
+Workflows are declarative JSON under `workflows/`. The dependency validator in `scripts/workflows.py` checks referenced agents, cycles, duplicate steps and dependency ordering. It emits waves eligible for parallel execution; it does not invoke agents or enforce approvals. The separate state machine enforces scoped HMAC-token approval transitions for local handoffs, without SSO-backed identity or deployment authorization. See [workflows](workflows.md).
