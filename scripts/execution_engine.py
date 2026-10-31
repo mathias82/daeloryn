@@ -11,6 +11,7 @@ import os
 from pathlib import Path
 import sys
 import tempfile
+import secrets
 from datetime import datetime, timezone
 
 from workflows import plan
@@ -79,7 +80,7 @@ def start(workflow_file, state_file, execute=False):
     if not execute:
         return {"mode": "dry-run", **layout, "state_changed": False}
     state = {
-        "schema_version": 1, "workflow": workflow,
+        "schema_version": 1, "run_id": secrets.token_hex(16), "workflow": workflow,
         "workflow_hash": workflow_digest(workflow),
         "steps": {s["id"]: "pending" for s in workflow["steps"]},
         "events": [], "evidence": {}
@@ -125,15 +126,23 @@ def complete(state_file, step, evidence_file):
     save_existing(state_file, state)
     return advance(state_file)
 
-def approve(state_file, step, actor, reason):
+def approve(state_file, step, actor, reason, token=None):
     if not actor.strip() or not reason.strip():
         raise ValueError("actor and reason are required")
+    if not token:
+        raise ValueError("signed approval token is required")
     state = load(state_file)
+    from approval_tokens import key_from_env, verify
+    claim = verify(token, key_from_env(), state["run_id"], state["workflow_hash"], step)
+    if claim["actor"] != actor:
+        raise ValueError("approver does not match signed identity")
+    if any(e.get("nonce") == claim["nonce"] for e in state["events"]):
+        raise ValueError("approval token replay")
     if state["steps"].get(step) != "awaiting_approval":
         raise ValueError("approval is not pending or was already granted")
     # Actor is self-declared, not a verified identity.
     state["steps"][step] = "completed"
-    event(state, "approved", step, actor=actor.strip(), reason=reason.strip())
+    event(state, "approved", step, actor=actor.strip(), reason=reason.strip(), nonce=claim["nonce"])
     save_existing(state_file, state)
     return advance(state_file)
 
@@ -155,6 +164,7 @@ def main():
     gate.add_argument("--step", required=True)
     gate.add_argument("--actor", required=True)
     gate.add_argument("--reason", required=True)
+    gate.add_argument("--token", required=True, help="scoped HMAC approval token; do not store in git")
     status = sub.add_parser("status")
     status.add_argument("--state", type=Path, required=True)
     args = parser.parse_args()
@@ -166,7 +176,7 @@ def main():
         elif args.command == "complete":
             output = complete(args.state, args.step, args.evidence)
         elif args.command == "approve":
-            output = approve(args.state, args.step, args.actor, args.reason)
+            output = approve(args.state, args.step, args.actor, args.reason, args.token)
         else:
             state = load(args.state)
             output = {"steps": state["steps"], "events": state["events"], "evidence": state["evidence"]}
