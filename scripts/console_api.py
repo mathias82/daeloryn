@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
 """Loopback-only, read-only JSON API for the Daeloryn console.
 
-Never accepts commands, uploads, prompts, paths or provider credentials.
+Optionally accepts bounded local-only chat prompts; never commands or credentials.
 """
 import argparse
+from local_chat import installed_models, chat, MAX_REQUEST
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
@@ -39,7 +40,7 @@ def benchmark_data(records_dir=None):
     return matrix(records)
 
 
-def make_handler(records_dir=None):
+def make_handler(records_dir=None, enable_chat=False):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             host = self.headers.get("Host", "")
@@ -49,8 +50,8 @@ def make_handler(records_dir=None):
                             "localhost:" + str(self.server.server_port)):
                 self.reply(403, {"error": "invalid host"})
                 return
-            if origin is not None:
-                self.reply(403, {"error": "cross-origin requests forbidden"})
+            if origin is not None and origin not in ("http://127.0.0.1:5173", "http://localhost:5173", "http://127.0.0.1:" + str(self.server.server_port), "http://localhost:" + str(self.server.server_port)):
+                self.reply(403, {"error": "untrusted origin"})
                 return
             path = urlsplit(self.path)
             if path.query or path.fragment:
@@ -59,9 +60,16 @@ def make_handler(records_dir=None):
             try:
                 if path.path == "/api/health":
                     payload = {"status": "ok", "execution_enabled": False,
-                               "provider_connected": False}
+                               "provider_connected": False, "local_chat_enabled": enable_chat}
                 elif path.path == "/api/agents":
                     payload = {"agents": agent_data(), "source": "repository"}
+                elif path.path == "/api/models":
+                    try:
+                        names = installed_models() if enable_chat else []
+                        available = enable_chat
+                    except (OSError, ValueError, KeyError, TypeError):
+                        names, available = [], False
+                    payload = {"models": names, "provider": "ollama-local", "chat_enabled": available}
                 elif path.path == "/api/benchmarks":
                     payload = benchmark_data(records_dir)
                 else:
@@ -73,7 +81,35 @@ def make_handler(records_dir=None):
             self.reply(200, payload)
 
         def do_POST(self):
-            self.reply(405, {"error": "read-only API"})
+            host = self.headers.get("Host", "")
+            origin = self.headers.get("Origin")
+            allowed_host = host in ("127.0.0.1:" + str(self.server.server_port),
+                                    "localhost:" + str(self.server.server_port))
+            if not allowed_host or origin not in ("http://127.0.0.1:5173", "http://localhost:5173",
+                                                  "http://127.0.0.1:" + str(self.server.server_port),
+                                                  "http://localhost:" + str(self.server.server_port)):
+                self.reply(403, {"error": "untrusted request origin"})
+                return
+            if not enable_chat or self.path != "/api/chat":
+                self.reply(405, {"error": "chat disabled or unsupported endpoint"})
+                return
+            if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                self.reply(415, {"error": "JSON required"})
+                return
+            length = self.headers.get("Content-Length", "")
+            if not length.isdigit() or not 0 < int(length) <= MAX_REQUEST:
+                self.reply(413, {"error": "request too large or missing length"})
+                return
+            try:
+                payload = json.loads(self.rfile.read(int(length)))
+                result = chat(payload)
+            except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+                self.reply(400, {"error": "invalid chat request or provider response"})
+                return
+            except (OSError, TimeoutError):
+                self.reply(503, {"error": "local model unavailable"})
+                return
+            self.reply(200, result)
 
         def do_PUT(self):
             self.reply(405, {"error": "read-only API"})
@@ -98,14 +134,15 @@ def make_handler(records_dir=None):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--port", type=int, default=8765)
+    p.add_argument("--enable-local-chat", action="store_true", help="opt in to local Ollama inference")
     p.add_argument("--records-dir", type=Path)
     a = p.parse_args()
     if not 1024 <= a.port <= 65535:
         p.error("port must be 1024..65535")
     if a.records_dir is not None and (a.records_dir.is_symlink() or not a.records_dir.is_dir()):
         p.error("records-dir must be an existing real directory")
-    server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(a.records_dir))
-    print("Daeloryn read-only API listening on http://127.0.0.1:" + str(a.port), flush=True)
+    server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(a.records_dir, a.enable_local_chat))
+    print("Daeloryn local console API listening on http://127.0.0.1:" + str(a.port), flush=True)
     try:
         server.serve_forever()
     except KeyboardInterrupt:
