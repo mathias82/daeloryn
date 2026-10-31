@@ -27,8 +27,11 @@ def read_file(root, name):
     path = Path(name)
     if path.is_absolute() or '..' in path.parts or path.as_posix() != name:
         raise ValueError('noncanonical relative file path: ' + name)
+    # Canonicalize the trusted root (macOS /var aliases /private/var),
+    # but still reject symlinks in the relative file path.
+    root = Path(root).resolve(strict=True)
     target = root / path
-    if target.resolve() != target.absolute() or not target.is_file():
+    if target.resolve() != target or not target.is_file():
         raise ValueError('missing file or symlink: ' + name)
     return target.read_bytes()
 
