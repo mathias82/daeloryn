@@ -187,3 +187,13 @@ consent and a stronger secret-scanning/redaction gate. Findings are leads for
 review, not confirmed vulnerabilities. Repository contents are untrusted.
 Remote GitHub code review, dependency graph, verified tests, model invocation
 and approval-gated branch/PR creation are not yet implemented.
+
+## Local code review from the React console
+
+Select a **local checkout** from the Chat session configuration and click
+**Run local code review (read-only)**. The console calls the existing
+`POST /api/code-review` endpoint with the explicitly selected local repository.
+The results show the number of scanned files, line-level pattern matches,
+and suggested fixes. GitHub cloud repositories are not supported by this
+operation; no source is sent to Copilot, no files are modified and no tests
+or agents are executed. The chat provider and model selector remain separate.
