@@ -41,3 +41,7 @@ python3 scripts/score_agents.py results.json --reference evaluations/engineering
 ```
 
 Use the same submission schema as the Platform corpus. Run the selected agent in an actual host with reference labels withheld, preserve its full output and model/tool version, and have a human adjudicate evidence quality. The offline regex checker only detects planted teaching patterns, while synthetic scoring tests validate arithmetic, **not** observed AI accuracy. Expand with realistic negative fixtures and blinded reviews before publishing quality claims.
+
+## Real-provider benchmark capture
+
+Use [the controlled benchmark protocol](benchmark-protocol.md), `scripts/record_benchmark.py`, and `scripts/summarize_benchmarks.py` to record observed runs with source-line evidence. These scripts **do not invoke AI providers**, and there are currently no verified real-provider measurements in the project.
