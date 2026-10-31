@@ -41,7 +41,7 @@ python3 scripts/agents.py install --target /path/to/project --module all --tool 
 
 ## Workflows
 
-DAG planning and local, approval-gated **manual agent handoffs** for Spring features and platform releases. No automatic AI invocation or deployments. See [Workflow orchestration](docs/workflows.md).
+DAG planning and local, signed-approval-gated **manual agent handoffs** for Spring features and platform releases. No automatic AI invocation or deployments. See [Workflow orchestration](docs/workflows.md).
 
 ## Documentation
 
