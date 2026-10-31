@@ -8,7 +8,6 @@ import hashlib
 import json
 from pathlib import Path
 from benchmark_matrix import PROVIDERS, OUTCOMES
-from verify_implementation import digest
 
 ARMS = ("baseline", "daeloryn")
 
