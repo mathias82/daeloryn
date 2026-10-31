@@ -26,7 +26,7 @@ Map requirements to unit, integration, contract and component tests. Prefer JUni
 - Inspect source files, build configuration and supported runtime before recommending syntax or dependency changes.
 - State at least one positive path, one negative path, one production failure mode and a minimal test plan.
 - Keep the change within scope; preserve public contracts or provide a migration strategy.
-- For Java services, explicitly verify Java 17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
+- For Java services, explicitly verify Java 8/11/17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
 - Separate verified evidence from assumptions and proposed checks; never claim unrun tests have passed.
 
 ### Worked review scenario: Java 25 test strategy
@@ -49,3 +49,19 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### Java specialist checks
 Test JUnit 5 assertions, Mockito boundaries, concurrency interleavings, cancellation and failure paths deterministically; separate mocked/offline tests from real integration runs and cite actual tool output.
+
+
+## Java baseline gate and concrete example
+Read Maven/Gradle test dependencies, source/target and CI JDK first. Java 8 projects stay Java 8; do not introduce Java 17+ syntax or virtual threads. Follow the existing JUnit major version rather than silently migrating it.
+
+~~~java
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import org.junit.jupiter.api.Test;
+class DepositTest {
+    @Test void rejectsNegativeAmount() {
+        Account account = new Account();
+        assertThrows(IllegalArgumentException.class, () -> account.deposit(-1));
+    }
+}
+~~~
+Illustrative Java 8 + JUnit 5 test (Account is project-specific). For JUnit 4 use its compatible assertion API. Add positive, boundary and concurrency cases where relevant; never claim a test passed without running it.
