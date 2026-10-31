@@ -174,5 +174,29 @@ class AgentTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 install(target, "java", "codex")
 
+    def test_preflight_existing_file_prevents_partial_install(self):
+        # One conflicting output must abort the whole batch before any writes.
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp)
+            conflict = target / ".github" / "agents" / "security-reviewer.agent.md"
+            conflict.parent.mkdir(parents=True)
+            conflict.write_text("keep original", encoding="utf-8")
+            with self.assertRaises(FileExistsError):
+                install(target, "shared", "all")
+            self.assertEqual(conflict.read_text(encoding="utf-8"), "keep original")
+            self.assertFalse((target / ".codex").exists())
+            self.assertFalse((target / ".claude").exists())
+            self.assertFalse((target / ".gemini").exists())
+
+    def test_diff_rejects_symlinked_destination(self):
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp)
+            outside = target / "outside"
+            outside.mkdir()
+            (target / ".github").symlink_to(outside, target_is_directory=True)
+            with self.assertRaises(ValueError):
+                install(target, "shared", "copilot", show_diff=True)
+            self.assertEqual(list(outside.iterdir()), [])
+
 if __name__ == "__main__":
     unittest.main()
