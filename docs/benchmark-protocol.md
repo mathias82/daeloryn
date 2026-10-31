@@ -172,3 +172,47 @@ establish comparative AI performance. Capture logs can contain sensitive
 information: keep all trial files private. Real unattended execution still
 requires provider-specific adapters, credentials and externally enforced
 isolation; this command does not bypass those requirements.
+
+## Sequential opt-in live trial orchestrator
+
+Create a prepared trial using `verify_implementation.py prepare`, then
+author a private plan with the exact CLI argv supported by the installed
+provider. Example (illustrative model ID and commands; not executed):
+
+```json
+{
+  "schema_version": 1,
+  "provider": "copilot",
+  "agent": "java-reviewer",
+  "run_id": "review-001",
+  "arms": {
+    "baseline": {"model": "MODEL_ID", "argv": ["copilot", "--model=MODEL_ID", "--prompt=Review the code"]},
+    "daeloryn": {"model": "MODEL_ID", "argv": ["copilot", "--model=MODEL_ID", "--agent=java-reviewer", "--prompt=Review the code"]}
+  }
+}
+```
+
+Preview without any provider call:
+
+```bash
+python3 scripts/run_live_benchmark.py --trial /trials/review-001 \
+  --plan /private/review-plan.json --output /private/review-preview.json
+```
+
+To execute, explicitly add `--execute --sandbox-image IMAGE@sha256:DIGEST`
+and choose a **new** output path. Execution is sequential, does not retry
+provider failures, and evaluates both candidate arms against the same
+independent checks using the pinned Docker image. The resulting JSON embeds
+CLI captures, independent evaluator results and an unverified coverage record.
+
+**Critical isolation boundary:** the Docker image isolates evaluator checks
+only. Provider CLIs run on the caller's host with its permissions and may
+execute tools, edit files, access network and secrets. Use a separate,
+externally isolated disposable VM/container per model session, restricted
+credentials and explicitly reviewed provider permissions. Do not run on
+sensitive repositories or trusted workstations without those controls.
+Provider-specific command syntax and activation must be confirmed against
+the installed CLI version. Do not interpret CLI exit 0 as a verified model
+identity or agent selection. Raw transcripts can contain secrets and must
+remain private. Full unattended safe multi-provider orchestration and
+independently validated model identity remain open work.
