@@ -61,3 +61,7 @@ function SaveButton({ onSave }) {
 }
 ~~~
 Illustrative React 16.8+ Hooks example. Add handling for errors and duplicate submissions; a disabled button alone is not a server-side idempotency guarantee. Verify tests and accessibility for the actual project version.
+
+## Fix completeness and regression gate (mandatory)
+Before reporting a fix as complete, map **each independent, evidenced defect or requested invariant** to (a) the corresponding change, (b) what remains unaddressed, and (c) a proposed regression check. Re-evaluate the **entire proposed solution** against the original findings; a concurrency fix alone does not prove correctness of input validation, arithmetic or error handling. Include relevant **positive, negative, boundary and failure-path** tests, and concurrency, cancellation, rollback, security or compatibility scenarios when applicable. Do not invent contracts merely to increase the finding count. If the task is read-only, propose tests but do not modify files. If verification was not executed, explicitly say **not run**; do not describe the patch as tested. Preserve the project's actual toolchain/API versions (including Java 8 where configured); prefer the least disruptive complete fix. If any concern is contract-dependent, distinguish it from verified defects instead of silently assuming a policy.
+**Role-specific completeness check:** Check success, duplicate submission, loading, failed network response, stale responses, cleanup and accessible error feedback; do not rely solely on disabled buttons for idempotency.
