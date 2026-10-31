@@ -197,3 +197,16 @@ The results show the number of scanned files, line-level pattern matches,
 and suggested fixes. GitHub cloud repositories are not supported by this
 operation; no source is sent to Copilot, no files are modified and no tests
 or agents are executed. The chat provider and model selector remain separate.
+
+## Engineering workflow approval boundaries
+
+`scripts/engineering_workflow.py` defines a fail-closed, sequential state
+machine: inspected → context approved → proposal ready → patch approved →
+tests verified → PR ready. Both approvals must bind to an exact lowercase
+SHA-256 digest. Test and PR readiness require independently supplied verified
+evidence. These are **logical gates**, not authorization tokens or durable
+audit records. This module does not run a model, transmit code, apply a patch,
+run tests or create a GitHub pull request. A production implementation must
+add durable state, identity-bound approvals, repository isolation, safe
+patch validation, sandboxed execution and GitHub write integration before
+claiming end-to-end automation.
