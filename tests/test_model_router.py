@@ -32,6 +32,25 @@ class ModelRouterTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             select([{'id': CATALOG[1], 'available': False}], 'Implement feature')
 
+    def test_specialist_routing_never_downgrades_a_lightweight_sounding_task(self):
+        for kind in ('auto', 'small'):
+            with self.subTest(kind=kind):
+                result = select(CATALOG, 'Summarize this paragraph',
+                                kind=kind, agent='security-reviewer')
+                self.assertEqual(CATALOG[1], result['requested_model'])
+                self.assertEqual('code', result['effective_kind'])
+                self.assertEqual('security-reviewer', result['selected_agent'])
+        with self.assertRaises(ValueError):
+            select(CATALOG, 'Short summary', kind='small', agent='invented-agent')
+
+    def test_security_identifiers_in_code_and_prose_block_small_routing(self):
+        for task in ('Read tenant_id', 'Configure OAuth2', 'Audit JWT', 'RBAC rules',
+                     'Review CSRF', 'Update personal_data', 'Assess race-condition'):
+            with self.subTest(task=task):
+                result = select(CATALOG, task, kind='small')
+                self.assertTrue(result['risk_detected'])
+                self.assertEqual(CATALOG[1], result['requested_model'])
+
     def test_runtime_policy_disabled_or_unconfigured_models_are_excluded(self):
         from types import SimpleNamespace
         models = [
@@ -49,8 +68,11 @@ class ModelRouterTests(unittest.TestCase):
 
     def test_launch_uses_single_shell_free_call_and_preserves_host_permissions(self):
         task = 'Implement feature; $(touch should-not-run)'
-        plan = select(CATALOG, task)
+        plan = select(CATALOG, task, agent='java-developer')
         with tempfile.TemporaryDirectory() as tmp, patch('model_router.subprocess.run') as run:
+            profile = Path(tmp) / '.github' / 'agents' / 'java-developer.agent.md'
+            profile.parent.mkdir(parents=True)
+            profile.write_text('installed agent definition')
             run.return_value.returncode = 1
             result = launch(plan, task, Path(tmp), 'java-developer', execute=True, executable='/reviewed/copilot')
             self.assertEqual(1, run.call_count)
@@ -99,10 +121,31 @@ class ModelRouterTests(unittest.TestCase):
 
     def test_no_launch_without_opt_in_or_if_task_changes(self):
         task = 'Implement feature'
-        plan = select(CATALOG, task)
+        plan = select(CATALOG, task, agent='java-developer')
         with patch('model_router.subprocess.run') as run, tempfile.TemporaryDirectory() as tmp:
+            profile = Path(tmp) / '.github' / 'agents' / 'java-developer.agent.md'
+            profile.parent.mkdir(parents=True)
+            profile.write_text('installed agent definition')
             with self.assertRaises(ValueError):
                 launch(plan, task, tmp, 'java-developer')
             with self.assertRaises(ValueError):
                 launch(plan, 'other task', tmp, 'java-developer', execute=True)
+            with self.assertRaises(ValueError):
+                launch(plan, task, tmp, 'security-reviewer', execute=True)
+            self.assertEqual(0, run.call_count)
+
+    def test_launch_fails_closed_for_missing_and_symlinked_agent_profiles(self):
+        plan = select(CATALOG, 'Implement feature', agent='java-developer')
+        with tempfile.TemporaryDirectory() as tmp, patch('model_router.subprocess.run') as run:
+            with self.assertRaises(ValueError):
+                launch(plan, 'Implement feature', tmp, 'java-developer',
+                       execute=True, executable='/installed/copilot')
+            profile = Path(tmp) / '.github' / 'agents' / 'java-developer.agent.md'
+            profile.parent.mkdir(parents=True)
+            outside = Path(tmp) / 'external-agent.md'
+            outside.write_text('do not follow')
+            profile.symlink_to(outside)
+            with self.assertRaises(ValueError):
+                launch(plan, 'Implement feature', tmp, 'java-developer',
+                       execute=True, executable='/installed/copilot')
             self.assertEqual(0, run.call_count)
