@@ -6,10 +6,21 @@ This repository is intentionally **independent from BMAD**. The goal is a small,
 | --- | --- | --- |
 | Primary focus | Implementation and technical review specialists | Structured discovery, planning and software delivery workflows |
 | Setup | Pick modules and install agent definitions | Follow BMAD installation and method conventions |
-| Workflow orchestration | Not included | A core part of its approach |
-| Requirements and story lifecycle | Bring your own process | Formalized workflows and artifacts |
+| Workflow orchestration | Declarative DAG workflows, dependency waves, local handoffs, signed approval gates; **no automatic agent execution** | Guided, multi-role planning and delivery workflows |
+| Requirements and story lifecycle | Bring your own process; optional Spring feature and platform release templates | Structured requirements, stories and delivery artifacts |
 | Technology-specific agents | Built-in for Java, Spring, React and Platform | Customizable or extendable |
 | Best fit | Existing repos, focused engineering tasks, code reviews | Complex greenfield initiatives, multi-role planning and traceability |
+
+### Our workflow implementation
+
+Unlike the initial version, this project now includes a [workflow planner and local execution state machine](workflows.md). Its current capabilities are:
+
+- Workflow templates for [Spring feature delivery](../workflows/spring-feature.json) and [platform releases](../workflows/platform-release.json).
+- DAG validation, dependency ordering and parallel-ready waves.
+- Manual agent handoffs, evidence fingerprints and local run-state tracking.
+- Approval-gated transitions with short-lived HMAC-signed tokens.
+
+**Important limitation:** it does not automatically invoke Codex, Claude Code, Copilot or Gemini, deploy software, or enforce SSO-backed approvals. Signing-key holders can self-approve, and local audit state is not tamper-proof. This is not a production release authorization system.
 
 ### Reasons for independence
 
