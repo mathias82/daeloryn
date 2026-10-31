@@ -144,3 +144,20 @@ The Chat UI can show local repositories and a suggested repository; the
 current Copilot chat adapter does **not** use the repository, even after UI
 selection. Do not treat the selector as authorization for filesystem access.
 Git worktrees with a `.git` file are intentionally excluded.
+
+## Opt-in GitHub repository catalog
+
+Install and authenticate GitHub CLI (`gh auth login`) locally, then start
+`python3 scripts/console_api.py --enable-github-repositories`.
+`GET /api/github/repositories` lists up to the first 100 recently updated
+repositories visible to the authenticated GitHub account. This is a **partial**
+catalog (not exhaustive pagination), including private repository names if the
+account has access. Only metadata is returned; no repository source files are
+downloaded, no clone occurs and no remote changes are made.
+
+The React repository selector includes the returned GitHub repositories.
+Choosing an entry is **advisory only** and does not grant the chat adapter
+repository access. The existing local checkout routing remains separate.
+Do not expose this loopback API via a public proxy: repository names may be
+sensitive. When `gh` is missing or authentication fails, the API returns
+503 without exposing CLI stderr.

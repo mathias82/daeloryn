@@ -8,6 +8,7 @@ from copilot_chat import copilot_chat
 from copilot_auto import available_models, route_chat
 from agent_router import recommend
 from repository_router import discover, suggest
+from github_repository_catalog import list_github_repositories
 from local_chat import installed_models, chat, MAX_REQUEST
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -44,7 +45,7 @@ def benchmark_data(records_dir=None):
     return matrix(records)
 
 
-def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repository_roots=()):
+def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repository_roots=(), enable_github_repositories=False):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             host = self.headers.get("Host", "")
@@ -77,6 +78,17 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                                    "automatic_routing": True}
                     except (RuntimeError, OSError, ValueError, TimeoutError):
                         self.reply(503, {"error": "Copilot model discovery unavailable"})
+                        return
+                elif path.path == "/api/github/repositories":
+                    if not enable_github_repositories:
+                        self.reply(405, {"error": "GitHub discovery disabled"})
+                        return
+                    try:
+                        payload = {"repositories": list_github_repositories(),
+                                   "source": "authenticated-gh-cli", "partial": True,
+                                   "execution_enabled": False}
+                    except (RuntimeError, OSError, ValueError):
+                        self.reply(503, {"error": "GitHub discovery unavailable"})
                         return
                 elif path.path == "/api/repositories":
                     payload = {"repositories": discover(repository_roots), "source": "configured-local-checkouts",
@@ -230,6 +242,7 @@ def main():
     p.add_argument("--enable-copilot-chat", action="store_true", help="opt in to Copilot CLI inference")
     p.add_argument("--enable-local-chat", action="store_true", help="opt in to local Ollama inference")
     p.add_argument("--records-dir", type=Path)
+    p.add_argument("--enable-github-repositories", action="store_true")
     p.add_argument("--repository-root", type=Path, action="append", default=[], help="trusted parent directory of local git checkouts (repeatable)")
     a = p.parse_args()
     if not 1024 <= a.port <= 65535:
@@ -240,7 +253,7 @@ def main():
         discover(a.repository_root)
     except (OSError, ValueError) as exc:
         p.error("invalid repository roots: " + str(exc))
-    server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(a.records_dir, a.enable_local_chat, a.enable_copilot_chat, a.repository_root))
+    server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(a.records_dir, a.enable_local_chat, a.enable_copilot_chat, a.repository_root, a.enable_github_repositories))
     print("Daeloryn local console API listening on http://127.0.0.1:" + str(a.port), flush=True)
     try:
         server.serve_forever()
