@@ -17,5 +17,7 @@ jobs:
         run: python3 scripts/agents.py validate
       - name: Validate platform benchmark reference data
         run: python3 scripts/evaluate_platform.py
+      - name: Smoke-test evaluation prompts without running AI agents
+        run: python3 scripts/prepare_agent_cases.py docker-root > /dev/null
       - name: Run installer tests
         run: python3 -m unittest discover -s tests -v
