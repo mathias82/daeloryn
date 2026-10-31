@@ -150,6 +150,8 @@ class CheckoutWorkflowTests(unittest.TestCase):
                 calls.append(label)
             def evaluation(*args, **kwargs):
                 calls.append('verify')
+                if not kwargs.get('execute'):
+                    return {'status': 'prepared_only_checks_not_run'}
                 return {'status': 'passed', 'benchmark_commit': 'a'*40, 'candidate': {
                     'execution_mode': 'host', 'checks': {
                         'checkout_contract': {'status': 'passed', 'exit_code': 0},
@@ -165,7 +167,7 @@ class CheckoutWorkflowTests(unittest.TestCase):
                     patch.object(w, 'approval', side_effect=record_approval), \
                     patch.object(w, 'evaluate', side_effect=evaluation):
                 self.assertEqual(0, w.run(args))
-            self.assertEqual(['review', 'IMPLEMENT', 'fix', 'VERIFY', 'verify'], calls)
+            self.assertEqual(['verify', 'review', 'IMPLEMENT', 'fix', 'VERIFY', 'verify'], calls)
             data = __import__('json').loads(report_file.read_text())
             self.assertEqual('PASS', data['status'])
             self.assertEqual(0o600, report_file.stat().st_mode & 0o777)
@@ -174,6 +176,44 @@ class CheckoutWorkflowTests(unittest.TestCase):
                 flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
                 fd = os.open(str(report_file), flags, 0o600)
                 os.close(fd)
+
+    def test_frozen_benchmark_preflight_stops_before_model_invocation(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = project_at(directory)
+            review = Path(directory) / 'review.txt'
+            fix = Path(directory) / 'fix.txt'
+            review.write_text('Review source')
+            fix.write_text('Repair defects')
+            args = types.SimpleNamespace(execute=True, project=project, review_prompt=review,
+                fix_prompt=fix, suite_ref='a'*40, timeout_seconds=60, report=None)
+            with patch.object(w.sys.stdin, 'isatty', return_value=True), \
+                    patch.object(w.sys.stdout, 'isatty', return_value=True), \
+                    patch.object(w.shutil, 'which', return_value='/copilot'), \
+                    patch.object(w, 'git', return_value=('a'*40+'\n').encode()), \
+                    patch.object(w, 'evaluate', side_effect=ValueError('contract differs')), \
+                    patch.object(w, 'discover_copilot', new_callable=AsyncMock) as discover:
+                with self.assertRaisesRegex(ValueError, 'contract differs'):
+                    w.run(args)
+                discover.assert_not_awaited()
+
+    def test_benchmark_preflight_must_be_prepared_only(self):
+        with tempfile.TemporaryDirectory() as directory:
+            project = project_at(directory)
+            review = Path(directory) / 'review.txt'
+            fix = Path(directory) / 'fix.txt'
+            review.write_text('Review')
+            fix.write_text('Fix')
+            args = types.SimpleNamespace(execute=True, project=project, review_prompt=review,
+                fix_prompt=fix, suite_ref='a'*40, timeout_seconds=60, report=None)
+            with patch.object(w.sys.stdin, 'isatty', return_value=True), \
+                    patch.object(w.sys.stdout, 'isatty', return_value=True), \
+                    patch.object(w.shutil, 'which', return_value='/copilot'), \
+                    patch.object(w, 'git', return_value=('a'*40+'\n').encode()), \
+                    patch.object(w, 'evaluate', return_value={'status': 'failed'}), \
+                    patch.object(w, 'discover_copilot', new_callable=AsyncMock) as discover:
+                with self.assertRaisesRegex(w.WorkflowError, 'preflight'):
+                    w.run(args)
+                discover.assert_not_awaited()
 
 
 if __name__ == '__main__':

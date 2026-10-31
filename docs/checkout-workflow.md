@@ -54,6 +54,9 @@ in the report are *requested*, not verified effective provider IDs.
    `check_checkout_benchmark.evaluate()` host checks, which reconstruct
    disposable sources and run 23 original and five recovery checks. The
    evaluator suite branch is resolved once to a SHA *before* provider use.
+   An additional non-executing evaluator preflight validates the frozen
+   README, pom.xml, source file set and suite provenance **before any paid
+   model call**. It fails closed if the candidate is incompatible.
 5. **Quality report**: PASS requires the evaluator's overall passing status
    and both named checks with successful exit codes. Reports include only
    checks, changed production paths, requested models and hashes—not prompts

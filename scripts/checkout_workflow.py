@@ -209,6 +209,11 @@ def run(args):
     suite_sha = git('rev-parse', '--verify', args.suite_ref + '^{commit}').decode().strip()
     if not SHA.fullmatch(suite_sha):
         raise WorkflowError('benchmark must resolve to a commit SHA')
+    # Check evaluator provenance and the complete frozen input contract *before*
+    # any paid model invocation. A mismatched checkout is not a valid trial.
+    preflight = evaluate(project, ref=suite_sha, execute=False, recovery_checks=True)
+    if preflight.get('status') != 'prepared_only_checks_not_run':
+        raise WorkflowError('benchmark preflight did not verify the frozen contract')
     models = asyncio.run(discover_copilot(executable))
     review_model = select(models, review_prompt, kind='review', agent=REV_AGENT)['requested_model']
     fix_model = select(models, fix_prompt, kind='code', agent=FIX_AGENT)['requested_model']
