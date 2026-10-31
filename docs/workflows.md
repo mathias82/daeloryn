@@ -43,3 +43,33 @@ The planner computes dependency waves; the execution state machine opens and com
 ## Production hardening needed
 
 SSO/OIDC-based verified approver identity, state locking/transaction isolation, durable append-only audit, credential isolation, trusted sandboxed execution adapters, cancellation, retry budgets, timeout enforcement, and authorization checks before actual deployments are **not implemented**. Do not use this tool as a production release gate.
+
+## Experimental SQLite runtime (opt-in)
+
+The newer `scripts/secure_runtime.py` uses SQLite `BEGIN IMMEDIATE` transactions and WAL journaling for atomic dependency and approval transitions across local processes. It does not invoke a model. It is separate from the legacy JSON state CLI.
+
+```bash
+python3 scripts/secure_runtime.py --db .agent-runs/runtime.db start workflows/spring-feature.json
+python3 scripts/secure_runtime.py --db .agent-runs/runtime.db start workflows/spring-feature.json --execute
+python3 scripts/secure_runtime.py --db .agent-runs/runtime.db complete --run RUN_ID --step design --evidence /path/to/evidence.txt
+```
+
+### OIDC-based approval verification
+
+Install `python3 -m pip install -r requirements-security.txt`. An administrator must provision a **trusted** JWKS file and issuer/audience values from their identity provider. The token must be a signed RS256 JWT carrying `iss`, `aud`, `exp`, `iat`, `sub`, `jti` and custom `run_id`, `step`, `workflow_hash` claims. The subject must match an explicit allowlist. This is a token verification interface, **not** an OIDC login/token-issuance flow; a normal identity-provider ID token will not automatically contain the custom claims.
+
+```bash
+python3 scripts/secure_runtime.py --db .agent-runs/runtime.db approve --run RUN_ID --step gate --token-file /secure/approval.jwt --jwks /secure/jwks.json --issuer https://issuer.example --audience engineering-approvals --allowed-subject reviewer-subject-id
+```
+
+For production authorization, move token validation inside a protected server boundary rather than exposing direct library functions or a writable state DB to untrusted operators. Do not treat the CLI alone as a production authorization service. Key rotation, federation, role mapping and identity-provider integration need environment-specific work.
+
+### Experimental container isolation
+
+`scripts/sandbox_runner.py` is an operator-invoked Docker adapter, **disabled unless `--execute` is supplied**. It requires an image pinned by SHA-256 digest, denies network access, removes capabilities, applies limits, and mounts no host directories. It is not wired to workflow handoffs and does not autonomously run Codex, Claude, Copilot or Gemini.
+
+```bash
+python3 scripts/sandbox_runner.py --image example.invalid/review@sha256:DIGEST --prompt "Review a sample" --execute
+```
+
+Replace `DIGEST` with an actual 64-character lowercase hexadecimal digest of a trusted, pre-reviewed image. Docker isolation is not a security guarantee against malicious containers; use rootless Docker or stronger sandboxing on a dedicated host for adversarial inputs. No production deployments are authorized.
