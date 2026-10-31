@@ -103,3 +103,24 @@ Requests may consume Copilot usage. A timeout does not prove cancellation of
 remote work. This implementation is synchronous and does not stream responses.
 
 Run `python3 -m unittest discover -s tests -p 'test_copilot_chat.py'`.
+
+## Automatic Copilot model routing (opt-in)
+
+With `--enable-copilot-chat`, the console can request `GET /api/copilot/models`.
+This calls the installed authenticated Copilot runtime through the optional
+`github-copilot-sdk` Python package (install it in the API Python environment).
+No models are invented when discovery fails. The UI exposes only returned model
+IDs plus `Automatic (task-based)`.
+
+For `model: "auto"`, the server discovers the current catalog and uses
+`scripts/model_router.py` to choose a model. Short translation/summary tasks
+prefer an available Haiku family; coding and risky tasks prefer an available
+Sonnet family. If no approved family is available, it returns a failure rather
+than silently using a different model. The response reports the **requested**
+model and routing reason, not a verified provider identity. Each auto request
+performs live discovery; this may add latency. No automatic retry is performed.
+
+The Daeloryn agent selector is still **preview-only**. Model routing does not
+activate agent profiles or grant workspace access. CLI and SDK installation,
+authentication, model entitlements and real model inference must be validated
+on the operator's machine.
