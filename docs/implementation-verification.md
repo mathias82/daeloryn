@@ -61,3 +61,27 @@ Compare each corrected arm with the original and with the other arm. Require all
 ## Execution and trust limits
 
 This is an explicit **code-execution** tool, with the caller's environment, network and filesystem permissions. The evaluator manifest and commands are trusted inputs; hashes detect accidental snapshot changes, not a malicious evaluator that edits hashes too. Candidate code can attempt filesystem/network/process access. Use a real disposable container/VM with no secrets, limited network/resources and inaccessible evaluator storage for untrusted candidates. POSIX timeout kills the process group; on non-POSIX hosts only the direct child is killed. Fresh reconstruction prevents ordinary build/test contamination; it is not hostile-code confinement. No CI workflow automatically executes candidate code through this utility.
+
+## One-command paired evaluation after actual model runs
+
+After preparing a trial and running **both** baseline and specialist sessions
+in isolated workspaces, evaluate the original, baseline and Daeloryn arms
+against identical frozen evaluator checks:
+
+```bash
+python3 scripts/compare_implementation_trials.py \
+  --trial /trials/inventory-r1 \
+  --output /private/reports/inventory-r1.json
+```
+
+Use `--sandbox-image` with a locally available digest-pinned Docker image
+for stronger isolation of candidate code. The report includes each arm's
+gate statuses, manifest and evaluator hashes, and a conservative outcome:
+tie, one arm passed, neither passed, or invalid comparison. It fails closed
+when evaluator manifests or suites differ or verification errors occur.
+
+**This command does not invoke an AI model.** An actual live-provider
+benchmark additionally requires separately authenticated provider execution,
+fresh sessions, model identity, raw transcripts, source hashes and an
+independent check that each host used the intended agent. The comparison
+result alone is never evidence that any provider was called.
