@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "java25-interruption",
+      "agent": "java-reviewer",
+      "fixture": "fixtures/Java25Worker.java",
+      "expected": [
+        "java.swallowed-interrupt",
+        "java.unbounded-virtual-threads"
+      ]
+    },
+    {
+      "id": "spring-transaction-boundary",
+      "agent": "spring-framework-expert",
+      "fixture": "fixtures/OrderService.java",
+      "expected": [
+        "spring.transaction-self-invocation",
+        "spring.sensitive-logging"
+      ]
+    },
+    {
+      "id": "react-list-xss",
+      "agent": "react-reviewer",
+      "fixture": "fixtures/UnsafeFeed.tsx",
+      "expected": [
+        "react.untrusted-html",
+        "react.unstable-list-key"
+      ]
+    },
+    {
+      "id": "k8s-privileged",
+      "agent": "kubernetes-engineer",
+      "fixture": "fixtures/insecure-deployment.yaml",
+      "expected": [
+        "k8s.privileged-container",
+        "k8s.mutable-image-tag"
+      ]
+    }
+  ]
+}
