@@ -17,7 +17,7 @@ class GithubRepositoryTests(unittest.TestCase):
   rows=list_github_repositories(executable="/usr/bin/gh",runner=run)
   self.assertEqual(["org/payments"],[r["name"] for r in rows])
   self.assertTrue(rows[0]["private"])
-  self.assertEqual("GET",calls[0][0][2])
+  self.assertEqual(["/usr/bin/gh", "api", "--method", "GET"], calls[0][0][:4])
  def test_failure_does_not_leak_stderr(self):
   def run(*args,**kwargs):
    return SimpleNamespace(returncode=1,stdout=b"",stderr=b"secret")
