@@ -10,8 +10,17 @@ from agents import catalog, install
 class AgentTests(unittest.TestCase):
     def test_catalog_is_unique_and_valid(self):
         agents = catalog()
-        self.assertEqual(len(agents), 10)
-        self.assertEqual(len({a[0]["name"] for a in agents}), 10)
+        self.assertEqual(len(agents), 16)
+        self.assertEqual(len({a[0]["name"] for a in agents}), 16)
+
+    def test_install_spring_across_all_tools(self):
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp)
+            self.assertEqual(install(target, "spring", "all"), 24)
+            self.assertTrue((target / ".codex/agents/spring-boot-engineer.toml").exists())
+            self.assertTrue((target / ".claude/agents/spring-security-engineer.md").exists())
+            self.assertTrue((target / ".github/agents/spring-reactive-engineer.agent.md").exists())
+            self.assertTrue((target / ".gemini/agents/spring-testing-engineer.md").exists())
 
     def test_install_java_codex(self):
         with tempfile.TemporaryDirectory() as temp:
