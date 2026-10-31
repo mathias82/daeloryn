@@ -5,13 +5,38 @@ import unittest
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
-from agents import catalog, install
+from agents import catalog, install, parse
 
 class AgentTests(unittest.TestCase):
     def test_catalog_is_unique_and_valid(self):
         agents = catalog()
         self.assertEqual(len(agents), 22)
         self.assertEqual(len({a[0]["name"] for a in agents}), 22)
+
+    def test_all_agents_have_evidence_contract_and_examples(self):
+        for meta, body in catalog():
+            with self.subTest(agent=meta["name"]):
+                self.assertIn("evidence contract", body.lower())
+                self.assertIn("example", body.lower())
+
+    def test_reject_missing_evidence_contract(self):
+        with tempfile.TemporaryDirectory() as temp:
+            path = Path(temp) / "java-developer.md"
+            path.write_text("---\\nname: java-developer\\ndescription: Demo\\nscope: java\\n---\\n"
+                            + "Example: good design. " * 30)
+            with self.assertRaisesRegex(ValueError, "quality sections"):
+                parse(path)
+
+    def test_reject_nested_symlink_destination(self):
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp)
+            outside = target / "outside"
+            outside.mkdir()
+            (target / ".github").mkdir()
+            (target / ".github" / "agents").symlink_to(outside, target_is_directory=True)
+            with self.assertRaises(ValueError):
+                install(target, "shared", "copilot")
+            self.assertEqual(list(outside.iterdir()), [])
 
     def test_install_spring_across_all_tools(self):
         with tempfile.TemporaryDirectory() as temp:
