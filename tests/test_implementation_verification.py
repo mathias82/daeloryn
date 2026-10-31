@@ -149,8 +149,12 @@ class AgentAcceptanceTests(unittest.TestCase):
                     with self.subTest(agent=name, adapter=relative):
                         # Windows Git checkouts may use CRLF while the
                         # generated adapters use LF. Compare logical lines.
-                        self.assertIn(body.splitlines(), [rendered.splitlines()[i:i + len(body.splitlines())]
-                                                          for i in range(len(rendered.splitlines()) - len(body.splitlines()) + 1)])
+                        # A Windows text-mode write can expand CRLF source to
+                        # CRCRLF. Remove carriage returns only for this
+                        # content-equivalence assertion, preserving all text.
+                        normalized_body = body.replace('\r', '')
+                        normalized_rendered = rendered.replace('\r', '')
+                        self.assertIn(normalized_body, normalized_rendered)
 
 
 if __name__ == '__main__':
