@@ -10,6 +10,7 @@ ROOT = Path(__file__).resolve().parents[1]
 MODULES = {"java", "spring", "react", "shared", "platform"}
 KEYS = {"name", "description", "scope"}
 SLUG = re.compile(r"^[a-z][a-z0-9-]{2,63}$")
+QUALITY_MARKERS = ("evidence contract", "example")
 
 def parse(path):
     content = path.read_text(encoding="utf-8")
@@ -32,6 +33,10 @@ def parse(path):
     body = pieces[2].strip()
     if len(body) < 200:
         raise ValueError(f"{path}: instructions too short")
+    lower = body.lower()
+    missing = [marker for marker in QUALITY_MARKERS if marker not in lower]
+    if missing:
+        raise ValueError(f"{path}: missing required quality sections: {missing}")
     return meta, body
 
 def catalog(module="all"):
@@ -83,10 +88,15 @@ def install(target, module, tool, force=False):
             output.append((target / ".github" / "agents" / (meta["name"] + ".agent.md"), format_copilot(meta, body)))
         if tool in ("gemini", "all"):
             output.append((target / ".gemini" / "agents" / (meta["name"] + ".md"), format_gemini(meta, body)))
-    # Preflight everything before any write.
+    # Preflight every path component: a nested symlink can redirect writes outside target.
     for path, _ in output:
-        if path.is_symlink() or path.parent.is_symlink() or path.parent.parent.is_symlink():
-            raise ValueError(f"symlink destination rejected: {path}")
+        candidate = path
+        while candidate != target:
+            if candidate.is_symlink():
+                raise ValueError(f"symlink destination rejected: {candidate}")
+            if target not in candidate.parents:
+                raise ValueError(f"destination escaped target: {path}")
+            candidate = candidate.parent
         if path.exists() and not force:
             raise FileExistsError(f"already exists (use --force): {path}")
     for path, content in output:
