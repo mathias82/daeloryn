@@ -50,3 +50,16 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### Platform specialist checks
 Verify Kubernetes versions, namespaces, manifests and actual telemetry before inferring runtime failures. Separate readiness, liveness and startup semantics; scope RBAC/NetworkPolicy and apply no live changes without approval.
+
+## Cluster and workload version gate
+Read the Kubernetes API/cluster version, workload kind, container JDK and health endpoint before proposing a manifest. Do not change Java 8 container tags or add unsupported Kubernetes API versions as a side effect of a probe fix.
+
+~~~yaml
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: 8080
+  periodSeconds: 5
+  failureThreshold: 3
+~~~
+Illustrative container-level readinessProbe fragment, not a full Deployment. Confirm the application really implements /ready and distinguish readiness from liveness and startup checks. Validate a dry-run/diff; never claim a rollout worked without cluster evidence.
