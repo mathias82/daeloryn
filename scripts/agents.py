@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dependency-free catalog validator and safe Codex/Claude/Copilot adapter installer."""
+"""Dependency-free catalog validator and safe Codex/Claude/Copilot/Gemini adapter installer."""
 import argparse
 import json
 import re
@@ -64,6 +64,9 @@ def format_claude(meta, body):
 def format_copilot(meta, body):
     return "---\nname: " + meta["name"] + "\ndescription: " + meta["description"] + "\n---\n\n" + body + "\n"
 
+def format_gemini(meta, body):
+    return "---\nname: " + meta["name"] + "\ndescription: " + meta["description"] + "\nkind: local\n---\n\n" + body + "\n"
+
 def install(target, module, tool, force=False):
     if target.is_symlink():
         raise ValueError("target cannot be a symlink")
@@ -78,6 +81,8 @@ def install(target, module, tool, force=False):
             output.append((target / ".claude" / "agents" / (meta["name"] + ".md"), format_claude(meta, body)))
         if tool in ("copilot", "all"):
             output.append((target / ".github" / "agents" / (meta["name"] + ".agent.md"), format_copilot(meta, body)))
+        if tool in ("gemini", "all"):
+            output.append((target / ".gemini" / "agents" / (meta["name"] + ".md"), format_gemini(meta, body)))
     # Preflight everything before any write.
     for path, _ in output:
         if path.is_symlink() or path.parent.is_symlink() or path.parent.parent.is_symlink():
@@ -97,7 +102,7 @@ def main():
     cmd = sub.add_parser("install")
     cmd.add_argument("--target", type=Path, required=True)
     cmd.add_argument("--module", choices=["all", *sorted(MODULES)], default="all")
-    cmd.add_argument("--tool", choices=["codex", "claude", "copilot", "both", "all"], default="both")
+    cmd.add_argument("--tool", choices=["codex", "claude", "copilot", "gemini", "both", "all"], default="both")
     cmd.add_argument("--force", action="store_true")
     args = parser.parse_args()
     try:
