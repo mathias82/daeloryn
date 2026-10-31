@@ -34,3 +34,7 @@ Adapter file generation and static tests are not the same as full end-to-end val
 ## Workflow DAG planning
 
 Workflows are declarative JSON under `workflows/`. The dependency validator in `scripts/workflows.py` checks referenced agents, cycles, duplicate steps and dependency ordering. It emits waves eligible for parallel execution; it does not invoke agents or enforce approvals. The separate state machine enforces scoped HMAC-token approval transitions for local handoffs, without SSO-backed identity or deployment authorization. See [workflows](workflows.md).
+
+## Agent quality contract
+
+The 22 canonical module Markdown definitions include focused practical scenarios and an evidence contract. Agents must distinguish confirmed findings from hypotheses, cite concrete repository lines and runtime/test evidence, report actual command results, and propose minimal verifiable corrections. Java examples explicitly consider Java 25 where the project's toolchain supports it. These are instruction-level requirements, **not proof that every host model will obey them**.
