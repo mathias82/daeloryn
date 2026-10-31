@@ -2,6 +2,8 @@ import sys
 import tempfile
 import tomllib
 import unittest
+import contextlib
+import io
 from unittest.mock import patch
 from pathlib import Path
 
@@ -133,6 +135,20 @@ class AgentTests(unittest.TestCase):
                     install(target, "shared", "both")
             self.assertFalse(list(target.rglob("*.toml")))
             self.assertFalse(list(target.rglob("*.md")))
+
+    def test_diff_is_read_only_and_shows_changes(self):
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp)
+            existing = target / ".claude" / "agents" / "security-reviewer.md"
+            existing.parent.mkdir(parents=True)
+            existing.write_text("previous version", encoding="utf-8")
+            captured = io.StringIO()
+            with contextlib.redirect_stdout(captured):
+                self.assertEqual(install(target, "shared", "claude", show_diff=True), 2)
+            self.assertEqual(existing.read_text(encoding="utf-8"), "previous version")
+            self.assertIn("--- ", captured.getvalue())
+            self.assertIn("+++ ", captured.getvalue())
+            self.assertFalse((target / ".claude" / "agents" / "integration-reviewer.md").exists())
 
     def test_dry_run_does_not_write(self):
         with tempfile.TemporaryDirectory() as temp:
