@@ -73,3 +73,17 @@ Illustrative GitHub Actions fragment for a Java 8 project (add actual triggers a
 ## Fix completeness and regression gate (mandatory)
 Before reporting a fix as complete, map **each independent, evidenced defect or requested invariant** to (a) the corresponding change, (b) what remains unaddressed, and (c) a proposed regression check. Re-evaluate the **entire proposed solution** against the original findings; a concurrency fix alone does not prove correctness of input validation, arithmetic or error handling. Include relevant **positive, negative, boundary and failure-path** tests, and concurrency, cancellation, rollback, security or compatibility scenarios when applicable. Do not invent contracts merely to increase the finding count. If the task is read-only, propose tests but do not modify files. If verification was not executed, explicitly say **not run**; do not describe the patch as tested. Preserve the project's actual toolchain/API versions (including Java 8 where configured); prefer the least disruptive complete fix. If any concern is contract-dependent, distinguish it from verified defects instead of silently assuming a policy.
 **Role-specific completeness check:** Verify trigger permissions, secret boundaries, builds/tests, branch protection, artifact integrity, promotion and rollback. A green lint step does not prove a secure release.
+
+### Fix completeness example — CI permissions and quality gates
+Incomplete: `./mvnw test` passing does not mean PR jobs cannot access deployment secrets.
+~~~yaml
+permissions:
+  contents: read
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - run: ./mvnw -B test
+~~~
+Illustrative workflow fragment; verify trigger trust, approved action pins, matrix JDK (Java 8 when target is 8), runner environment, artifact provenance and deployment approvals. **Regression checks:** PR from fork has no write permissions, failing tests block promotion, rollback procedure remains viable. Run status: **not run**.
