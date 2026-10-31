@@ -17,6 +17,12 @@ python3 scripts/agents.py validate
 python3 scripts/agents.py install --target /path/to/project --module spring --tool copilot
 ```
 
+Preview the installer without writing files:
+
+```bash
+python3 scripts/agents.py install --target /path/to/project --module all --tool all --dry-run
+```
+
 To install every module for all four tools:
 
 ```bash
@@ -59,7 +65,7 @@ The cross-provider benchmark harness now records external Codex, Claude, Copilot
 
 ## Documentation
 
-[Getting started](docs/getting-started.md) · [Workflows](docs/workflows.md) · [Architecture](docs/architecture.md) · [Pros & cons](docs/pros-cons.md) · [Evaluations](docs/evaluations.md) · [Benchmark protocol](docs/benchmark-protocol.md) · [Roadmap](docs/roadmap.md)
+[Getting started](docs/getting-started.md) · [Workflows](docs/workflows.md) · [Architecture](docs/architecture.md) · [Pros & cons](docs/pros-cons.md) · [Evaluations](docs/evaluations.md) · [Benchmark protocol](docs/benchmark-protocol.md) · [Roadmap](docs/roadmap.md) · [Release gates](docs/release-gates.md) · [Host compatibility](docs/host-compatibility.md)
 
 **Status:** developer preview. An opt-in offline container adapter is available for trusted, digest-pinned images; it does not provide hosted AI API connectivity. Static validation and synthetic evaluation tests exist, but production readiness and cross-provider runtime behavior are not verified.
 
