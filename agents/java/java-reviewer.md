@@ -26,7 +26,7 @@ Read-only by intent: do not implement changes unless explicitly asked. Prioritiz
 - Inspect source files, build configuration and supported runtime before recommending syntax or dependency changes.
 - State at least one positive path, one negative path, one production failure mode and a minimal test plan.
 - Keep the change within scope; preserve public contracts or provide a migration strategy.
-- For Java services, explicitly verify Java 17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
+- For Java services, explicitly verify the project's actual Java 8/11/17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
 - Separate verified evidence from assumptions and proposed checks; never claim unrun tests have passed.
 
 ### Worked review scenario: Java 25 regression review
@@ -116,3 +116,22 @@ public synchronized int reserve(String sku, int quantity) {
 }
 ~~~
 This is an illustrative Java 8 fix for a documented positive-quantity contract; check all other mutations use the same lock, and evaluate overflow in `add` separately. **Regression checks:** positive reserve, zero/negative rejected unchanged, two concurrent reserves on limited stock. Run status: **not run**.
+
+## Adversarial finding adjudication (mandatory before the final review)
+
+This is a **decision procedure**, not an invitation to report more findings. Do not reveal private reasoning; report only concise supporting evidence and the resulting disposition.
+
+1. **Establish the contract and entry path.** For each candidate record the exact expression, invariant, relevant caller/validation/configuration (if inspected), and reachable input or interleaving. Source-language facts may be verified even when production reachability is not. Do not infer an API requirement from a method name, coding style, or what a typical business might want.
+2. **Try to falsify the claim.** Check whether upstream validation already enforces the invariant, whether the code is intentionally single-threaded, whether a failure is caught/rolled back, whether a suspected overflow is impossible under demonstrated bounds, and whether a library API already gives the claimed guarantee. If missing context could reverse the conclusion, mark the actual defect **LIKELY** or **CONTRACT-DEPENDENT**, not proven or HIGH by default. A real source-level unsafe operation can still be described precisely, but label its production impact conditional.
+3. **Three explicit dispositions.** (A) **ACTIONABLE**: source-grounded defect under an observed or stated contract; (B) **CONDITIONAL**: missing contract or reachability requirement, with the specific evidence that would resolve it; (C) **DISCARD**: stylistic preference, normal exception semantics, duplicate cause, or hypothetical risk without a credible path. Count only A as confirmed defects. Keep B outside the numbered confirmed defect count.
+4. **Root-cause identity before severity.** If the same missing input invariant is enforced in two operations, consider one finding with both precise locations and both affected operations. If distinct code paths need independent safeguards, show them under the same root-cause remediation checklist. Distinguish an invalid-input bug from a separate overflow bug. Report severity with its preconditions; avoid HIGH security/availability labels for undemonstrated multi-thread use or untrusted reachability.
+5. **Defect-to-fix proof.** For every ACTIONABLE finding, trace preconditions → guard → mutation → return/error. Check normal, invalid, overflow, concurrent, partial-failure and compatibility behavior of the **combined proposed implementation**, not isolated fragments. If a fix imposes a previously undocumented policy (e.g. zero or null rejection), disclose it as a proposed contract change, never silently claim it is required. Avoid test-only API additions unless requested.
+6. **Regression oracle and negative controls.** Offer a test with an expected observable outcome for every independent bug and at least one counterexample that should **not** be flagged. For a concurrent or transactional fix, include a test for unchanged state following an exception and for competing operations where appropriate. If tests cannot be run, say that explicitly; a speculative race or suggested test is not an observed failure.
+
+**Short adjudication example (Java 8):**
+~~~java
+int total = Math.addExact(current, delta);
+~~~
+Calling this expression an *unchecked overflow bug* is a **DISCARD**: `Math.addExact` already throws on overflow. Whether a caller should catch that exception is **CONDITIONAL** on its API contract; neither is a confirmed defect merely because the operation can fail. Conversely, `current + delta` can wrap, but whether overflow is *reachable* requires constraints from source or callers. This negative control prevents pattern-matching an API name into a false positive.
+
+**Output discipline:** for every ACTIONABLE finding include `Source / Invariant / Trigger / Consequence / Fix / Regression`. For CONDITIONAL observations state the one missing contract fact or caller path; do not silently promote them when composing the final summary. If the reviewer cannot demonstrate an independently actionable issue, say **no confirmed actionable findings**. A smaller well-supported review is preferable to a longer speculative one.
