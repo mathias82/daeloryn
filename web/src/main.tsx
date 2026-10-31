@@ -69,7 +69,8 @@ function App() {
         if (modelsData && typeof modelsData === 'object' && 'models' in modelsData && Array.isArray(modelsData.models) && modelsData.models.every((m: unknown)=>typeof m==='string') && 'chat_enabled' in modelsData && typeof modelsData.chat_enabled==='boolean') {
           setInstalledModels(modelsData.models as string[]);
           setChatEnabled(modelsData.chat_enabled);
-          if (modelsData.models.length) setModel(previous=>previous || modelsData.models[0]);
+          const discoveredModels = modelsData.models as string[];
+          if (discoveredModels.length) setModel(previous=>previous || discoveredModels[0]);
         }
         setRemoteAgents(agentData.agents as Agent[]);
         setBenchmarks(reportData as Benchmark);
