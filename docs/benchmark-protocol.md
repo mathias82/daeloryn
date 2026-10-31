@@ -279,3 +279,26 @@ labels. The evaluator uses synthetic teaching fixtures and **does not**
 independently validate quoted evidence or actual model identity. The
 exported prompt pack must not be distributed with the reference labels.
 This is the first small case corpus, not full coverage of all agents.
+
+## Score actual captured engineering answers
+
+After separately running each of the four blinded engineering prompts through
+an approved, isolated provider session, save the resulting
+`local-provider-cli-capture` JSON reports in a private JSON object keyed by
+the four reference case IDs:
+
+```bash
+python3 scripts/score_captured_engineering.py \
+  --captures /private/engineering-captures.json \
+  --provider copilot --model MODEL_ID \
+  --output /private/copilot-engineering-score.json
+```
+
+This command rejects missing cases, failed or truncated captures, wrong case
+IDs, malformed JSON and mismatched requested provider/model. It scores only
+the actual captured findings against the existing engineering gold reference.
+It does **not** call remote providers or prove that a given CLI output was
+produced by the requested model or specialist. Repeat the same blinded prompts
+for both baseline and Daeloryn, independently verify provider identity,
+agent activation and cited evidence, then compare the scores. Keep raw
+transcripts private.
