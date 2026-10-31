@@ -62,3 +62,25 @@ Missing cases fail this gate rather than being silently treated as completed
 reviews. This is an offline *coverage* check, not evidence that the findings
 are correct or that any model was actually invoked. Preserve raw submissions
 and verify model provenance separately before making performance claims.
+
+## Unified offline benchmark gate
+
+Run the combined offline quality suite locally or through the dedicated
+GitHub Actions job:
+
+```bash
+python3 scripts/run_benchmark_suite.py --output benchmark-report.json
+```
+
+The runner validates all agent definitions, checks Platform and Engineering
+reference fixtures, and runs all Python regression tests. Each gate has a
+bounded timeout and its own pass/fail status, stdout/stderr tail and duration.
+Any failed, timed-out or unavailable gate causes a nonzero process exit.
+The CI job uploads the JSON report even when a check fails.
+
+**Interpretation:** This is a comprehensive *offline repository quality gate*,
+not a live Copilot/Claude/Codex/Gemini evaluation. It does not run generated
+patches, measure real-provider accuracy, or demonstrate that Daeloryn
+outperforms another tool. Live provider and implementation trials require
+separately authorized runners, isolated workspaces, blinded reference labels
+and independent execution of frozen tests.
