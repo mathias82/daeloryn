@@ -7,10 +7,11 @@
 - Work directly in an existing repository without adopting a new software-delivery method.
 - Use domain-specific review checklists and evidence requirements.
 - Validate catalog/install behavior in CI and score recorded benchmark findings separately.
+- Plan dependency-aware workflows and require signed tokens for local approval-gated handoffs (not production authorization).
 
 ## Cons and trade-offs
 
-- No orchestration, project planning, sprint management or automatic agent handoffs.
+- Workflow planning and approval-gated local manual handoffs exist, but there is **no automatic AI agent execution**, project planning or sprint management.
 - Adapter generation does not guarantee identical behavior in different hosts.
 - Human review remains essential for security, correctness and production changes.
 - Agent prompts are not access-control enforcement; host permission settings matter.
