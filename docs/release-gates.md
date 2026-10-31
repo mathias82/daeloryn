@@ -21,7 +21,7 @@ Status: **BLOCKED — developer preview**, until all mandatory P0 gates pass. Th
 2. Four host integrations: format outputs exist; live tests pending.
 3. Benchmarks: recording/scoring harness exists; observed runs pending.
 4. Evidence: line/quote verification exists; semantic human adjudication pending.
-5. Installer: staging and best-effort rollback with injected-failure tests added; diff and independent verification pending.
+5. Installer: staging, best-effort rollback and read-only unified diff with automated tests added; independent CI/host security verification pending.
 6. Security: CodeQL and pip-audit workflows added; findings and threat modeling pending.
 7. Agent quality: 22 definitions have evidence/examples; live quality pending.
 8. Versioning: changelog/release procedure drafted; tag pending.
