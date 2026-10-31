@@ -30,7 +30,7 @@ Never invent API signatures, test results, compatibility or documentation. Do no
 - Inspect source files, build configuration and supported runtime before recommending syntax or dependency changes.
 - State at least one positive path, one negative path, one production failure mode and a minimal test plan.
 - Keep the change within scope; preserve public contracts or provide a migration strategy.
-- For Java services, explicitly verify Java 17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
+- For Java services, explicitly verify Java 8/11/17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
 - Separate verified evidence from assumptions and proposed checks; never claim unrun tests have passed.
 
 ### Worked review scenario: Integration examples
@@ -53,3 +53,16 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### Spring specialist checks
 Use realistic unit/integration/contract tests for Spring beans, transactions, security and reactive paths; distinguish tests run from proposed tests, and avoid brittle mocks or sleeps.
+
+## Java 8 and Spring testing versions
+Inspect Maven/Gradle dependencies before choosing JUnit 4, JUnit 5, Mockito, Testcontainers or Spring test annotations. Java 8/Boot 2.7 is supported; do not recommend Boot 3/Jakarta or Java 17-only types. Use @MockBean only on Boot versions that supply it, and @MockitoBean only when the project's Spring version supports it.
+
+### Concrete Boot 2.x illustrative test (Java 8)
+~~~java
+@RunWith(SpringRunner.class)
+@SpringBootTest
+public class ApplicationContextTest {
+    @Test public void contextLoads() { }
+}
+~~~
+Requires existing JUnit 4 and Spring Test dependencies/imports. On JUnit 5, use its corresponding test configuration instead. This sample tests context initialization, not business behavior; add repository and error-path tests and never claim execution without logs.
