@@ -69,7 +69,7 @@ All 22 specialists now include source-grounded review requirements: verified fil
 
 ## Evidence audit (opt-in)
 
-All 22 agents now include an outcome-aware review protocol. The [review proof gate](docs/review-proof-gate.md) adds an independent CLI that checks structured findings against exact source lines, source hashes, contract references and duplicate root causes. These checks are **not proof of semantic correctness or model superiority**.
+All 22 agents now include an outcome-aware review protocol. The [review proof gate](docs/review-proof-gate.md) adds an independent CLI that checks structured findings against exact source lines, source hashes, contract references and duplicate root causes. Optional `--require-source-hashes` mode also rejects reports whose cited file revisions have changed. These checks are **not proof of semantic correctness or model superiority**.
 
 ```bash
 python3 scripts/audit_review_evidence.py --root /path/to/project --report /path/to/review.json
