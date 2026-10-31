@@ -171,3 +171,19 @@ The checkout must resolve uniquely among configured roots and contain a
 non-symlink `.git` directory. No source file contents are read, no commands
 are executed, and no modifications are made. This endpoint does not yet
 support remote GitHub repositories, deep dependency inspection or agent execution.
+
+## Bounded source review (local repositories only)
+
+POST `/api/code-review` with `{"repository":"checkout-name","task":"Review Java concurrency"}`
+after configuring `--repository-root`. This opt-in request reads up to 80
+small source files (256 KiB total), excludes common secret file names,
+symlinks and build folders, and returns conservative pattern-based findings
+with file paths and line numbers plus an advisory agent recommendation.
+No code is executed, no edits are made, and no pull requests are opened.
+
+**Security caveat:** Redaction is heuristic, not a complete secret detector.
+Do not forward returned excerpts to external AI providers without separate
+consent and a stronger secret-scanning/redaction gate. Findings are leads for
+review, not confirmed vulnerabilities. Repository contents are untrusted.
+Remote GitHub code review, dependency graph, verified tests, model invocation
+and approval-gated branch/PR creation are not yet implemented.
