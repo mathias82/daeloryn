@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "name": "spring-feature",
+  "description": "Review-gated Spring feature delivery",
+  "steps": [
+    {
+      "id": "design",
+      "agent": "spring-framework-expert",
+      "depends_on": []
+    },
+    {
+      "id": "implement",
+      "agent": "spring-boot-engineer",
+      "depends_on": [
+        "design"
+      ]
+    },
+    {
+      "id": "security",
+      "agent": "spring-security-engineer",
+      "depends_on": [
+        "implement"
+      ]
+    },
+    {
+      "id": "tests",
+      "agent": "spring-testing-engineer",
+      "depends_on": [
+        "implement"
+      ]
+    },
+    {
+      "id": "gate",
+      "type": "approval",
+      "depends_on": [
+        "security",
+        "tests"
+      ]
+    }
+  ]
+}
