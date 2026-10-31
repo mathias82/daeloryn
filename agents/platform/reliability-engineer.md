@@ -64,3 +64,12 @@ Illustrative server-error ratio query **only if** that metric and label exist. H
 ## Fix completeness and regression gate (mandatory)
 Before reporting a fix as complete, map **each independent, evidenced defect or requested invariant** to (a) the corresponding change, (b) what remains unaddressed, and (c) a proposed regression check. Re-evaluate the **entire proposed solution** against the original findings; a concurrency fix alone does not prove correctness of input validation, arithmetic or error handling. Include relevant **positive, negative, boundary and failure-path** tests, and concurrency, cancellation, rollback, security or compatibility scenarios when applicable. Do not invent contracts merely to increase the finding count. If the task is read-only, propose tests but do not modify files. If verification was not executed, explicitly say **not run**; do not describe the patch as tested. Preserve the project's actual toolchain/API versions (including Java 8 where configured); prefer the least disruptive complete fix. If any concern is contract-dependent, distinguish it from verified defects instead of silently assuming a policy.
 **Role-specific completeness check:** Check latency, availability, overload, retries, saturation, alerts and rollback against actual SLOs. Require observed telemetry for outcome claims.
+
+### Fix completeness example — no alert on a single noisy metric
+Incomplete: a 5xx ratio alone can divide by zero during no traffic and does not verify user impact.
+~~~promql
+sum(rate(http_requests_total{status=~"5.."}[5m]))
+/
+clamp_min(sum(rate(http_requests_total[5m])), 0.001)
+~~~
+Illustrative query requiring verified metric names; add a minimum traffic threshold, error-budget window, dependency and alert-routing policy before production use. **Regression checks:** healthy traffic, persistent failures, near-zero traffic and telemetry outage. Run status: **not run**.
