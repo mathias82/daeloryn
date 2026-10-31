@@ -239,3 +239,18 @@ trial workspaces, inject secrets or establish agent activation. For real
 live benchmarks use separately managed disposable workers with reviewed
 network egress, ephemeral credentials, safe workspace injection and
 independent attestation; those integrations remain outstanding.
+
+## Agent-specific case manifest gate
+
+`scripts/validate_agent_benchmarks.py --cases /private/agent-cases`
+checks one JSON manifest per catalog agent, named `<agent>.json`.
+Each manifest contains `schema_version: 1`, the matching `agent`,
+and a nonempty `cases` array. Each case requires a unique `id`,
+nonempty `task`, and `evaluator.suite_sha256` with a 64-digit lowercase
+hex digest. Missing manifests and invalid cases cause nonzero exit status.
+
+This is a strict **coverage readiness gate**, not fabricated case generation
+or a claim that evaluator suites were executed. Real benchmark cases require
+independent frozen tests and human-reviewed correctness contracts. The
+live-provider network/credential isolation and model identity attestation
+are still pending.
