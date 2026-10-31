@@ -8,7 +8,11 @@ BASE = Path(__file__).resolve().parents[1] / "evaluations" / "platform"
 def score(submission, reference):
     if not isinstance(submission, dict) or not isinstance(submission.get("cases"), list):
         raise ValueError("submission must contain a cases array")
+    if not isinstance(reference, dict) or not isinstance(reference.get("cases"), list):
+        raise ValueError("reference must contain a cases array")
     expected = {c["id"]: set(c["expected"]) for c in reference["cases"]}
+    if len(expected) != len(reference["cases"]):
+        raise ValueError("duplicate reference case id")
     submitted = {}
     for case in submission["cases"]:
         if not isinstance(case, dict) or case.get("case_id") not in expected:
@@ -16,8 +20,11 @@ def score(submission, reference):
         case_id = case["case_id"]
         if case_id in submitted:
             raise ValueError("duplicate case_id")
+        findings = case.get("findings", [])
+        if not isinstance(findings, list):
+            raise ValueError("findings must be an array")
         found = set()
-        for item in case.get("findings", []):
+        for item in findings:
             if not isinstance(item, dict) or not isinstance(item.get("id"), str) or not item["id"].strip():
                 raise ValueError("finding must contain nonempty id")
             if not isinstance(item.get("evidence"), str) or not item["evidence"].strip():
