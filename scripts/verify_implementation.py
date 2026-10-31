@@ -12,6 +12,7 @@ from pathlib import Path
 import signal
 import subprocess
 import tempfile
+import uuid
 
 from agents import ROOT, catalog, format_copilot
 
@@ -123,7 +124,37 @@ def run_check(command, work, timeout):
                 'output_truncated': size > 65536}
 
 
-def verify(trial, arm, timeout=60):
+def container_check(image, command, work, timeout):
+    from sandbox_runner import DIGEST_IMAGE
+    if not isinstance(image, str) or not DIGEST_IMAGE.fullmatch(image):
+        raise ValueError('sandbox image must be digest-pinned')
+    name = 'daeloryn-check-' + uuid.uuid4().hex
+    argv = ['docker', 'run', '--rm', '--pull=never', '--name', name, '--network=none',
+            '--read-only', '--cap-drop=ALL', '--security-opt=no-new-privileges',
+            '--pids-limit=128', '--memory=1g', '--cpus=1', '--user=65534:65534',
+            '--tmpfs=/tmp:rw,nosuid,size=256m', '--workdir=/work',
+            '--mount', 'type=bind,src=' + str(work) + ',dst=/work,readonly',
+            '--entrypoint', command[0], image] + command[1:]
+    # Permit the container's unprivileged UID to read only this disposable snapshot.
+    work.chmod(0o755)
+    result = None
+    try:
+        result = run_check(argv, work, timeout)
+        return result
+    finally:
+        cleanup_status = 'not_verified'
+        try:
+            removed = subprocess.run(['docker', 'rm', '-f', name], capture_output=True,
+                                     timeout=10, check=False)
+            if removed.returncode == 0:
+                cleanup_status = 'confirmed_removed'
+        except (OSError, subprocess.TimeoutExpired):
+            pass  # Never replace the original outcome with a cleanup error.
+        if result is not None:
+            result['container_cleanup'] = cleanup_status
+
+
+def verify(trial, arm, timeout=60, sandbox_image=None):
     if arm not in ('baseline', 'daeloryn', 'original'):
         raise ValueError('arm must be baseline, daeloryn or original')
     if type(timeout) is not int or timeout <= 0:
@@ -167,14 +198,17 @@ def verify(trial, arm, timeout=60):
             check_work = Path(check_tmp)
             write_files(check_work, sources)
             write_files(check_work / '_suite', tests)
-            results[name] = {'command': command, **run_check(command, check_work, timeout)}
+            result = (run_check(command, check_work, timeout) if sandbox_image is None
+                      else container_check(sandbox_image, command, check_work, timeout))
+            results[name] = {'command': command, **result}
     return {'schema_version': 1, 'arm': arm,
             'manifest_sha256': digest(raw_manifest),
             'source_sha256': {k: digest(v) for k, v in sources.items()},
             'suite_sha256': manifest['suite_sha256'],
             'changed_files': sorted(k for k in sources if sources[k] != originals[k]),
             'status': 'passed' if all(r['status'] == 'passed' for r in results.values()) else 'failed',
-            'checks': results, 'model_execution': 'not_run_by_this_tool'}
+            'checks': results, 'execution_mode': 'host' if sandbox_image is None else 'container',
+            'sandbox_image': sandbox_image, 'model_execution': 'not_run_by_this_tool'}
 
 
 def main():
@@ -190,6 +224,7 @@ def main():
     run.add_argument('--trial', type=Path, required=True)
     run.add_argument('--arm', choices=('original', 'baseline', 'daeloryn'), required=True)
     run.add_argument('--timeout', type=int, default=60)
+    run.add_argument('--sandbox-image', help='opt-in reviewed digest-pinned Docker image')
     args = parser.parse_args()
     try:
         if args.action == 'prepare':
@@ -197,7 +232,7 @@ def main():
                              args.suite_file, json.loads(args.checks.read_text()),
                              args.output, args.agent)
         else:
-            result = verify(args.trial, args.arm, args.timeout)
+            result = verify(args.trial, args.arm, args.timeout, args.sandbox_image)
     except (OSError, ValueError) as exc:
         parser.exit(2, f'ERROR: {exc}\n')
     print(json.dumps(result, indent=2))

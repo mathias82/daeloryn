@@ -49,3 +49,9 @@ The unified service is **not implemented yet**. Existing components are experime
 - Versioned releases and distribution packaging
 
 Prioritize correctness and safety over agent count.
+
+## Experimental engineering cycle additions
+
+Implemented an independent Java checkout development suite on the benchmark branch, source/context-pinned handoffs, content-free trace records with an optional OpenTelemetry bridge, a bounded data-only OpenAI Responses adapter, hardened opt-in container checks, transactional stage checkpoints with explicit recovery, and bounded/deduplicated context preparation. See [engineering cycle](engineering-cycle.md).
+
+These additions do not enable the older automatic provider adapter, production deployment authorization or an autonomous tool loop. Live OpenAI/Docker/OpenTelemetry integration tests, independent human security review, unseen benchmark cases and real repeated provider comparisons remain outstanding.

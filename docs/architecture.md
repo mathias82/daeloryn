@@ -38,3 +38,7 @@ Workflows are declarative JSON under `workflows/`. The dependency validator in `
 ## Agent quality contract
 
 The 22 canonical module Markdown definitions include focused practical scenarios and an evidence contract. Agents must distinguish confirmed findings from hypotheses, cite concrete repository lines and runtime/test evidence, report actual command results, and propose minimal verifiable corrections. Java examples explicitly consider Java 25 where the project's toolchain supports it. These are instruction-level requirements, **not proof that every host model will obey them**.
+
+## Optional engineering artifact cycle
+
+The separate `engineering_cycle.py` operator CLI can invoke the opt-in, data-only OpenAI Responses client, validate source-pinned review/fix artifacts and independently execute checks with explicit authorization. It persists stages and attempts transactionally in its own SQLite tables, emits content-free spans and rejects silent retries of unknown effects. This does not enable the original `agent_adapter.execute()` boundary, add a model shell/tool loop, authorize production changes or modify original workspaces. See [engineering cycle](engineering-cycle.md) for scope and validation limits.

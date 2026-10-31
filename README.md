@@ -79,6 +79,10 @@ python3 scripts/audit_review_evidence.py --root /path/to/project --report /path/
 
 All 22 specialists now require a fix-verification handoff and role-specific acceptance for code quality, observability, security, reliability and compatibility. The opt-in [implementation verifier](docs/implementation-verification.md) prepares paired copies and runs the same pinned evaluator-owned checks against both patches. It records actual command results and rejects changed test snapshots or frozen build context; it does not invoke models or provide a security sandbox. Benchmark fixtures remain on the dedicated benchmark branch. **Real-provider code quality equivalence or superiority has not been established.**
 
+## Optional engineering verification cycle
+
+The [experimental engineering cycle](docs/engineering-cycle.md) adds pinned review-to-fix handoffs, content-free tracing, SQLite checkpoints, explicit recovery and bounded context. An opt-in OpenAI Responses adapter returns validated data artifacts; independent checks run separately with explicit host/container execution authorization. Existing manual adapters remain disabled for automatic provider execution. The checkout evaluator stays on the benchmark branch; `python3 scripts/check_checkout_benchmark.py --project /path/to/existing/copy --execute-checks` runs it without modifying that copy. Real provider performance and live container/API integrations remain unverified.
+
 ## Documentation
 
 [Getting started](docs/getting-started.md) · [Workflows](docs/workflows.md) · [Architecture](docs/architecture.md) · [Pros & cons](docs/pros-cons.md) · [Evaluations](docs/evaluations.md) · [Benchmark protocol](docs/benchmark-protocol.md) · [Roadmap](docs/roadmap.md) · [Release gates](docs/release-gates.md) · [Host compatibility](docs/host-compatibility.md)
