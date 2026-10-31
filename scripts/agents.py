@@ -121,8 +121,10 @@ def install(target, module, tool, force=False, dry_run=False, show_diff=False):
             if path.is_symlink() or path.parent.is_symlink():
                 raise ValueError(f"symlink destination rejected: {path}")
             fd, temp_path = tempfile.mkstemp(prefix=".agent-stage-", dir=path.parent)
-            with os.fdopen(fd, "w", encoding="utf-8") as stream:
-                stream.write(content)
+            # Explicit LF prevents platform-specific newline translation and
+            # preserves the exact validated agent instructions on Windows.
+            with os.fdopen(fd, "wb") as stream:
+                stream.write(content.encode("utf-8"))
             staged.append((path, Path(temp_path)))
         for path, temp_path in staged:
             original[path] = path.read_bytes() if path.exists() else None
