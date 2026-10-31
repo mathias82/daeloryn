@@ -254,3 +254,28 @@ or a claim that evaluator suites were executed. Real benchmark cases require
 independent frozen tests and human-reviewed correctness contracts. The
 live-provider network/credential isolation and model identity attestation
 are still pending.
+
+## First executable, blinded engineering benchmark pack
+
+Export four existing real fixture prompts (Java, Spring, React and Kubernetes)
+without reference findings:
+
+```bash
+python3 scripts/engineering_benchmark_pack.py export --output /private/engineering-prompts.json
+```
+
+Submit actual agent output as JSON using the existing `score_agents.py`
+submission contract (`cases` array with `case_id` and `findings`,
+each finding with `id` and nonempty `evidence`). Grade it:
+
+```bash
+python3 scripts/engineering_benchmark_pack.py score \
+  --submission /private/agent-output.json --output /private/engineering-score.json
+```
+
+All four cases are required; missing cases fail closed. Scoring reports
+precision, recall, F1 and false positives against the hidden reference
+labels. The evaluator uses synthetic teaching fixtures and **does not**
+independently validate quoted evidence or actual model identity. The
+exported prompt pack must not be distributed with the reference labels.
+This is the first small case corpus, not full coverage of all agents.
