@@ -45,3 +45,11 @@ All 22 canonical agents include at least one fenced, role-specific code/configur
 Before proposing an implementation, inspect the project's actual compiler target, framework dependencies, CI and runtime. **Java 8 remains supported:** Java 8/Spring Boot 2.x users must not be offered Java 17+ records, Java 21+ virtual threads, Spring Boot 3/Jakarta migration or modern-only APIs unless they explicitly request and validate an upgrade. React agents must inspect package.json/lockfiles; platform agents must verify their actual tool and API versions. No agent should recommend migration as a default improvement.
 
 The offline regression file `tests/test_concrete_agent_examples.py` checks example presence across 22 canonical agents and their four host adapters. It cannot compile every illustrative fragment or prove model compliance.
+
+## Fix completeness: role-specific examples and regression checks
+
+Every one of the **22** canonical agents contains a mandatory `Fix completeness and regression gate`, plus a **concrete example** showing an incomplete change, a fuller approach, a proposed regression test and the explicit `not run` status. These are illustrative fragments and not substitutes for checking the user's actual project. The offline regression test `tests/test_fix_completeness.py` checks the 22 definitions and the 88 generated Copilot/Claude/Codex/Gemini adapters.
+
+The [shared quality-rule worked examples](agent-rule-worked-examples.md) give before/after patterns for each of the six common evidence/quality rules. They are teaching materials, **not** proof that the models follow each rule. Specialty-specific rules still require the domain context and actual dependencies.
+
+Do not claim a fix is complete until its proposed patch is re-evaluated against **all independently supported defects**, conditional contract assumptions are called out, and missing/failed verification is explicitly recorded.
