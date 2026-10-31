@@ -4,6 +4,7 @@ from code_context import scan
 from architecture_inventory import inventory
 from review_action_plan import plan
 from agent_router import recommend
+from engineering_workflow import Workflow, describe
 
 RULES = (
  ("java-swallowed-interrupt", "medium", re.compile(r"catch\s*\(\s*InterruptedException\b[^)]*\)\s*\{\s*\}", re.S),
@@ -35,5 +36,6 @@ def review(root, repository, task):
             "skipped": context["skipped"],
             "execution": "not_run", "changes_made": False,
             "limitations": "Pattern matches are review leads, not verified defects; no tests executed"}
+    result["workflow"] = describe(Workflow(repository))
     result["remediation_plan"] = plan(result)
     return result
