@@ -31,6 +31,9 @@ function App() {
   const [draft,setDraft] = useState('');
   const [agent,setAgent] = useState('Automatic (preview)');
   const [agentRecommendation,setAgentRecommendation] = useState('');
+  const [repositoryRecommendation,setRepositoryRecommendation] = useState('');
+  const [repositoryConfirmed,setRepositoryConfirmed] = useState(false);
+  const [repositoryCatalog,setRepositoryCatalog] = useState<{name:string;path:string;technologies:string[]}[]>([]);
   const [model,setModel] = useState('');
   const [installedModels,setInstalledModels] = useState<string[]>([]);
   const [chatEnabled,setChatEnabled] = useState(false);
@@ -88,6 +91,18 @@ function App() {
           const discoveredModels = modelsData.models as string[];
           if (discoveredModels.length) setModel(previous=>previous || discoveredModels[0]);
         }
+        try {
+          const response=await fetch('/api/repositories',{signal:controller.signal});
+          if (response.ok) {
+            const data:unknown=await response.json();
+            if (data && typeof data==='object' && 'repositories' in data &&
+                Array.isArray(data.repositories) &&
+                data.repositories.every((r:unknown)=>r!==null && typeof r==='object' &&
+                  'name' in r && typeof r.name==='string' && 'path' in r && typeof r.path==='string' &&
+                  'technologies' in r && Array.isArray(r.technologies)))
+              setRepositoryCatalog(data.repositories as {name:string;path:string;technologies:string[]}[]);
+          }
+        } catch { /* optional repository catalog; chat remains usable */ }
         setRemoteAgents(agentData.agents as Agent[]);
         setBenchmarks(reportData as Benchmark);
         setApiStatus('connected');
@@ -113,6 +128,7 @@ function App() {
   async function send(event: React.FormEvent) {
     event.preventDefault();
     const text=draft.trim();
+    setRepositoryConfirmed(false);
     if (!text || sending) return;
     const stamp=Date.now(), targetSession=sessionId;
     const selectedModel=provider==='copilot'?copilotModel:model;
@@ -130,6 +146,20 @@ function App() {
     }
     setSending(true);
     try {
+      if (provider==='copilot') {
+        try {
+          const suggestion=await fetch('/api/repository-routing',{method:'POST',
+            headers:{'Content-Type':'application/json'},body:JSON.stringify({task:text})});
+          if (suggestion.ok) {
+            const data:unknown=await suggestion.json();
+            if (data && typeof data==='object' && 'repository' in data &&
+                data.repository && typeof data.repository==='object' &&
+                'name' in data.repository && typeof data.repository.name==='string')
+              setRepositoryRecommendation(data.repository.name);
+            else setRepositoryRecommendation('No unique repository match');
+          } else setRepositoryRecommendation('Repository recommendation unavailable');
+        } catch { setRepositoryRecommendation('Repository recommendation unavailable'); }
+      }
       if (provider==='copilot' && agent==='Automatic (preview)') {
         try {
           const suggestion=await fetch('/api/agent-routing',{method:'POST',
@@ -186,7 +216,7 @@ function App() {
         <div className="chat-layout"><section className="chat-panel"><div className="chat-toolbar"><div><span className="chat-orb">✧</span><strong>{session.name}</strong><small>Local conversation</small></div><button className="icon-button" onClick={()=>setShowDetails(!showDetails)} aria-label="Toggle session details">☷</button></div>
           <div className="chat-messages" aria-live="polite">{session.messages.map(m=><article key={m.id} className={'bubble '+m.role}><div className="bubble-author">{m.role==='user'?'YOU':'DAELORYN · SYSTEM STATUS'}</div><p>{m.text}</p></article>)}</div>
           <form className="composer" onSubmit={send}><label htmlFor="task-input">Message</label><textarea id="task-input" value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Ask Daeloryn to review code, plan a workflow, or assess architecture…" rows={3}/><div className="composer-footer"><span>⌁ {chatEnabled ? 'Local Ollama · no tools or repository access' : 'No selected provider connected'}</span><button disabled={!draft.trim() || sending} type="submit">{sending ? "Generating…" : "Send message"} <span>↗</span></button></div></form>
-        </section>{showDetails&&<aside className="details-panel"><h3>Session configuration</h3><p className="muted">Agent recommendation is advisory; no agent tools or workspace access.</p>{agentRecommendation && <p className="muted">Suggested specialist: {agentRecommendation}</p>}<label>Agent<select value={agent} onChange={e=>setAgent(e.target.value)}><option>Automatic (preview)</option>{displayedAgents.map(a=><option key={a.name}>{a.name}</option>)}</select></label><label>Provider<select value={provider} onChange={e=>setProvider(e.target.value as 'copilot'|'ollama')}><option value="copilot">GitHub Copilot</option><option value="ollama">Local Ollama</option></select></label>{provider==='copilot'?<label>Copilot model<select value={copilotModel} onChange={e=>setCopilotModel(e.target.value)}><option value="auto">Automatic (task-based)</option>{copilotModels.map(m=><option key={m} value={m}>{m}</option>)}</select></label>:<label>Model<select value={model} onChange={e=>setModel(e.target.value)}><option value="">No model selected</option>{installedModels.map(m=><option key={m} value={m}>{m}</option>)}</select></label>}{provider==='copilot' && copilotDiscoveryError && <p className="muted">{copilotDiscoveryError} — automatic routing will fail closed.</p>}<div className="detail-divider"/><h3>Execution safeguards</h3><StatusLine label="Provider" state="Disconnected"/><StatusLine label="Workspace access" state="Disabled"/><StatusLine label="Code modifications" state="Disabled"/><StatusLine label="Approval gates" state="Not active"/><div className="details-note">Model selection can invoke local Ollama only when explicitly enabled. Agent selection is still preview-only; no tools or repository modifications.</div></aside>}</div>
+        </section>{showDetails&&<aside className="details-panel"><h3>Session configuration</h3><p className="muted">Agent recommendation is advisory; no agent tools or workspace access.</p>{agentRecommendation && <p className="muted">Suggested specialist: {agentRecommendation}</p>}<label>Local repository (read-only suggestion)<select value={repositoryConfirmed?repositoryRecommendation:''} onChange={e=>{setRepositoryRecommendation(e.target.value);setRepositoryConfirmed(Boolean(e.target.value));}}><option value="">Not confirmed</option>{repositoryCatalog.map(r=><option key={r.path} value={r.name}>{r.name}</option>)}</select></label>{repositoryRecommendation && <p className="muted">Suggested repository: {repositoryRecommendation}. Confirm it manually before any future repository operation. Current chat does not access the repository.</p>}<label>Agent<select value={agent} onChange={e=>setAgent(e.target.value)}><option>Automatic (preview)</option>{displayedAgents.map(a=><option key={a.name}>{a.name}</option>)}</select></label><label>Provider<select value={provider} onChange={e=>setProvider(e.target.value as 'copilot'|'ollama')}><option value="copilot">GitHub Copilot</option><option value="ollama">Local Ollama</option></select></label>{provider==='copilot'?<label>Copilot model<select value={copilotModel} onChange={e=>setCopilotModel(e.target.value)}><option value="auto">Automatic (task-based)</option>{copilotModels.map(m=><option key={m} value={m}>{m}</option>)}</select></label>:<label>Model<select value={model} onChange={e=>setModel(e.target.value)}><option value="">No model selected</option>{installedModels.map(m=><option key={m} value={m}>{m}</option>)}</select></label>}{provider==='copilot' && copilotDiscoveryError && <p className="muted">{copilotDiscoveryError} — automatic routing will fail closed.</p>}<div className="detail-divider"/><h3>Execution safeguards</h3><StatusLine label="Provider" state="Disconnected"/><StatusLine label="Workspace access" state="Disabled"/><StatusLine label="Code modifications" state="Disabled"/><StatusLine label="Approval gates" state="Not active"/><div className="details-note">Model selection can invoke local Ollama only when explicitly enabled. Agent selection is still preview-only; no tools or repository modifications.</div></aside>}</div>
       </>}
       {view==='Agents'&&<><PageHeading eyebrow="SPECIALIST DIRECTORY" title="Agent catalog" description="Explore engineering roles. The full repository catalog will be loaded by the future API."/><div className="filter-bar"><input aria-label="Search agents" value={search} onChange={e=>setSearch(e.target.value)} placeholder="⌕  Search specialists…"/><span>{remoteAgents ? 'Repository catalog · '+remoteAgents.length+' agents' : 'Illustrative profiles · API offline'}</span></div><div className="agent-grid">{filteredAgents.map(a=><article className="agent-card" key={a.name}><div className="agent-card-top"><span className="agent-symbol">✧</span><span className="subtle-tag">{a.scope}</span></div><h3>{a.name}</h3><p>{a.description}</p><div className="agent-bottom"><span>○ Not connected</span><button onClick={()=>{setAgent(a.name);setView('Chat')}}>Select for chat →</button></div></article>)}</div>{filteredAgents.length===0&&<Empty text="No agents match your search."/>}</>}
       {view==='Workflows'&&<><PageHeading eyebrow="EXECUTION ORCHESTRATION" title="Workflows" description="Track request lifecycle, approvals and execution events once the backend is connected."/><div className="notice"><span className="notice-icon">ⓘ</span><div><strong>Execution disabled</strong><p>No workflows are running. The following pipeline is an interface preview only.</p></div></div><section className="surface"><div className="surface-head"><h2>Workflow lifecycle</h2><span className="subtle-tag">REFERENCE DESIGN</span></div><div className="workflow-grid">{['Request submitted','Route to specialist','Review proposed changes','Explicit human approval','Isolated execution','Independent verification'].map((s,i)=><div key={s} className="workflow-stage"><span>0{i+1}</span><strong>{s}</strong><small>Not started</small></div>)}</div></section><Empty text="No real workflow history is available."/></>}
