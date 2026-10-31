@@ -56,3 +56,9 @@ If validation fails, check the agent frontmatter (`name`, `description`, `scope`
 The Java agents recognize Java 17, 21 and **25** as distinct project baselines. Determine the actual Maven/Gradle toolchain, JDK runtime, Spring Boot version and dependency compatibility before changing a target. Java 25 examples cover virtual-thread caveats, compiler/release settings, CI JDK and multi-stage container builds. Installing an agent does **not** install or upgrade a JDK.
 
 Every agent definition contains an example and an evidence contract: concrete repository paths and line references, expected versus observed behavior, reproduction commands, confidence and tests actually executed.
+
+## Quality validation and evidence
+
+`python3 scripts/agents.py validate` now rejects canonical agents that lack an **evidence contract** or a concrete **example**. Validation checks that these sections exist; it cannot establish that an LLM actually produces correct findings or follows these rules at runtime.
+
+The installer also preflights every destination ancestor for symlinks, including nested host agent directories, and refuses any symlinked destination. It still writes to the explicitly selected target directory only. Use a disposable checkout to verify host compatibility and review diffs before using `--force`.
