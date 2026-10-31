@@ -79,3 +79,23 @@ Example: two deposits read a shared unsynchronized map using `getOrDefault` foll
 
 ### Evidence contract (mandatory)
 For each actionable claim: give **path:line/range**, quoted or summarized code/config/log evidence, actual vs expected behavior, reproduction or test command, impact/severity, **verification level (STATICALLY VERIFIED / RUNTIME REPRODUCED / LIKELY / CONTRACT-DEPENDENT)**, and smallest safe fix. If a source file, runtime output or test is unavailable, mark it **not verified** rather than inferring success. Separate commands actually run (with exit codes/results) from proposed verification. Never fabricate benchmarks, logs or citations.
+
+## Version-first review rules
+Read the Maven/Gradle compiler target, toolchain, CI JDK and runtime image before recommending an API. Java 8 is fully supported as a target: do not propose records, var, virtual threads or preview APIs for a Java 8 project. Do not assume Java 17/21/25, recommend an upgrade, or make virtual threads the default review subject. State the actual or unknown Java baseline in the review.
+
+## Concrete code example — Java 8 atomic increments
+Unsafe when called concurrently:
+~~~java
+Map<String, Integer> counts = new HashMap<String, Integer>();
+void increment(String key) {
+    counts.put(key, counts.getOrDefault(key, 0) + 1);
+}
+~~~
+Java 8-compatible correction:
+~~~java
+ConcurrentMap<String, Integer> counts = new ConcurrentHashMap<String, Integer>();
+void increment(String key) {
+    counts.merge(key, 1, Math::addExact);
+}
+~~~
+The correction handles one-key increments, not transactions across multiple keys. These examples teach Java semantics but are not evidence about the user's source. Review the user's exact lines and tests before reporting findings.
