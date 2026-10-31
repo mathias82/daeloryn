@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 BASE = Path(__file__).resolve().parents[1] / "evaluations" / "platform"
-def score(submission, reference):
+def score(submission, reference, require_complete=False):
     if not isinstance(submission, dict) or not isinstance(submission.get("cases"), list):
         raise ValueError("submission must contain a cases array")
     if not isinstance(reference, dict) or not isinstance(reference.get("cases"), list):
@@ -33,6 +33,9 @@ def score(submission, reference):
                 raise ValueError("duplicate finding id")
             found.add(item["id"])
         submitted[case_id] = found
+    missing_cases = sorted(set(expected) - set(submitted))
+    if require_complete and missing_cases:
+        raise ValueError("missing evaluated cases: " + ", ".join(missing_cases))
     tp = fp = fn = 0
     rows = []
     for case_id, gold in expected.items():
@@ -49,6 +52,8 @@ def score(submission, reference):
     return {"run_id": submission.get("run_id", "unspecified"), "tool": submission.get("tool", "unspecified"),
             "model": submission.get("model", "unspecified"), "tp": tp, "fp": fp, "fn": fn,
             "precision": round(precision, 4), "recall": round(recall, 4), "f1": round(f1, 4),
+            "expected_case_count": len(expected), "submitted_case_count": len(submitted),
+            "missing_cases": missing_cases, "complete": not missing_cases,
             "cases": rows}
 
 def main():
@@ -56,9 +61,12 @@ def main():
     ap.add_argument("submission", type=Path, help="JSON findings from an actual agent run")
     ap.add_argument("--reference", type=Path, default=BASE / "cases.json")
     ap.add_argument("--output", type=Path)
+    ap.add_argument("--require-complete", action="store_true",
+                    help="fail closed when any reference case has no submitted result")
     args = ap.parse_args()
     result = score(json.loads(args.submission.read_text(encoding="utf-8")),
-                   json.loads(args.reference.read_text(encoding="utf-8")))
+                   json.loads(args.reference.read_text(encoding="utf-8")),
+                   require_complete=args.require_complete)
     rendered = json.dumps(result, indent=2) + "\n"
     if args.output:
         args.output.write_text(rendered, encoding="utf-8")

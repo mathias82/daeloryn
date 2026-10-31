@@ -45,3 +45,20 @@ Use the same submission schema as the Platform corpus. Run the selected agent in
 ## Real-provider benchmark capture
 
 Use [the controlled benchmark protocol](benchmark-protocol.md), `scripts/record_benchmark.py`, and `scripts/summarize_benchmarks.py` to record observed runs with source-line evidence. These scripts **do not invoke AI providers**, and there are currently no verified real-provider measurements in the project.
+
+### Coverage gate for comparable cross-stack runs
+
+A submission can omit a case and still receive a numerical F1 score. The scorer
+now reports `expected_case_count`, `submitted_case_count`, `missing_cases`
+and `complete` to make that limitation visible. For a comparable full-corpus
+run, **require every case** (including cases with no findings):
+
+```bash
+python3 scripts/score_agents.py results.json \
+  --reference evaluations/engineering/cases.json --require-complete
+```
+
+Missing cases fail this gate rather than being silently treated as completed
+reviews. This is an offline *coverage* check, not evidence that the findings
+are correct or that any model was actually invoked. Preserve raw submissions
+and verify model provenance separately before making performance claims.
