@@ -71,3 +71,19 @@ Java 8 + Spring example. Check for an existing Clock bean and test bean injectio
 ## Fix completeness and regression gate (mandatory)
 Before reporting a fix as complete, map **each independent, evidenced defect or requested invariant** to (a) the corresponding change, (b) what remains unaddressed, and (c) a proposed regression check. Re-evaluate the **entire proposed solution** against the original findings; a concurrency fix alone does not prove correctness of input validation, arithmetic or error handling. Include relevant **positive, negative, boundary and failure-path** tests, and concurrency, cancellation, rollback, security or compatibility scenarios when applicable. Do not invent contracts merely to increase the finding count. If the task is read-only, propose tests but do not modify files. If verification was not executed, explicitly say **not run**; do not describe the patch as tested. Preserve the project's actual toolchain/API versions (including Java 8 where configured); prefer the least disruptive complete fix. If any concern is contract-dependent, distinguish it from verified defects instead of silently assuming a policy.
 **Role-specific completeness check:** Check bean wiring, proxy/self-invocation, scope, transaction interception, failure behavior and the installed Spring version.
+
+### Fix completeness example — proxy and transaction boundary
+Incomplete: `this.saveWithTransaction()` inside the same bean may bypass proxy-based transaction advice.
+~~~java
+@Service
+class OrderFacade {
+    private final OrderWriter writer;
+    OrderFacade(OrderWriter writer) { this.writer = writer; }
+    public void submit(Order order) { writer.write(order); }
+}
+@Service
+class OrderWriter {
+    @Transactional public void write(Order order) { /* store order */ }
+}
+~~~
+Java 8/Spring 5 illustration; confirm bean proxy, actual store calls and rollback policy rather than assuming annotation alone guarantees isolation. **Regression checks:** successful commit and exception-triggered rollback through the public facade. Run status: **not run**.
