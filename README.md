@@ -1,6 +1,6 @@
 # Enterprise Engineering Agents
 
-Original, modular, technology-aware engineering agents for **Codex** and **Claude Code**. No BMAD dependency.
+Original, modular, technology-aware engineering agents for **Codex**, **Claude Code**, and **GitHub Copilot**. No BMAD dependency.
 
 > Status: experimental v0.1.0. Definitions and installer are validated by CI; agent performance has not yet been benchmarked on production repositories.
 
@@ -33,9 +33,12 @@ python3 scripts/agents.py validate
 python3 scripts/agents.py install --target /path/to/your/project --module java --tool codex
 python3 scripts/agents.py install --target /path/to/your/project --module react --tool claude
 python3 scripts/agents.py install --target /path/to/your/project --module shared --tool both
+python3 scripts/agents.py install --target /path/to/your/project --module all --tool copilot
+# Install all modules for all three tools:
+python3 scripts/agents.py install --target /path/to/your/project --module all --tool all
 ```
 
-Generated files: `.codex/agents/*.toml` and/or `.claude/agents/*.md`, based on the tool flag. `--module all` includes all modules. Installer refuses to overwrite files unless `--force` is given. Review changes before committing them.
+Generated files: `.codex/agents/*.toml`, `.claude/agents/*.md`, and/or `.github/agents/*.agent.md`, based on the tool flag. `--tool both` means Codex + Claude for backward compatibility; `--tool all` also adds GitHub Copilot. Copilot agents can be selected in compatible VS Code/Copilot clients from the agent picker. `--module all` includes all modules. Installer refuses to overwrite files unless `--force` is given. Review changes before committing them.
 
 The installer copies each agent's self-contained instructions into tool-native definitions; agent selection and execution remain controlled by the host tool. A reviewer prompt **does not** independently enforce read-only permissions.
 
@@ -62,7 +65,7 @@ python3 -m unittest discover -s tests -v
 ## Roadmap
 
 - [x] Canonical source and modular catalog
-- [x] Codex and Claude Code adapters with safe overwrite behavior
+- [x] Codex, Claude Code and GitHub Copilot adapters with safe overwrite behavior
 - [x] Security policy and cross-stack reviewer
 - [x] CI validation and installer tests
 - [ ] Real-world Java and React benchmark fixtures with known defects
@@ -74,5 +77,6 @@ python3 -m unittest discover -s tests -v
 - [Codex subagents](https://learn.chatgpt.com/docs/agent-configuration/subagents)
 - [Claude Code subagents](https://academy.claude.com/courses/introduction-to-subagents/creating-a-subagent)
 - [Agent Skills specification](https://github.com/agentskills/agentskills)
+- [GitHub Copilot custom agents configuration](https://docs.github.com/en/copilot/reference/custom-agents-configuration)
 
 MIT licensed. See [CONTRIBUTING.md](CONTRIBUTING.md).
