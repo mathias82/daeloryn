@@ -5,7 +5,7 @@ Status: **BLOCKED — developer preview**, until all mandatory P0 gates pass. Th
 | Gate | How to verify | Status |
 | --- | --- | --- |
 | P0: validation green on Python 3.11/3.12/3.13 | GitHub Actions matrix, all jobs passing on release commit | Unverified |
-| P0: installer refuses path escape/symlink and handles errors safely | Automated negative cases, dry-run tests passed in CI, rollback and manual audit still required | Partial |
+| P0: installer refuses path escape/symlink and handles errors safely | Automated negative cases, dry-run and rollback tests added, but CI and independent audit not verified | Partial |
 | P0: static and dependency security checks | Security workflow added; check completion and triage findings | Unverified |
 | P0: four host adapter formats | Disposable project installation and CLI/host recognition for Codex, Claude, Copilot, Gemini | Pending |
 | P0: observed comparison to baseline | Repeated actual model runs, identical conditions, independent review | Pending |
@@ -21,7 +21,7 @@ Status: **BLOCKED — developer preview**, until all mandatory P0 gates pass. Th
 2. Four host integrations: format outputs exist; live tests pending.
 3. Benchmarks: recording/scoring harness exists; observed runs pending.
 4. Evidence: line/quote verification exists; semantic human adjudication pending.
-5. Installer: dry-run and symlink preflight exist; atomic rollback/diff pending.
+5. Installer: staging and best-effort rollback with injected-failure tests added; diff and independent verification pending.
 6. Security: CodeQL and pip-audit workflows added; findings and threat modeling pending.
 7. Agent quality: 22 definitions have evidence/examples; live quality pending.
 8. Versioning: changelog/release procedure drafted; tag pending.
