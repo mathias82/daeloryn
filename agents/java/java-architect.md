@@ -82,3 +82,13 @@ Illustrative Java 8 architecture boundary: verify error behavior, idempotency, t
 ## Fix completeness and regression gate (mandatory)
 Before reporting a fix as complete, map **each independent, evidenced defect or requested invariant** to (a) the corresponding change, (b) what remains unaddressed, and (c) a proposed regression check. Re-evaluate the **entire proposed solution** against the original findings; a concurrency fix alone does not prove correctness of input validation, arithmetic or error handling. Include relevant **positive, negative, boundary and failure-path** tests, and concurrency, cancellation, rollback, security or compatibility scenarios when applicable. Do not invent contracts merely to increase the finding count. If the task is read-only, propose tests but do not modify files. If verification was not executed, explicitly say **not run**; do not describe the patch as tested. Preserve the project's actual toolchain/API versions (including Java 8 where configured); prefer the least disruptive complete fix. If any concern is contract-dependent, distinguish it from verified defects instead of silently assuming a policy.
 **Role-specific completeness check:** Verify architecture-wide invariants: cross-service transaction boundaries, retries/idempotency, API contracts and operational rollback.
+
+### Fix completeness example — Java 8 idempotent checkout
+Incomplete: `gateway.charge(requestId, amount);` is retried blindly and can charge twice.
+~~~java
+boolean checkout(String requestId, long cents) {
+    if (cents <= 0) throw new IllegalArgumentException("cents");
+    return gateway.chargeOnce(requestId, cents);
+}
+~~~
+Complete **only if** the gateway enforces a durable, atomic idempotency key and returns the previous outcome on retries; this method alone is insufficient. **Regression check:** submit the same request ID twice and verify exactly one persisted charge, plus a failure/retry path. Run status: **not run**.
