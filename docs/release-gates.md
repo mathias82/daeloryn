@@ -17,9 +17,9 @@ Status: **BLOCKED — developer preview**, until all mandatory P0 gates pass. Th
 
 ## Tracking the 13 agreed workstreams
 
-1. CI/CD: matrix added; green run unverified.
+1. CI/CD: historic PR run 41186962207 passed; security run 41186962114 failed due to misinvoked pip-audit module. Fixed invocation in commit 22cc665; main-branch rerun still unverified.
 2. Four host integrations: format outputs exist; live tests pending.
-3. Benchmarks: recording/scoring harness exists; observed runs pending.
+3. Benchmarks: recording/scoring harness and [96-trial preregistered matrix](benchmark-execution-matrix.md) exist; actual provider runs pending.
 4. Evidence: line/quote verification exists; semantic human adjudication pending.
 5. Installer: staging, best-effort rollback and read-only unified diff with automated tests added; independent CI/host security verification pending.
 6. Security: CodeQL and pip-audit workflows added; findings and threat modeling pending.
