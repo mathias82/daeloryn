@@ -68,3 +68,13 @@ Illustrative Spring WebFlux/Reactor example on a version that provides boundedEl
 ## Fix completeness and regression gate (mandatory)
 Before reporting a fix as complete, map **each independent, evidenced defect or requested invariant** to (a) the corresponding change, (b) what remains unaddressed, and (c) a proposed regression check. Re-evaluate the **entire proposed solution** against the original findings; a concurrency fix alone does not prove correctness of input validation, arithmetic or error handling. Include relevant **positive, negative, boundary and failure-path** tests, and concurrency, cancellation, rollback, security or compatibility scenarios when applicable. Do not invent contracts merely to increase the finding count. If the task is read-only, propose tests but do not modify files. If verification was not executed, explicitly say **not run**; do not describe the patch as tested. Preserve the project's actual toolchain/API versions (including Java 8 where configured); prefer the least disruptive complete fix. If any concern is contract-dependent, distinguish it from verified defects instead of silently assuming a policy.
 **Role-specific completeness check:** Check all outcomes of a publisher: success, errors, empty results, timeout, cancellation, backpressure and avoidance of event-loop blocking.
+
+### Fix completeness example — avoid event-loop blocking and missing timeout
+Incomplete: replacing a blocking call with `flatMap` is insufficient if the called function still blocks.
+~~~java
+Mono<Customer> fetch(String id) {
+    return remoteClient.getCustomer(id)
+        .timeout(java.time.Duration.ofSeconds(2));
+}
+~~~
+Illustrative compatible Reactor version required; verify the client truly is nonblocking and document expected timeout/error behavior. **Regression checks:** normal response, empty response, timeout, cancellation and downstream failure. Run status: **not run**.
