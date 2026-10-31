@@ -63,3 +63,7 @@ Use `STATICALLY VERIFIED` only for demonstrated source semantics; this is not an
 A user-requested new feature or architecture may be discussed as an **explicit design proposal**, even when there is no pre-existing code; proposals cannot be disguised as diagnosed bugs. All fixes must be checked against the actual source/version and all supported findings, with unexecuted checks marked `not run`.
 
 The `tests/test_source_evidence_gate.py` suite checks the 22 definitions and generated 88 host adapters for these instructions. **Passing those tests verifies only text and installation, not behavioral compliance or superior model quality.** External outputs still require blinded benchmarking and human verification of actual source-grounded claims.
+
+## Executable fixes and production acceptance
+
+All 22 definitions now include `Executable verification handoff` and `Production quality acceptance`, with unique specialty checks. They require type/caller/effective-config verification, fault-path state assertions, regression failure before correction, combined-fix validation and scoped observability/code-quality/security/compatibility evidence. Small changes may mark irrelevant dimensions not applicable with a reason. See [implementation verification](implementation-verification.md) for actual paired execution tooling and its trust limits. `tests/test_implementation_verification.py` checks packaging plus evaluator behavior on toy patches; this does not measure model compliance or Copilot superiority.

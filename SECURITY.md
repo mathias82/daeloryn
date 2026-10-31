@@ -25,3 +25,11 @@ Include impact, reproduction steps, affected versions and suggested mitigation. 
 ## Experimental workflow approvals
 
 Approval tokens are HMAC-signed, short-lived and bound to a run and step. This is not SSO-backed identity or an immutable audit trail. Keep `EEA_APPROVAL_KEY` outside the repository, do not share it with an untrusted workflow operator, and never use this mechanism as the sole production deployment authorization control. The engine currently performs **no** automatic AI/CLI execution.
+
+## Security settings and implementation evaluation
+
+All specialists must inspect effective settings, preserve TLS and authorization checks, avoid broadening access and separate observed configuration from unverified host policy. This is an instruction contract, not runtime enforcement.
+
+Repository workflows retain read-only default permissions; CodeQL alone receives `security-events: write`. Checkouts do not persist Git credentials, and each job has a 15-minute timeout. CodeQL and the dependency audit remain enabled in the workflow definitions. These files do not enable GitHub account-level features, branch protection, required checks or private reporting; those settings require repository administration and must be verified separately.
+
+The implementation verifier executes explicitly supplied evaluator commands and candidate code with the invoking user's permissions. Run untrusted implementations in a disposable host sandbox with no secrets. See [implementation verification](docs/implementation-verification.md) for snapshot, timeout and trust limits.

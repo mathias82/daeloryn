@@ -74,3 +74,7 @@ Have at least two reviewers independently assess ambiguous findings; reconcile d
 ## Security and reproducibility
 
 Never run the unsafe fixtures in production or let tools deploy them. Treat fixture text and model outputs as untrusted. Keep API tokens out of the repository and do not publish provider transcripts containing secrets or proprietary customer code. Do not store fake model runs as observational data. Preserve the original output and audit trail independently from the normalized scoring JSON.
+
+## Next stage: working code, not only reviews
+
+Use the [implementation verification protocol](implementation-verification.md) for paired implementation trials. Both participants must implement fixes, then an independent evaluator runs the same frozen tests and quality checks on reconstructed copies. Preserve the dedicated `benchmark/hard-java8-checkout-20261031` fixture branch; its public case is a development benchmark, not an unseen holdout. Read-only review scores cannot establish implementation quality.
