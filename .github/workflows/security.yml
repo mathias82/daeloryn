@@ -29,4 +29,4 @@ jobs:
         with:
           python-version: '3.11'
       - run: python3 -m pip install pip-audit
-      - run: python3 -m pip-audit -r requirements-security.txt
+      - run: python3 -m pip_audit -r requirements-security.txt
