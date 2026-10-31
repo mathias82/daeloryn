@@ -31,6 +31,10 @@ Status: **BLOCKED — developer preview**, until all mandatory P0 gates pass. Th
 12. End-to-end pilots: template ready, no pilots run.
 13. Release candidate: BLOCKED until all P0 requirements pass.
 
+## Automated fail-closed release check
+
+The repository includes `scripts/check_release_gates.py` and a **negative** evidence example. Running `python3 scripts/check_release_gates.py --evidence docs/release-evidence.example.json` must exit nonzero because all P0 gates remain unverified. The checker validates attestation structure and recorded HTTPS evidence URLs; it cannot independently confirm that those links contain authentic proof. Independent reviewer sign-off is still required. **Never flip the example gates to passed without verifiable results.**
+
 ## Release process
 
 1. Stabilize the installer and close correctness/security bugs before adding features.
