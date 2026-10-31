@@ -5,8 +5,8 @@ Status: **BLOCKED — developer preview**, until all mandatory P0 gates pass. Th
 | Gate | How to verify | Status |
 | --- | --- | --- |
 | P0: validation green on Python 3.11/3.12/3.13 | GitHub Actions matrix, all jobs passing on release commit | Unverified |
-| P0: installer refuses path escape/symlink and handles errors safely | Automated negative cases, dry-run/rollback tests, manual audit | Partial |
-| P0: static and dependency security checks | CodeQL or equivalent, dependency scan, no unresolved high/critical issues | Pending |
+| P0: installer refuses path escape/symlink and handles errors safely | Automated negative cases, dry-run tests passed in CI, rollback and manual audit still required | Partial |
+| P0: static and dependency security checks | Security workflow added; check completion and triage findings | Unverified |
 | P0: four host adapter formats | Disposable project installation and CLI/host recognition for Codex, Claude, Copilot, Gemini | Pending |
 | P0: observed comparison to baseline | Repeated actual model runs, identical conditions, independent review | Pending |
 | P0: evidence adjudication | File/line confirmation plus reviewers checking semantic validity | Pending |
@@ -14,6 +14,22 @@ Status: **BLOCKED — developer preview**, until all mandatory P0 gates pass. Th
 | P0: release candidate regression | frozen tag candidate; all P0 issues closed; audit pass | Pending |
 | P1: packaging and migration docs | semver and reproducible checksum artifacts | Pending |
 | P1: operational tooling | clear errors, consistent exit codes and run metadata | Partial |
+
+## Tracking the 13 agreed workstreams
+
+1. CI/CD: matrix added; green run unverified.
+2. Four host integrations: format outputs exist; live tests pending.
+3. Benchmarks: recording/scoring harness exists; observed runs pending.
+4. Evidence: line/quote verification exists; semantic human adjudication pending.
+5. Installer: dry-run and symlink preflight exist; atomic rollback/diff pending.
+6. Security: CodeQL and pip-audit workflows added; findings and threat modeling pending.
+7. Agent quality: 22 definitions have evidence/examples; live quality pending.
+8. Versioning: changelog/release procedure drafted; tag pending.
+9. Documentation: quick start, protocol, compatibility and pilot guides added; user validation pending.
+10. Observability: full lifecycle, timeouts and recovery pending.
+11. Supply chain: Dependabot and scans added; SBOM, action SHA pinning pending.
+12. End-to-end pilots: template ready, no pilots run.
+13. Release candidate: BLOCKED until all P0 requirements pass.
 
 ## Release process
 
