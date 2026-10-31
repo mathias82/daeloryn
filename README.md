@@ -1,4 +1,4 @@
-# Enterprise Engineering Agents
+# Daeloryn
 
 **Technology-focused AI engineering agents for Codex, Claude Code, GitHub Copilot and Gemini CLI.**
 
@@ -11,8 +11,8 @@ Specialists for **Java, Spring Boot, React, Kubernetes, Docker, CI/CD, GitOps an
 Requires Python 3.11+.
 
 ```bash
-git clone https://github.com/mathias82/enterprise-engineering-agents.git
-cd enterprise-engineering-agents
+git clone https://github.com/mathias82/daeloryn.git
+cd daeloryn
 python3 scripts/agents.py validate
 python3 scripts/agents.py install --target /path/to/project --module spring --tool copilot
 ```
