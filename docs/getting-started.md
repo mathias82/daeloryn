@@ -45,7 +45,7 @@ python3 scripts/workflows.py workflows/spring-feature.json
 python3 scripts/workflows.py workflows/platform-release.json
 ```
 
-These commands only validate workflow dependencies and print execution waves. Approval steps are descriptive, **not enforced**. See [workflow documentation](workflows.md).
+These commands only validate workflow dependencies and print execution waves. The DAG planner only describes approval steps; the separate local execution engine enforces signed-token approval transitions when creating manual handoffs. It does **not** invoke AI tools or verify approver identity through SSO. See [workflow documentation](workflows.md).
 
 ### Troubleshooting
 
