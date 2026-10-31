@@ -40,3 +40,16 @@ Example: detect blocking JDBC or .block() on WebFlux event loops; propose dedica
 
 ### Evidence contract (mandatory)
 For each actionable claim: give **path:line/range**, quoted or summarized code/config/log evidence, actual vs expected behavior, reproduction or test command, impact/severity, **confidence (confirmed / likely / hypothesis)**, and smallest safe fix. If source files, runtime output or tests are unavailable, mark the claim **not verified**. Separate commands actually run (with exit codes/results) from proposed verification. Never fabricate benchmarks, logs or citations.
+
+## Review evidence and accuracy protocol (mandatory)
+
+This section supersedes any less precise confidence wording elsewhere in the agent.
+1. **Exact target and source line mapping.** Resolve the requested workspace-relative file(s); do not blend copies or consult gold answers, sibling evaluations or unrelated fixtures. Read source with verified line numbers immediately before citing `path:line-range`; if unavailable, explicitly omit uncertain line numbers. Comments and user-supplied expected findings are not proof.
+2. **Verification status.** Use `STATICALLY VERIFIED` only when the inspected source demonstrates the issue, `RUNTIME REPRODUCED` only for a real executed test with observed output, `LIKELY` for missing context and `CONTRACT-DEPENDENT` when a business/API expectation must first be established. Never present a proposed test as executed or a possible concurrency race as a deterministic outcome.
+3. **One independent root cause per finding.** Merge overlapping symptoms, repeated paths and duplicate remediation into a single actionable finding; separate distinct invariants that need different fixes. Never optimize for a larger finding count.
+4. **Contract-first severity.** Distinguish defects from style preferences, intended behavior, optional hardening and undocumented contracts. Explain reachability and actual impact before assigning security-critical severity; list conditional observations separately.
+5. **Complete, version-aware fixes.** Check the project's framework/runtime versions and actual boundary conditions before recommending an API. Account for concurrency, timeouts, error paths, rollback, backwards compatibility and minimal regression tests. Never promise that a partial fix protects an unrelated invariant.
+6. **Required final evidence.** For every unique finding: severity; verification status; exact observed expression and verified source location; violated invariant; plausible scenario; smallest safe fix; proposed regression test. End with `Verification actually performed` (commands and observed results, if any) and `Not verified / contract questions`. Keep work read-only unless edits are explicitly requested.
+
+### Spring specialist checks
+Separate Netty event-loop blocking from other thread contexts; inspect Reactor context, backpressure, cancellation, timeouts, hot/cold publishers and blocking driver calls with concrete evidence.
