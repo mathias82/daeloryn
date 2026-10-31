@@ -12,6 +12,7 @@ from github_repository_catalog import list_github_repositories
 from project_analysis import analyze_local
 from code_review import review
 from approved_copilot_review import prepare as prepare_ai_review, execute as execute_ai_review
+from patch_workspace import preview as preview_patch
 from local_chat import installed_models, chat, MAX_REQUEST
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -162,6 +163,28 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     return
                 except (RuntimeError, TimeoutError):
                     self.reply(503, {"error": "Copilot review unavailable"})
+                    return
+                self.reply(200, result)
+                return
+            if self.path == "/api/patch/preview":
+                if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                    self.reply(415, {"error": "JSON required"})
+                    return
+                length = self.headers.get("Content-Length", "")
+                if not length.isdigit() or not 0 < int(length) <= 16000:
+                    self.reply(413, {"error": "invalid request size"})
+                    return
+                try:
+                    payload = json.loads(self.rfile.read(int(length)))
+                    if not isinstance(payload, dict) or set(payload) != {"repository", "path", "replacement"}:
+                        raise ValueError("invalid patch payload")
+                    matches = [root for root in repository_roots
+                               if any(r["name"] == payload["repository"] for r in discover([root]))]
+                    if len(matches) != 1:
+                        raise ValueError("repository must resolve uniquely")
+                    result = preview_patch(matches[0], payload["repository"], payload["path"], payload["replacement"])
+                except (ValueError, TypeError, KeyError, json.JSONDecodeError, OSError, UnicodeError):
+                    self.reply(400, {"error": "invalid patch preview"})
                     return
                 self.reply(200, result)
                 return
