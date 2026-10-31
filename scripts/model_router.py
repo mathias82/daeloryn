@@ -18,9 +18,12 @@ from agents import catalog
 from verify_implementation import digest
 
 MODEL_ID = re.compile(r'[A-Za-z0-9][A-Za-z0-9._:/-]{0,199}')
-RISK = re.compile(r'\b(auth\w*|security|tenant|payment\w*|refund\w*|transaction\w*|'
+RISK = re.compile(r'\b(auth\w*|security\w*|tenant\w*|payment\w*|refund\w*|transaction\w*|'
                   r'credential\w*|secret\w*|encrypt\w*|migration\w*|concurren\w*|'
-                  r'rollback|retry|timeout|compensation|idempotenc\w*)\b', re.I)
+                  r'rollback|retry|timeout|compensation|idempotenc\w*|'
+                  r'oauth\w*|jwt\w*|csrf\w*|xss\w*|rbac\w*|'
+                  r'access[-_ ]?control|personal[-_ ]?data|pii|gdpr|privacy|'
+                  r'deadlock|race[-_ ]?condition|toctou|injection)\b', re.I)
 KIND_FAMILIES = {'small': ('haiku', 'sonnet'), 'code': ('sonnet', 'opus'),
                  'review': ('sonnet', 'opus'), 'security': ('sonnet', 'opus'),
                  'architecture': ('sonnet', 'opus')}
@@ -52,9 +55,14 @@ def model_ids(models):
     return ids
 
 
-def select(models, task, *, kind='code', previous_failure=False, allowed=None):
+def select(models, task, *, kind='code', previous_failure=False, allowed=None, agent=None):
     if kind not in ('auto', *KIND_FAMILIES) or not isinstance(task, str) or not task.strip():
         raise ValueError('explicit task and supported work kind required')
+    # Every currently defined Daeloryn specialist is an engineering role; even a
+    # summary-style prompt requires the engineering tier when one is invoked.
+    if agent is not None and (not isinstance(agent, str)
+                              or agent not in {meta['name'] for meta, _ in catalog()}):
+        raise ValueError('unknown Daeloryn agent')
     available = model_ids(models)
     if allowed is not None:
         allowed_ids = set(model_ids(allowed))
@@ -66,7 +74,7 @@ def select(models, task, *, kind='code', previous_failure=False, allowed=None):
         lightweight = re.search(r'(summari[sz]e|translate|rephrase|proofread|μετάφρα|μεταφρα|περίληψ|περιληψ)', task, re.I)
         engineering = re.search(r'(code|java|python|typescript|sql|implement|fix|refactor|review|κώδικ|κωδικ|διορθ)', task, re.I)
         classified = 'small' if lightweight and not engineering and not risk else 'code'
-    tier = 'code' if classified == 'small' and (risk or previous_failure) else classified
+    tier = 'code' if classified == 'small' and (risk or previous_failure or agent is not None) else classified
     families = ('opus', 'sonnet') if previous_failure else KIND_FAMILIES[tier]
     chosen = None
     for family in families:
@@ -81,7 +89,10 @@ def select(models, task, *, kind='code', previous_failure=False, allowed=None):
         reasons.append('task text contains risk indicators; small-model routing excluded')
     if previous_failure:
         reasons.append('previous failure: prefer configured escalation family, no automatic retry')
+    if agent is not None:
+        reasons.append('engineering specialist selected: small-model routing excluded')
     return {'requested_model': chosen, 'requested_kind': kind, 'effective_kind': tier,
+            'selected_agent': agent,
             'risk_detected': risk, 'previous_failure': bool(previous_failure),
             'reason': reasons, 'task_sha256': digest(task.encode()),
             'catalog_sha256': digest(json.dumps(available, separators=(',', ':')).encode()),
@@ -110,6 +121,15 @@ def launch(plan, task, project, agent, *, execute=False, executable=None):
     project = Path(project).resolve(strict=True)
     if not project.is_dir() or agent not in {meta['name'] for meta, _ in catalog()}:
         raise ValueError('explicit project and known Daeloryn agent required')
+    if plan.get('selected_agent') != agent:
+        raise ValueError('agent differs from the model-routing decision')
+    # Do not ask the host to resolve a missing or redirected profile silently.
+    github_dir = project / '.github'
+    profiles_dir = github_dir / 'agents'
+    profile = profiles_dir / (agent + '.agent.md')
+    if (github_dir.is_symlink() or profiles_dir.is_symlink() or profile.is_symlink()
+            or not profile.is_file()):
+        raise ValueError('installed non-symlink Copilot agent profile required')
     if not isinstance(plan.get('requested_model'), str) or not MODEL_ID.fullmatch(plan['requested_model']):
         raise ValueError('invalid requested model')
     if plan.get('task_sha256') != digest(task.encode()):
@@ -153,7 +173,7 @@ def main():
             models = json.loads(args.models_json.read_text())
             origin = 'operator_supplied_offline_catalog'
         plan = select(models, task, kind=args.kind, previous_failure=args.previous_failure,
-                      allowed=args.allowed_model)
+                      allowed=args.allowed_model, agent=args.agent)
         plan.update({'catalog_origin': origin, 'selected_at_ns': time.time_ns()})
         print(json.dumps(plan, indent=2), flush=True)
         if args.execute:
