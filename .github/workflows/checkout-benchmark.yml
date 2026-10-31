@@ -25,3 +25,7 @@ jobs:
           python-version: '3.11'
       - name: Verify independent assertions distinguish unsafe baseline and safe controls
         run: python3 benchmarks/hard-java8-checkout/evaluator/check_baseline.py
+      - name: Verify structured invariant adapter rejects the original baseline
+        run: |
+          cd benchmarks/hard-java8-checkout
+          python3 -c "import json, subprocess, sys; r=subprocess.run([sys.executable,'evaluator/run_invariants.py'],capture_output=True,text=True); d=json.loads(r.stdout); assert r.returncode == 1; assert len(d['cases']) == 23; assert any(c['status'] == 'failed' for c in d['cases'])"

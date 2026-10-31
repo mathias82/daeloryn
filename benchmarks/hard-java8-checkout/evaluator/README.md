@@ -19,3 +19,9 @@ These are public development fixtures, not unseen holdouts or evidence of provid
 ## Existing Mac copies
 
 From an updated main checkout, the opt-in `scripts/check_checkout_benchmark.py` loads this suite from frozen local Git objects and reconstructs both original and candidate in temporary directories. It requires no new permanent copies and never changes the existing benchmark workspace. Fetch the benchmark branch first. Candidate additions/deletions or changed README/pom require a separately declared extended trial; the fixed-set v1 evaluator rejects them rather than silently ignoring changes.
+
+## Targeted invariant/mutation protocol
+
+`run_invariants.py` adapts the same 23 Java contract cases to the structured `cases` protocol used by `scripts/invariant_mutation.py` on main. Each record represents one completed case-level assertion (the Java case may contain additional internal assertions). Copy all three runner/suite files into the frozen evaluator selection; do not expose them to a model session. Build an explicit invariant manifest with exact README contract locators and exact source-line mutations for the **candidate's current version**, then pin it before scoring. Mutations are not guessed from arbitrary generated code.
+
+The unchanged fixture does not pass its invariant baseline, so mutation scoring must stop with `baseline_not_passing`; it must not gain credit simply because its tests already fail. After a corrected candidate passes, meaningful source mutations should fail their targeted assertions. Invalid compilation, unknown/setup output, missing cases, crashes and timeouts are inconclusive, not kills. Equivalent mutations need human adjudication. This adapter adds no model/provider results and does not change the original source or contract.
