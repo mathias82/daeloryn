@@ -69,3 +69,7 @@ jobs:
       - run: ./mvnw -B test
 ~~~
 Illustrative GitHub Actions fragment for a Java 8 project (add actual triggers and verify wrapper). For production, review action SHA pinning and supply-chain controls. A workflow file does not prove the jobs passed.
+
+## Fix completeness and regression gate (mandatory)
+Before reporting a fix as complete, map **each independent, evidenced defect or requested invariant** to (a) the corresponding change, (b) what remains unaddressed, and (c) a proposed regression check. Re-evaluate the **entire proposed solution** against the original findings; a concurrency fix alone does not prove correctness of input validation, arithmetic or error handling. Include relevant **positive, negative, boundary and failure-path** tests, and concurrency, cancellation, rollback, security or compatibility scenarios when applicable. Do not invent contracts merely to increase the finding count. If the task is read-only, propose tests but do not modify files. If verification was not executed, explicitly say **not run**; do not describe the patch as tested. Preserve the project's actual toolchain/API versions (including Java 8 where configured); prefer the least disruptive complete fix. If any concern is contract-dependent, distinguish it from verified defects instead of silently assuming a policy.
+**Role-specific completeness check:** Verify trigger permissions, secret boundaries, builds/tests, branch protection, artifact integrity, promotion and rollback. A green lint step does not prove a secure release.
