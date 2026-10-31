@@ -39,6 +39,10 @@ python3 scripts/agents.py install --target /path/to/project --module all --tool 
 
 **Why not BMAD?** Different purpose, not a claim of superiority. BMAD helps organize software delivery and planning; this toolkit focuses on specialists for everyday implementation and review. They can be used together. [Full comparison](docs/why-not-bmad.md).
 
+## Workflows
+
+Declarative orchestration **planning** for Spring features and platform releases (dependency waves and approval gates). This does not yet launch agents or perform deployments. See [Workflow orchestration](docs/workflows.md).
+
 ## Documentation
 
 [Getting started](docs/getting-started.md) · [Architecture](docs/architecture.md) · [Pros & cons](docs/pros-cons.md) · [Why not BMAD?](docs/why-not-bmad.md) · [Evaluations](docs/evaluations.md) · [Roadmap](docs/roadmap.md)
