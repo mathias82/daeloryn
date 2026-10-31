@@ -16,7 +16,19 @@ python3 scripts/prepare_blind_java_review.py \\
   --output "$HOME/daeloryn-trials/java-case-r1"
 ```
 
-The Java source must exist. The output path must be new and outside this repository. Do **not** copy `*-ground-truth.md`, `cases.json`, other evaluation answers, old run transcripts or review instructions into either arm. The preparation script does not prevent a coding host from accessing global memory, parent-directory instructions or other configured connectors; inspect its search/read logs and discard contaminated trials.
+The Java source must exist. The output path must be new and outside this repository.
+
+For **actual Java/Spring projects**, use a project root and explicitly include the needed build and dependency-context files in both arms, so the same Java version and caller contracts can be checked without the reviewer guessing:
+
+```bash
+python3 scripts/prepare_blind_java_review.py \\
+  --source "$HOME/daeloryn-java8-test/src/main/java/Inventory.java" \\
+  --project-root "$HOME/daeloryn-java8-test" \\
+  --include pom.xml \\
+  --output "$HOME/daeloryn-trials/inventory-independent-r1"
+```
+
+This preserves `src/main/java/Inventory.java` and `pom.xml` paths under **both** arms, verifies byte hashes in `manifest.json`, and installs the reviewer only under the `daeloryn` arm. Use `--include` again for other explicitly needed source, config or build files. Hidden agent instructions, answer keys, gold-label files, recursive project copies and out-of-root paths are disallowed. For a fair **unseen holdout**, choose new code that was not previously used to tune the agent. The public `Inventory.java` example is a teaching case, not a blind holdout. Do **not** copy `*-ground-truth.md`, `cases.json`, other evaluation answers, old run transcripts or review instructions into either arm. The preparation script does not prevent a coding host from accessing global memory, parent-directory instructions or other configured connectors; inspect its search/read logs and discard contaminated trials.
 
 Run Copilot CLI from `.../java-case-r1/baseline` for the baseline, and from `.../java-case-r1/daeloryn` for the specialist. In the latter, select `/agent` → `java-reviewer` and verify the host reports the custom agent as selected; otherwise the run is **not** a Daeloryn trial. For the baseline, verify no custom agent or project-specific instructions were activated. Use the same host, model ID/version, read-only prompt, tool permissions and fresh session for each arm.
 
