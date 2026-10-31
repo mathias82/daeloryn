@@ -50,3 +50,9 @@ These commands only validate workflow dependencies and print execution waves. Th
 ### Troubleshooting
 
 If validation fails, check the agent frontmatter (`name`, `description`, `scope`) and matching `agents/<module>/<name>.md` path. If an installation fails, check the target path and existing generated files. For CI failures, inspect the exact commit and failed step; old red runs do not update after a fix.
+
+## Java 25 support
+
+The Java agents recognize Java 17, 21 and **25** as distinct project baselines. Determine the actual Maven/Gradle toolchain, JDK runtime, Spring Boot version and dependency compatibility before changing a target. Java 25 examples cover virtual-thread caveats, compiler/release settings, CI JDK and multi-stage container builds. Installing an agent does **not** install or upgrade a JDK.
+
+Every agent definition contains an example and an evidence contract: concrete repository paths and line references, expected versus observed behavior, reproduction commands, confidence and tests actually executed.
