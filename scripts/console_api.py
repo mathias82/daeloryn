@@ -41,7 +41,7 @@ def benchmark_data(records_dir=None):
     return matrix(records)
 
 
-def make_handler(records_dir=None, enable_chat=False):
+def make_handler(records_dir=None, enable_chat=False, enable_copilot=False):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             host = self.headers.get("Host", "")
@@ -93,6 +93,27 @@ def make_handler(records_dir=None, enable_chat=False):
                                                   "http://127.0.0.1:" + str(self.server.server_port),
                                                   "http://localhost:" + str(self.server.server_port)):
                 self.reply(403, {"error": "untrusted request origin"})
+                return
+            if self.path == "/api/copilot/chat":
+                if not enable_copilot:
+                    self.reply(405, {"error": "Copilot chat disabled"})
+                    return
+                if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                    self.reply(415, {"error": "JSON required"})
+                    return
+                length = self.headers.get("Content-Length", "")
+                if not length.isdigit() or not 0 < int(length) <= 24576:
+                    self.reply(413, {"error": "request too large or missing length"})
+                    return
+                try:
+                    result = copilot_chat(json.loads(self.rfile.read(int(length))))
+                except (ValueError, TypeError, KeyError, json.JSONDecodeError):
+                    self.reply(400, {"error": "invalid Copilot request"})
+                    return
+                except (RuntimeError, OSError, TimeoutError):
+                    self.reply(503, {"error": "Copilot unavailable or timed out"})
+                    return
+                self.reply(200, result)
                 return
             if not enable_chat or self.path != "/api/chat":
                 self.reply(405, {"error": "chat disabled or unsupported endpoint"})
@@ -146,7 +167,7 @@ def main():
         p.error("port must be 1024..65535")
     if a.records_dir is not None and (a.records_dir.is_symlink() or not a.records_dir.is_dir()):
         p.error("records-dir must be an existing real directory")
-    server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(a.records_dir, a.enable_local_chat))
+    server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(a.records_dir, a.enable_local_chat, a.enable_copilot_chat))
     print("Daeloryn local console API listening on http://127.0.0.1:" + str(a.port), flush=True)
     try:
         server.serve_forever()
