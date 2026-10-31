@@ -39,17 +39,15 @@ class ApprovedReviewApiTests(unittest.TestCase):
   self.assertEqual(200,code)
   self.assertIn("class App",prepared["prompt"])
   self.assertFalse(prepared["source_transmitted"])
-  with patch("approved_copilot_review.copilot_chat",return_value={"reply":"review"}) as mocked:
-   # execute's default transport is bound at definition time, so patch API entrypoint.
-   with patch("console_api.execute_ai_review",return_value={"review":{"reply":"review"}}) as execute:
-    code,_=self.post("/api/copilot/review/execute",{**request,"model":"test","approved_sha256":"bad"})
-    self.assertEqual(200,code) if False else None
-   # Exercise actual validation, without invoking provider.
-   from approved_copilot_review import execute as actual
-   with self.assertRaises(PermissionError):
-    actual(prepared,"test","bad",transport=lambda _: {"reply":"never"})
-   self.repo.joinpath("App.java").write_text("class Changed {}")
-   code,changed=self.post("/api/copilot/review/prepare",request)
-   self.assertEqual(200,code)
-   self.assertNotEqual(prepared["sha256"],changed["sha256"])
+  with patch("console_api.execute_ai_review",side_effect=PermissionError("bad digest")) as mocked:
+   code,_=self.post("/api/copilot/review/execute",{**request,"model":"test","approved_sha256":"bad"})
+   self.assertEqual(400,code)
+   mocked.assert_called_once()
+  from approved_copilot_review import execute as actual
+  with self.assertRaises(PermissionError):
+   actual(prepared,"test","bad",transport=lambda _: {"reply":"never"})
+  self.repo.joinpath("App.java").write_text("class Changed {}")
+  code,changed=self.post("/api/copilot/review/prepare",request)
+  self.assertEqual(200,code)
+  self.assertNotEqual(prepared["sha256"],changed["sha256"])
 if __name__=="__main__":unittest.main()
