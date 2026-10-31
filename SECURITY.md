@@ -21,3 +21,7 @@ Please **do not open public issues containing exploits, secrets or sensitive dat
 
 ## Disclosure
 Include impact, reproduction steps, affected versions and suggested mitigation. Do not share live secrets or sensitive payloads.
+
+## Experimental workflow approvals
+
+Approval tokens are HMAC-signed, short-lived and bound to a run and step. This is not SSO-backed identity or an immutable audit trail. Keep `EEA_APPROVAL_KEY` outside the repository, do not share it with an untrusted workflow operator, and never use this mechanism as the sole production deployment authorization control. The engine currently performs **no** automatic AI/CLI execution.
