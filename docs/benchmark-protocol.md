@@ -93,3 +93,31 @@ These are **structural integrity gates**, not proof that a model was called,
 that a quoted finding is semantically correct, or that a code patch passes
 tests. Human review and independently executed fix verification remain
 mandatory before publishing comparative results.
+
+## Opt-in local provider CLI capture (POSIX)
+
+After independently preparing baseline and Daeloryn workspaces, a trusted
+operator may run a locally installed provider CLI using an explicit argv
+(no shell interpolation). Example for a configured Copilot CLI:
+
+```bash
+python3 scripts/capture_provider_cli.py \
+  --arm /trials/example/baseline --provider copilot --model MODEL_ID \
+  --output /private/records/copilot-baseline.json -- \
+  copilot --model=MODEL_ID --prompt="Review this project"
+```
+
+Repeat in the Daeloryn arm with the appropriate selected agent, then run
+the independent evaluator and retain all reports. This command captures
+local CLI output, limits retained output to 1 MiB and terminates local POSIX
+process groups on timeout. It does **not** automatically validate CLI
+arguments, provider authentication, actual remote model selection, agent
+activation, or sandbox isolation. Use separate externally enforced host
+isolation and a trusted command. Never enable permissive unattended
+write/deploy flags on untrusted code.
+
+**Sensitive data:** the captured transcript may contain secrets. Store
+reports only in private access-controlled storage, inspect/redact before
+sharing, and do not upload them as public CI artifacts. Timeouts leave
+remote outcomes unknown; do not automatically retry. This opt-in capture
+is a building block, not a completed four-provider unattended benchmark.
