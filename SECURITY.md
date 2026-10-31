@@ -48,3 +48,15 @@ Java impact analysis compiles only its trusted helper, disables project annotati
 `engineering_cycle.py repair` can transmit the selected candidate, original review, and explicitly public visible tests to the data-only provider, and execute an operator-owned test argv in disposable copies. It requires provider/check opt-ins plus a reviewed digest-pinned container or explicit host execution. Protect the local SQLite database: it contains replacement code and visible-test provenance. The tool does not grant permissions, change host security policy, execute model-selected commands, or bypass the legacy approval service.
 
 Visible-suite inputs are pinned and cannot be replaced through model artifacts. Independent evaluator feedback is withheld. This separation depends on the operator choosing appropriate tests and commands; path/hash checks do not prove semantic secrecy, prevent malicious stdout forgery, or sandbox host processes. Timeouts/unknown provider outcomes stop without automatic retry. In-flight/unknown repair loops require reconciliation and a new run rather than an implicit retry. Existing container restrictions and explicit host-execution risks still apply. Security changes here are the addition of this opt-in execution path and its bounded scheduling/persistence; no production credentials or access policy are modified.
+
+### Optional native Copilot model router
+
+`model_router.py --discover-copilot` queries the existing, explicitly installed
+Copilot runtime via an optional SDK. `--execute` additionally launches a native
+Copilot task with requested model/agent in the explicitly selected project.
+Discovery does not certify quota/permissions; CLI completion does not certify
+model identity, test success or absence of side effects. Risk classification is
+heuristic. Native host permissions/approvals remain authoritative; no allow-all,
+credential replacement, automatic SDK/runtime install or paid retry is added.
+Offline catalogs cannot launch tasks. Reconcile partial edits/remote effects after
+an interrupted or failed task before retrying. See docs/model-routing.md.

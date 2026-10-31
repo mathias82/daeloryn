@@ -94,3 +94,10 @@ The [experimental engineering cycle](docs/engineering-cycle.md) adds pinned revi
 **Status:** developer preview. An opt-in offline container adapter is available for trusted, digest-pinned images; it does not provide hosted AI API connectivity. Static validation and synthetic evaluation tests exist, but production readiness and cross-provider runtime behavior are not verified.
 
 [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [MIT License](LICENSE)
+
+
+Recovery and model routing updates: [recovery verification](docs/recovery-verification.md)
+adds an opt-in five-case development extension without changing the original 23 checks.
+[Copilot model routing](docs/model-routing.md) discovers host models and selects a
+requested model by task/risk policy; native execution is explicit and live behavior
+still requires validation on a compatible installed SDK/CLI.
