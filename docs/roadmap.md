@@ -14,7 +14,9 @@
 
 - [x] Shared CLI for planning, starting, inspecting and completing manual workflow handoffs
 - [x] Transaction-backed state and central OIDC verification entry point
-- [x] Strict provider request interface with dry-run metadata and disabled execution
+- [x] Strict provider request interface with dry-run metadata and hosted provider execution disabled
+- [x] Opt-in network-disabled, digest-pinned container invocation (manual, no credentials or implicit state transitions)
+- [x] Tests for concurrent single-winner completion and approval-gate enforcement
 - [ ] Reviewed sandboxed provider implementations, credential brokering and end-to-end tests
 
 ## Next major milestone: unified execution service
