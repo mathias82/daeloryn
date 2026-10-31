@@ -53,9 +53,13 @@ Unify the current components into a single execution service with **real AI-prov
 
 An additional offline reference corpus covers **Java 25, Spring, React and Kubernetes**, with 4 unsafe fixtures and 8 expected findings. CI validates fixture labels and scoring tests; actual model accuracy has **not** been measured. [Evaluation protocol](docs/evaluations.md).
 
+## Measured AI evaluation (in progress)
+
+The cross-provider benchmark harness now records external Codex, Claude, Copilot and Gemini outputs, checks claimed source-line evidence and compares recorded findings. **No real-provider results are published yet**; synthetic offline scores must not be treated as measured agent accuracy. See the [benchmark protocol](docs/benchmark-protocol.md).
+
 ## Documentation
 
-[Getting started](docs/getting-started.md) · [Workflows](docs/workflows.md) · [Architecture](docs/architecture.md) · [Pros & cons](docs/pros-cons.md) · [Evaluations](docs/evaluations.md) · [Roadmap](docs/roadmap.md)
+[Getting started](docs/getting-started.md) · [Workflows](docs/workflows.md) · [Architecture](docs/architecture.md) · [Pros & cons](docs/pros-cons.md) · [Evaluations](docs/evaluations.md) · [Benchmark protocol](docs/benchmark-protocol.md) · [Roadmap](docs/roadmap.md)
 
 **Status:** developer preview. An opt-in offline container adapter is available for trusted, digest-pinned images; it does not provide hosted AI API connectivity. Static validation and synthetic evaluation tests exist, but production readiness and cross-provider runtime behavior are not verified.
 
