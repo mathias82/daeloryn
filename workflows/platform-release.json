@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "name": "platform-release",
+  "description": "Validate container and rollout design before release",
+  "steps": [
+    {
+      "id": "container",
+      "agent": "docker-engineer",
+      "depends_on": []
+    },
+    {
+      "id": "kubernetes",
+      "agent": "kubernetes-engineer",
+      "depends_on": [
+        "container"
+      ]
+    },
+    {
+      "id": "supply-chain",
+      "agent": "platform-security-engineer",
+      "depends_on": [
+        "container"
+      ]
+    },
+    {
+      "id": "delivery",
+      "agent": "cicd-engineer",
+      "depends_on": [
+        "kubernetes",
+        "supply-chain"
+      ]
+    },
+    {
+      "id": "approval",
+      "type": "approval",
+      "depends_on": [
+        "delivery"
+      ]
+    }
+  ]
+}
