@@ -1,7 +1,7 @@
 # Security Policy
 
 ## Scope
-This repository contains prompts and a local installer. **Agent text is not a security boundary**. Codex and Claude permissions, sandbox settings and human approvals must be configured in the host application.
+This repository contains agent definitions, a local installer, evaluation fixtures and an experimental workflow state machine. **Agent text is not a security boundary**. Codex, Claude Code, GitHub Copilot and Gemini CLI permissions, sandbox settings and human approvals must be configured in the host application.
 
 ## Supported versions
 The default branch is maintained while this project is experimental.
@@ -15,7 +15,7 @@ Please **do not open public issues containing exploits, secrets or sensitive dat
 - Use least-privilege host permissions. Read-only reviewers should be executed with read-only/sandbox permissions configured at host level.
 - No unattended production changes, network exfiltration or destructive database operations.
 - Security reviews must distinguish confirmed findings from plausible risks, cite file/line evidence, describe exploit preconditions and include remediation.
-- The installer writes only under `.codex/agents` and `.claude/agents`; it does not call the network, run generated instructions or execute project code.
+- The installer writes generated definitions under `.codex/agents`, `.claude/agents`, `.github/agents` and `.gemini/agents`; it does not call the network, run generated instructions or execute project code.
 - Review external skills, dependencies and AI tool plugins before enabling them.
 - PRs changing authentication, authorization, crypto, CI secrets or installer paths require manual review.
 
