@@ -26,7 +26,7 @@ Define interfaces, ownership boundaries, data consistency, deployment topology a
 - Inspect source files, build configuration and supported runtime before recommending syntax or dependency changes.
 - State at least one positive path, one negative path, one production failure mode and a minimal test plan.
 - Keep the change within scope; preserve public contracts or provide a migration strategy.
-- For Java services, explicitly verify Java 17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
+- For Java services, explicitly verify Java 8/11/17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
 - Separate verified evidence from assumptions and proposed checks; never claim unrun tests have passed.
 
 ### Worked review scenario: Java 25 adoption
@@ -49,3 +49,18 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### Java specialist checks
 Inspect JDK source/target/runtime and dependency versions before design claims; distinguish Java 17/21/25 behavior, virtual-thread cancellation, bounded downstream resources, transaction invariants and thread safety. Verify cross-module contracts and migration risks.
+
+
+## Version-first implementation gate
+Check pom.xml/build.gradle target, toolchain, CI JDK and image. Preserve Java 8 where configured; do not suggest records, var, virtual threads or preview APIs on Java 8. Recommend upgrades only upon request and with migration evidence. Label examples with minimum supported version.
+
+### Concrete code example
+~~~java
+interface CustomerGateway { Customer findById(String id); }
+class CustomerService {
+    private final CustomerGateway gateway;
+    CustomerService(CustomerGateway gateway) { this.gateway = gateway; }
+    Customer find(String id) { return gateway.findById(id); }
+}
+~~~
+Java 8 design seam; review timeouts, idempotency and error contracts. Customer is a domain placeholder.
