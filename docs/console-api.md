@@ -71,3 +71,35 @@ Tests:
 ```bash
 python3 -m unittest discover -s tests -p 'test_local_chat.py'
 ```
+
+## Opt-in GitHub Copilot CLI Chat
+
+This alternative to the local Ollama integration uses your **installed and
+authenticated GitHub Copilot CLI**. The web console sends chat messages to a
+bounded, one-shot `copilot --prompt ... --model ...` invocation.
+
+```bash
+# Authenticate Copilot CLI separately, using the official GitHub workflow.
+python3 scripts/console_api.py --enable-copilot-chat
+# In a second terminal:
+cd web && npm install && npm run dev
+```
+
+In the Chat sidebar, enter a Copilot model identifier available to your account
+and send a message. The model ID is requested, **not independently verified**.
+The server launches each request from a fresh temporary working directory with
+`--deny-tool=shell,write,read,url,memory`, disables built-in MCP servers,
+custom instructions and automatic updates, and does not grant all-tools access.
+The web UI agent selector is **not yet connected to the Copilot agent system**.
+
+**Important security boundary:** Copilot CLI may load user-installed extensions,
+other configured MCP integrations or user-level settings. CLI deny rules and a
+temporary working directory are not a sandbox or proof of zero side effects.
+Use a dedicated OS account/container without workspace mounts or sensitive
+credentials for untrusted prompts. Do not expose the unauthenticated console API
+or Vite development server beyond localhost. Prompts can be sent to GitHub's
+Copilot service and may appear in process arguments; never send secrets.
+Requests may consume Copilot usage. A timeout does not prove cancellation of
+remote work. This implementation is synchronous and does not stream responses.
+
+Run `python3 -m unittest discover -s tests -p 'test_copilot_chat.py'`.
