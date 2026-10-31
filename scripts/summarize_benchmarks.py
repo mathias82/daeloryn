@@ -8,10 +8,17 @@ PROVIDERS=("codex","claude","copilot","gemini")
 def summarize(files):
     runs=[]
     seen=set()
+    reference_hashes=set()
+    unknown_reference=False
     for path in files:
         item=json.loads(Path(path).read_text(encoding="utf-8"))
         if item.get("schema_version")!=1 or item.get("kind")!="recorded-external-output" or item.get("provider") not in PROVIDERS:
             raise ValueError(f"{path}: not a recorded benchmark run")
+        reference_hash=item.get("reference_sha256")
+        if reference_hash is None:
+            unknown_reference=True
+        else:
+            reference_hashes.add(reference_hash)
         ident=(item["provider"],item["run_id"])
         if ident in seen:
             raise ValueError("duplicate provider run id")
@@ -20,7 +27,11 @@ def summarize(files):
                      "precision":item["metrics"]["precision"],"recall":item["metrics"]["recall"],
                      "f1":item["metrics"]["f1"],"evidence_line_valid_fraction":item["evidence_line_valid_fraction"],
                      "human_evidence_reviewed":False})
-    return {"status":"partial" if len({x["provider"] for x in runs})<4 else "collected_needs_human_review",
+    if len(reference_hashes)>1 or (unknown_reference and reference_hashes):
+        raise ValueError("cannot compare benchmark runs with different or unknown reference corpora")
+    return {"reference_sha256":next(iter(reference_hashes),None),
+            "reference_comparable":not unknown_reference,
+            "status":"partial" if len({x["provider"] for x in runs})<4 else "collected_needs_human_review",
             "providers_missing":sorted(set(PROVIDERS)-{x["provider"] for x in runs}),
             "runs":sorted(runs,key=lambda r:(r["provider"],r["run_id"])),
             "warning":"Scores reflect submitted finding IDs; line checks do not validate semantic correctness. Human adjudication required."}
