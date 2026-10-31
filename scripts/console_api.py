@@ -42,6 +42,16 @@ def benchmark_data(records_dir=None):
 def make_handler(records_dir=None):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
+            host = self.headers.get("Host", "")
+            origin = self.headers.get("Origin")
+            if host not in ("127.0.0.1:8765", "localhost:8765",
+                            "127.0.0.1:" + str(self.server.server_port),
+                            "localhost:" + str(self.server.server_port)):
+                self.reply(403, {"error": "invalid host"})
+                return
+            if origin is not None:
+                self.reply(403, {"error": "cross-origin requests forbidden"})
+                return
             path = urlsplit(self.path)
             if path.query or path.fragment:
                 self.reply(400, {"error": "query parameters not supported"})
