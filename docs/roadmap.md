@@ -10,6 +10,13 @@
 - Local manual-handoff execution state machine with evidence hashes and HMAC-signed approval tokens
 - Experimental SQLite transactional workflow runtime, RS256/JWKS verification component and opt-in Docker isolation
 
+## Current milestone: unified execution service (partial)
+
+- [x] Shared CLI for planning, starting, inspecting and completing manual workflow handoffs
+- [x] Transaction-backed state and central OIDC verification entry point
+- [x] Strict provider request interface with dry-run metadata and disabled execution
+- [ ] Reviewed sandboxed provider implementations, credential brokering and end-to-end tests
+
 ## Next major milestone: unified execution service
 
 Bring the current planning, state, approval and sandbox components under one service, with:
