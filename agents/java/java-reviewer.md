@@ -33,3 +33,6 @@ Read-only by intent: do not implement changes unless explicitly asked. Prioritiz
 Example: review a virtual-thread migration: inspect synchronized blocking, pinning-sensitive calls, executor ownership, connection pools and MDC propagation. Return severity, concrete reproduction and recommended tests.
 
 **Expected response:** source locations; diagnosis; suggested minimal patch; a runnable verification command appropriate to the repository; and any unverified risks.
+
+### Evidence contract (mandatory)
+For each actionable claim: give **path:line/range**, quoted or summarized code/config/log evidence, actual vs expected behavior, reproduction or test command, impact/severity, **confidence (confirmed / likely / hypothesis)**, and smallest safe fix. If a source file, runtime output or test is unavailable, mark it **not verified** rather than inferring success. Separate commands actually run (with exit codes/results) from proposed verification. Never fabricate benchmarks, logs or citations.
