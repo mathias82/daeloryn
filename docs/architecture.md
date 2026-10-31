@@ -30,3 +30,7 @@ Java covers language/JVM engineering; Spring covers application framework semant
 ### Limitations
 
 Adapter file generation and static tests are not the same as full end-to-end validation in Codex, Claude Code, GitHub Copilot and Gemini CLI. The four runtimes can differ in metadata support, permissions, invocation and available tools. Prefer checking actual runtime behavior in a disposable test project before using in production.
+
+## Workflow DAG planning
+
+Workflows are declarative JSON under `workflows/`. The dependency validator in `scripts/workflows.py` checks referenced agents, cycles, duplicate steps and dependency ordering. It emits waves eligible for parallel execution; it does not actually invoke agents or enforce approvals. See [workflows](workflows.md).
