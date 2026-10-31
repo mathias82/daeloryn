@@ -10,8 +10,8 @@ from agents import catalog, install
 class AgentTests(unittest.TestCase):
     def test_catalog_is_unique_and_valid(self):
         agents = catalog()
-        self.assertEqual(len(agents), 16)
-        self.assertEqual(len({a[0]["name"] for a in agents}), 16)
+        self.assertEqual(len(agents), 22)
+        self.assertEqual(len({a[0]["name"] for a in agents}), 22)
 
     def test_install_spring_across_all_tools(self):
         with tempfile.TemporaryDirectory() as temp:
@@ -21,6 +21,15 @@ class AgentTests(unittest.TestCase):
             self.assertTrue((target / ".claude/agents/spring-security-engineer.md").exists())
             self.assertTrue((target / ".github/agents/spring-reactive-engineer.agent.md").exists())
             self.assertTrue((target / ".gemini/agents/spring-testing-engineer.md").exists())
+
+    def test_platform_all_adapters(self):
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp)
+            self.assertEqual(install(target, "platform", "all"), 24)
+            self.assertTrue((target / ".codex/agents/kubernetes-engineer.toml").is_file())
+            self.assertTrue((target / ".claude/agents/docker-engineer.md").is_file())
+            self.assertTrue((target / ".github/agents/cicd-engineer.agent.md").is_file())
+            self.assertTrue((target / ".gemini/agents/gitops-engineer.md").is_file())
 
     def test_install_java_codex(self):
         with tempfile.TemporaryDirectory() as temp:
