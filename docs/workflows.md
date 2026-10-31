@@ -88,3 +88,9 @@ python3 scripts/execution_service.py complete --run RUN_ID --step design --evide
 The `approve` command takes an operator-provisioned trusted JWKS, expected issuer, audience and allowed subjects. For safety, provider adapters currently support validation and dry-run metadata only; `execute()` explicitly rejects real execution. Provider credentials are not read or managed by this project yet. See `scripts/agent_adapter.py`.
 
 **Security boundary:** the Python library and local SQLite database must only be accessible to trusted operators. A caller with direct database access can bypass application-level approval checks. OIDC verification on the CLI is not a remote identity service or production release authorization mechanism.
+
+## Isolated adapter boundary
+
+`agent_adapter.execute_isolated(request, image, enabled=True)` can run a **trusted operator-reviewed image** through the network-disabled Docker sandbox. This is a deliberately narrow local execution path: no host mounts, API credentials, model network connectivity or automatic workflow completion. Provider selection is metadata; it does **not** mean Codex/Claude/Copilot/Gemini are actually invoked. The image must already contain a compatible entrypoint that reads the prompt from stdin. The caller must explicitly opt in and assess the image's safety. The normal `agent_adapter.execute()` remains fail-closed.
+
+Concurrency tests ensure only one transaction can complete a given step. OIDC authorization is still tied to a trusted CLI caller and database access policy; production-grade identity enforcement requires a protected service boundary.
