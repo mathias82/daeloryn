@@ -63,6 +63,10 @@ An additional offline reference corpus covers **Java 25, Spring, React and Kuber
 
 The cross-provider benchmark harness now records external Codex, Claude, Copilot and Gemini outputs, checks claimed source-line evidence and compares recorded findings. **No real-provider results are published yet**; synthetic offline scores must not be treated as measured agent accuracy. See the [benchmark protocol](docs/benchmark-protocol.md).
 
+## Engineering review quality
+
+All 22 specialists now include source-grounded review requirements: verified file locations, explicit static-versus-runtime evidence, root-cause deduplication, contract-aware severity, and minimal version-specific fixes. Automated tests check that these rules survive generation for all four hosts; **live model quality improvements remain unproven**. See [Agent quality standard](docs/agent-quality-standard.md).
+
 ## Documentation
 
 [Getting started](docs/getting-started.md) · [Workflows](docs/workflows.md) · [Architecture](docs/architecture.md) · [Pros & cons](docs/pros-cons.md) · [Evaluations](docs/evaluations.md) · [Benchmark protocol](docs/benchmark-protocol.md) · [Roadmap](docs/roadmap.md) · [Release gates](docs/release-gates.md) · [Host compatibility](docs/host-compatibility.md)
