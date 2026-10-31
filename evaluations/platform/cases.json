@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "cases": [
+    {
+      "id": "k8s-privileged",
+      "agent": "kubernetes-engineer",
+      "fixture": "fixtures/kubernetes/insecure-deployment.yaml",
+      "expected": [
+        "k8s.privileged-container",
+        "k8s.missing-resources",
+        "k8s.mutable-image-tag"
+      ]
+    },
+    {
+      "id": "docker-root",
+      "agent": "docker-engineer",
+      "fixture": "fixtures/docker/insecure.Dockerfile",
+      "expected": [
+        "docker.root-user",
+        "docker.mutable-base-tag"
+      ]
+    },
+    {
+      "id": "ci-pr-target",
+      "agent": "cicd-engineer",
+      "fixture": "fixtures/cicd/unsafe-workflow.yml",
+      "expected": [
+        "ci.write-all-permissions",
+        "ci.untrusted-checkout"
+      ]
+    }
+  ]
+}
