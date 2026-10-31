@@ -50,3 +50,22 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### Platform specialist checks
 Confirm CI runner, trigger permissions, action versions, credential exposure, dependency provenance, cache keys and branch protection; never equate a declared workflow with a successful CI run.
+
+## Toolchain gate and concrete CI example
+Read the current CI definition, Maven/Gradle toolchain and supported JDK. Never move a Java 8 build to JDK 21/25 merely because the example uses a newer version. Check permissions and pin verified actions to commit SHAs for release hardening.
+
+~~~yaml
+permissions:
+  contents: read
+jobs:
+  unit-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '8'
+      - run: ./mvnw -B test
+~~~
+Illustrative GitHub Actions fragment for a Java 8 project (add actual triggers and verify wrapper). For production, review action SHA pinning and supply-chain controls. A workflow file does not prove the jobs passed.
