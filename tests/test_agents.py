@@ -36,11 +36,20 @@ class AgentTests(unittest.TestCase):
             self.assertIn("description: ", output)
             self.assertIn("Threat", output)
 
+    def test_install_gemini(self):
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp)
+            self.assertEqual(install(target, "shared", "gemini"), 2)
+            output = (target / ".gemini/agents/security-reviewer.md").read_text()
+            self.assertIn("kind: local", output)
+            self.assertIn("name: security-reviewer", output)
+
     def test_install_all_tools(self):
         with tempfile.TemporaryDirectory() as temp:
             target = Path(temp)
-            self.assertEqual(install(target, "java", "all"), 12)
+            self.assertEqual(install(target, "java", "all"), 16)
             self.assertTrue((target / ".github/agents/java-developer.agent.md").is_file())
+            self.assertTrue((target / ".gemini/agents/java-developer.md").is_file())
 
     def test_no_overwrite_without_force(self):
         with tempfile.TemporaryDirectory() as temp:
