@@ -95,6 +95,13 @@ class AgentTests(unittest.TestCase):
             self.assertTrue((target / ".github/agents/java-developer.agent.md").is_file())
             self.assertTrue((target / ".gemini/agents/java-developer.md").is_file())
 
+    def test_dry_run_does_not_write(self):
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp)
+            self.assertEqual(install(target, "shared", "all", dry_run=True), 8)
+            self.assertFalse((target / ".codex").exists())
+            self.assertFalse((target / ".github").exists())
+
     def test_no_overwrite_without_force(self):
         with tempfile.TemporaryDirectory() as temp:
             target = Path(temp)
