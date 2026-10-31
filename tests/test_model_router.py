@@ -1,5 +1,7 @@
 """Routing policy and one-shot argv tests; live Copilot behavior is not exercised."""
 from pathlib import Path
+import subprocess
+import signal
 import sys
 import tempfile
 import unittest
@@ -69,11 +71,11 @@ class ModelRouterTests(unittest.TestCase):
     def test_launch_uses_single_shell_free_call_and_preserves_host_permissions(self):
         task = 'Implement feature; $(touch should-not-run)'
         plan = select(CATALOG, task, agent='java-developer')
-        with tempfile.TemporaryDirectory() as tmp, patch('model_router.subprocess.run') as run:
+        with tempfile.TemporaryDirectory() as tmp, patch('model_router.subprocess.Popen') as run:
             profile = Path(tmp) / '.github' / 'agents' / 'java-developer.agent.md'
             profile.parent.mkdir(parents=True)
             profile.write_text('installed agent definition')
-            run.return_value.returncode = 1
+            run.return_value.wait.return_value = 1
             result = launch(plan, task, Path(tmp), 'java-developer', execute=True, executable='/reviewed/copilot')
             self.assertEqual(1, run.call_count)
             argv = run.call_args.args[0]
@@ -81,6 +83,8 @@ class ModelRouterTests(unittest.TestCase):
             self.assertEqual('--model=' + CATALOG[1], argv[1])
             self.assertNotIn('--allow-all', argv)
             self.assertNotIn('shell', run.call_args.kwargs)
+            self.assertTrue(run.call_args.kwargs['start_new_session'])
+            self.assertEqual(900, run.return_value.wait.call_args.kwargs['timeout'])
             self.assertEqual('not_verified_by_router', result['actual_model'])
             self.assertEqual('failed', result['execution'])
 
@@ -122,7 +126,7 @@ class ModelRouterTests(unittest.TestCase):
     def test_no_launch_without_opt_in_or_if_task_changes(self):
         task = 'Implement feature'
         plan = select(CATALOG, task, agent='java-developer')
-        with patch('model_router.subprocess.run') as run, tempfile.TemporaryDirectory() as tmp:
+        with patch('model_router.subprocess.Popen') as run, tempfile.TemporaryDirectory() as tmp:
             profile = Path(tmp) / '.github' / 'agents' / 'java-developer.agent.md'
             profile.parent.mkdir(parents=True)
             profile.write_text('installed agent definition')
@@ -136,7 +140,7 @@ class ModelRouterTests(unittest.TestCase):
 
     def test_launch_fails_closed_for_missing_and_symlinked_agent_profiles(self):
         plan = select(CATALOG, 'Implement feature', agent='java-developer')
-        with tempfile.TemporaryDirectory() as tmp, patch('model_router.subprocess.run') as run:
+        with tempfile.TemporaryDirectory() as tmp, patch('model_router.subprocess.Popen') as run:
             with self.assertRaises(ValueError):
                 launch(plan, 'Implement feature', tmp, 'java-developer',
                        execute=True, executable='/installed/copilot')
@@ -149,3 +153,57 @@ class ModelRouterTests(unittest.TestCase):
                 launch(plan, 'Implement feature', tmp, 'java-developer',
                        execute=True, executable='/installed/copilot')
             self.assertEqual(0, run.call_count)
+
+    def test_timeout_terminates_local_group_without_retry_or_success_claim(self):
+        task = 'Implement feature'
+        plan = select(CATALOG, task, agent='java-developer')
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch('model_router.subprocess.Popen') as popen, \
+                patch('model_router.os.killpg') as killpg:
+            profile = Path(tmp) / '.github' / 'agents' / 'java-developer.agent.md'
+            profile.parent.mkdir(parents=True)
+            profile.write_text('installed agent definition')
+            proc = popen.return_value
+            proc.pid = 12345
+            proc.wait.side_effect = [subprocess.TimeoutExpired(cmd='copilot', timeout=3),
+                                     0, 0]
+            result = launch(plan, task, tmp, 'java-developer',
+                            execute=True, executable='/installed/copilot',
+                            timeout_seconds=3)
+            self.assertEqual('timed_out', result['execution'])
+            self.assertIsNone(result['exit_code'])
+            self.assertEqual('unknown', result['outcome'])
+            self.assertEqual('best_effort', result['local_termination'])
+            self.assertEqual(1, popen.call_count)
+            self.assertEqual(2, killpg.call_count)
+            self.assertEqual((12345, signal.SIGTERM), killpg.call_args_list[0].args)
+            self.assertEqual((12345, signal.SIGKILL), killpg.call_args_list[1].args)
+
+    def test_invalid_timeout_fails_before_process_creation(self):
+        task = 'Implement feature'
+        plan = select(CATALOG, task, agent='java-developer')
+        with tempfile.TemporaryDirectory() as tmp, patch('model_router.subprocess.Popen') as popen:
+            for invalid in (0, -1, 3601, True, 1.5, '900'):
+                with self.subTest(timeout=invalid), self.assertRaises(ValueError):
+                    launch(plan, task, tmp, 'java-developer',
+                           execute=True, executable='/installed/copilot',
+                           timeout_seconds=invalid)
+            self.assertEqual(0, popen.call_count)
+
+    def test_interruption_kills_local_group_and_propagates(self):
+        task = 'Implement feature'
+        plan = select(CATALOG, task, agent='java-developer')
+        with tempfile.TemporaryDirectory() as tmp, \
+                patch('model_router.subprocess.Popen') as popen, \
+                patch('model_router.os.killpg') as killpg:
+            profile = Path(tmp) / '.github' / 'agents' / 'java-developer.agent.md'
+            profile.parent.mkdir(parents=True)
+            profile.write_text('installed agent definition')
+            proc = popen.return_value
+            proc.pid = 23456
+            proc.wait.side_effect = [KeyboardInterrupt(), 0, 0]
+            with self.assertRaises(KeyboardInterrupt):
+                launch(plan, task, tmp, 'java-developer',
+                       execute=True, executable='/installed/copilot')
+            self.assertEqual(1, popen.call_count)
+            self.assertEqual(2, killpg.call_count)
