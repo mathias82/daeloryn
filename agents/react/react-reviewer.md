@@ -65,3 +65,15 @@ React 16.8+ illustrative component snippet. In real code check HTTP response sta
 ## Fix completeness and regression gate (mandatory)
 Before reporting a fix as complete, map **each independent, evidenced defect or requested invariant** to (a) the corresponding change, (b) what remains unaddressed, and (c) a proposed regression check. Re-evaluate the **entire proposed solution** against the original findings; a concurrency fix alone does not prove correctness of input validation, arithmetic or error handling. Include relevant **positive, negative, boundary and failure-path** tests, and concurrency, cancellation, rollback, security or compatibility scenarios when applicable. Do not invent contracts merely to increase the finding count. If the task is read-only, propose tests but do not modify files. If verification was not executed, explicitly say **not run**; do not describe the patch as tested. Preserve the project's actual toolchain/API versions (including Java 8 where configured); prefer the least disruptive complete fix. If any concern is contract-dependent, distinguish it from verified defects instead of silently assuming a policy.
 **Role-specific completeness check:** Recheck each reported issue after the proposed change: stale closures, request races, keys, security sinks, accessible names and effect cleanup, without assuming a newer React version.
+
+### Fix completeness example — search response race
+Incomplete: adding `[query]` as an effect dependency does not stop older responses from overwriting newer results.
+~~~tsx
+useEffect(() => {
+  let active = true;
+  search(query).then(value => { if (active) setResults(value); })
+    .catch(error => { if (active) setError(error); });
+  return () => { active = false; };
+}, [query]);
+~~~
+Illustrative React Hooks code; verify actual `search` API and whether cancellation is available. **Regression checks:** old response arrives last, error path, empty results, dependency change and unmount. Run status: **not run**.
