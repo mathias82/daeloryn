@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
-"""Create clean, separate baseline and Copilot-specialist review workspaces.
+"""Prepare clean Copilot baseline and Daeloryn review workspaces.
 
-Only the selected Java source is copied. Gold answers and benchmark rubrics
-are deliberately kept outside both model-visible workspaces.
+The two arms receive byte-identical, explicitly selected project source/build
+files. No gold answers, previous transcripts or AI instructions are copied.
+The tool never invokes AI models or claims model evaluation results.
 """
 import argparse
 import hashlib
@@ -13,9 +14,35 @@ import shutil
 from agents import catalog, format_copilot
 
 ROOT = Path(__file__).resolve().parents[1]
+ALLOWED_EXTENSIONS = {".java", ".xml", ".properties", ".gradle", ".kts",
+                      ".yaml", ".yml"}
+EXCLUDED_DIRS = {".github", ".git", ".codex", ".claude", ".gemini",
+                 ".venv", "target", "build", "node_modules", "__pycache__"}
+EXCLUDED_NAMES = ("gold", "ground-truth", "answer-key", "rubric",
+                  "agent-instruction", "copilot-instruction", "benchmark-result")
 
 
-def prepare(source: Path, output: Path) -> dict:
+def sha256(data):
+    return hashlib.sha256(data).hexdigest()
+
+
+def validated_file(root, relative):
+    relative = Path(relative)
+    parts = relative.parts
+    if (not parts or relative.is_absolute() or ".." in parts
+            or any(part.startswith(".") or part in EXCLUDED_DIRS for part in parts)
+            or any(word in relative.name.lower() for word in EXCLUDED_NAMES)
+            or relative.suffix.lower() not in ALLOWED_EXTENSIONS):
+        raise ValueError("unsafe or unsupported project context: " + str(relative))
+    path = root / relative
+    # Both direct and parent-directory symlinks are excluded; never follow
+    # arbitrary outside-workspace source paths during an opt-in copy.
+    if not path.is_file() or path.resolve() != path.absolute():
+        raise ValueError("context must be a regular file inside project: " + str(relative))
+    return relative, path.read_bytes()
+
+
+def prepare(source: Path, output: Path, project_root=None, include=()) -> dict:
     source = source.expanduser().resolve(strict=True)
     output = output.expanduser().resolve(strict=False)
     if not source.is_file() or source.suffix.lower() != ".java":
@@ -24,32 +51,52 @@ def prepare(source: Path, output: Path) -> dict:
         raise ValueError("output must be outside the Daeloryn checkout")
     if output.exists():
         raise FileExistsError(f"output already exists: {output}; select a new trial directory")
+    if include and project_root is None:
+        raise ValueError("--include requires --project-root")
+
+    if project_root is None:
+        root = source.parent
+        source_relative = Path(source.name)
+    else:
+        root = Path(project_root).expanduser().resolve(strict=True)
+        if not root.is_dir() or root not in source.parents:
+            raise ValueError("source must be inside --project-root")
+        source_relative = source.relative_to(root)
+    if output == root or root in output.parents:
+        raise ValueError("trial directory must be outside source project")
+
+    # Validate *all* paths and prepare their bytes before writing the trial.
+    files = {}
+    for requested in [source_relative, *list(include)]:
+        relative, data = validated_file(root, requested)
+        files[relative.as_posix()] = data
 
     reviewers = [(meta, body) for meta, body in catalog("java")
                  if meta["name"] == "java-reviewer"]
     if len(reviewers) != 1:
         raise ValueError("expected exactly one java-reviewer definition")
     metadata, instructions = reviewers[0]
-    source_bytes = source.read_bytes()
     agent_file = format_copilot(metadata, instructions).encode("utf-8")
     result = {
-        "fixture": source.name,
-        "fixture_sha256": hashlib.sha256(source_bytes).hexdigest(),
+        "fixture": source_relative.as_posix(),
+        "fixture_sha256": sha256(files[source_relative.as_posix()]),
+        "context_sha256": {name: sha256(data) for name, data in sorted(files.items())},
         "agent": metadata["name"],
-        "agent_definition_sha256": hashlib.sha256(agent_file).hexdigest(),
+        "agent_definition_sha256": sha256(agent_file),
         "arms": ["baseline", "daeloryn"],
         "status": "prepared_only_no_model_runs",
     }
 
     output.mkdir(parents=True)
     try:
-        baseline = output / "baseline"
-        specialist = output / "daeloryn"
-        baseline.mkdir()
-        specialist.mkdir()
-        (baseline / source.name).write_bytes(source_bytes)
-        (specialist / source.name).write_bytes(source_bytes)
-        agent_dir = specialist / ".github" / "agents"
+        for arm in result["arms"]:
+            destination = output / arm
+            destination.mkdir()
+            for name, data in files.items():
+                target = destination / name
+                target.parent.mkdir(parents=True, exist_ok=True)
+                target.write_bytes(data)
+        agent_dir = output / "daeloryn" / ".github" / "agents"
         agent_dir.mkdir(parents=True)
         (agent_dir / "java-reviewer.agent.md").write_bytes(agent_file)
         (output / "manifest.json").write_text(
@@ -64,12 +111,16 @@ def prepare(source: Path, output: Path) -> dict:
 def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--source", type=Path, required=True,
-                        help="Java fixture to copy to each arm (not a gold answer)")
+                        help="Java source file, not a ground-truth reference")
     parser.add_argument("--output", type=Path, required=True,
-                        help="New trial root directory outside this repository")
+                        help="fresh trial directory outside the source and Daeloryn checkout")
+    parser.add_argument("--project-root", type=Path,
+                        help="project root; preserves source-relative paths")
+    parser.add_argument("--include", action="append", default=[],
+                        help="explicit project-relative build/context file; repeatable")
     args = parser.parse_args()
     try:
-        result = prepare(args.source, args.output)
+        result = prepare(args.source, args.output, args.project_root, args.include)
     except (OSError, ValueError) as exc:
         parser.exit(status=1, message=f"ERROR: {exc}\n")
     print(json.dumps(result, indent=2))
