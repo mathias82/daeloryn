@@ -21,7 +21,8 @@ class AgentTests(unittest.TestCase):
 
     def test_reject_missing_evidence_contract(self):
         with tempfile.TemporaryDirectory() as temp:
-            path = Path(temp) / "java-developer.md"
+            path = Path(temp) / "java" / "java-developer.md"
+            path.parent.mkdir()
             path.write_text("---\\nname: java-developer\\ndescription: Demo\\nscope: java\\n---\\n"
                             + "Example: good design. " * 30)
             with self.assertRaisesRegex(ValueError, "quality sections"):
