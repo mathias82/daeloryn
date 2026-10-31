@@ -19,7 +19,7 @@ jobs:
       - name: Build Python dependency SBOM
         run: |
           python3 -m pip install cyclonedx-bom
-          python3 -m pip install -r requirements-security.txt
+          python3 -m pip install -r requirements-security.txt -r requirements-code-analysis.txt
           cyclonedx-py environment --output-format JSON --output-file sbom.cdx.json
       - name: Upload inventory as CI artifact
         uses: actions/upload-artifact@v7

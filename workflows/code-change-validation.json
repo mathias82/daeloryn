@@ -1,0 +1,11 @@
+{
+  "schema_version": 1,
+  "name": "code-change-validation",
+  "description": "Manual handoffs for semantic impact, business invariants and cross-service contracts; tool results are supplied by an operator, not executed by this planner.",
+  "steps": [
+    {"id": "semantic-impact", "agent": "java-reviewer", "depends_on": []},
+    {"id": "invariant-strength", "agent": "java-testing", "depends_on": ["semantic-impact"]},
+    {"id": "service-contracts", "agent": "integration-reviewer", "depends_on": ["invariant-strength"]},
+    {"id": "approval", "type": "approval", "depends_on": ["service-contracts"]}
+  ]
+}

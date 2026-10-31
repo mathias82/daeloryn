@@ -1,0 +1,2 @@
+# Optional native event-schema compatibility checks; no AI/provider dependency.
+avro==1.12.2

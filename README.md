@@ -83,6 +83,10 @@ All 22 specialists now require a fix-verification handoff and role-specific acce
 
 The [experimental engineering cycle](docs/engineering-cycle.md) adds pinned review-to-fix handoffs, content-free tracing, SQLite checkpoints, explicit recovery and bounded context. An opt-in OpenAI Responses adapter returns validated data artifacts; independent checks run separately with explicit host/container execution authorization. Existing manual adapters remain disabled for automatic provider execution. The checkout evaluator stays on the benchmark branch; `python3 scripts/check_checkout_benchmark.py --project /path/to/existing/copy --execute-checks` runs it without modifying that copy. Real provider performance and live container/API integrations remain unverified.
 
+## Code impact, invariants and service contracts
+
+[Three opt-in engineering gates](docs/code-change-validation.md) add compiler-resolved Java impact, pinned business-invariant/targeted mutation checks, and explicit consumer/provider compatibility matrices using native Avro plus a conservative OpenAPI JSON subset. All 22 specialists and 88 host adapters include scoped rules for these checks. Missing dependencies, unsupported contracts and unexecuted checks remain explicit; static compatibility never means production readiness. Full regression tests now require JDK 17 and `requirements-code-analysis.txt` as well as the security test dependencies.
+
 ## Documentation
 
 [Getting started](docs/getting-started.md) · [Workflows](docs/workflows.md) · [Architecture](docs/architecture.md) · [Pros & cons](docs/pros-cons.md) · [Evaluations](docs/evaluations.md) · [Benchmark protocol](docs/benchmark-protocol.md) · [Roadmap](docs/roadmap.md) · [Release gates](docs/release-gates.md) · [Host compatibility](docs/host-compatibility.md)
