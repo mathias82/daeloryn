@@ -36,6 +36,13 @@
         "security",
         "tests"
       ]
+    },
+    {
+      "id": "finalize",
+      "agent": "java-reviewer",
+      "depends_on": [
+        "gate"
+      ]
     }
   ]
 }
