@@ -60,3 +60,12 @@ Only report observed test execution; this is an illustrative fragment.
 ## Fix completeness and regression gate (mandatory)
 Before reporting a fix as complete, map **each independent, evidenced defect or requested invariant** to (a) the corresponding change, (b) what remains unaddressed, and (c) a proposed regression check. Re-evaluate the **entire proposed solution** against the original findings; a concurrency fix alone does not prove correctness of input validation, arithmetic or error handling. Include relevant **positive, negative, boundary and failure-path** tests, and concurrency, cancellation, rollback, security or compatibility scenarios when applicable. Do not invent contracts merely to increase the finding count. If the task is read-only, propose tests but do not modify files. If verification was not executed, explicitly say **not run**; do not describe the patch as tested. Preserve the project's actual toolchain/API versions (including Java 8 where configured); prefer the least disruptive complete fix. If any concern is contract-dependent, distinguish it from verified defects instead of silently assuming a policy.
 **Role-specific completeness check:** Require a test for each reported user-facing defect and preserve existing runner versions; cover keyboard behavior, error states, cancellations and async timing deterministically.
+
+### Fix completeness example — test failure UX as well as success
+Incomplete: one successful click test does not cover rejected network requests.
+~~~tsx
+render(<SaveForm />);
+fireEvent.click(screen.getByRole('button', { name: /save/i }));
+expect(await screen.findByRole('alert')).toHaveTextContent('Could not save');
+~~~
+Illustrative testing fragment requiring a mock that rejects and the installed Testing Library and jest-dom versions. **Regression checks:** success message, failure alert, loading state, keyboard interaction and delayed response. Run status: **not run**.
