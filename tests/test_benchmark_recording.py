@@ -7,12 +7,22 @@ from pathlib import Path
 ROOT=Path(__file__).resolve().parents[1]
 sys.path.insert(0,str(ROOT/"scripts"))
 from record_benchmark import record,evidence_audit
+from score_agents import score
 
 BASE=ROOT/"evaluations/engineering"
 
 class BenchmarkRecordingTests(unittest.TestCase):
     def setUp(self):
         self.reference=json.loads((BASE/"cases.json").read_text())
+
+    def test_malformed_findings_are_rejected(self):
+        with self.assertRaisesRegex(ValueError, "findings must be an array"):
+            score({"cases":[{"case_id":"java25-interruption","findings":"invalid"}]},self.reference)
+
+    def test_duplicate_reference_ids_rejected(self):
+        bad={"cases":[self.reference["cases"][0],self.reference["cases"][0]]}
+        with self.assertRaisesRegex(ValueError, "duplicate reference case"):
+            score({"cases":[]},bad)
 
     def test_real_format_with_line_verified_evidence(self):
         fixture=(BASE/"fixtures/Java25Worker.java").read_text().splitlines()
