@@ -49,9 +49,13 @@ class Telemetry:
                       'status': status, 'attributes': attrs}
             try:
                 if self.path is not None:
-                    if self.path.resolve() != self.path.absolute():
+                    # Normalize existing parent aliases without following a
+                    # symlink at the log file itself.
+                    parent = self.path.absolute().parent.resolve(strict=True)
+                    target = parent / self.path.name
+                    if target.is_symlink():
                         raise ValueError('telemetry symlink path rejected')
-                    fd = os.open(self.path, os.O_WRONLY | os.O_APPEND | os.O_CREAT
+                    fd = os.open(target, os.O_WRONLY | os.O_APPEND | os.O_CREAT
                                  | getattr(os, 'O_NOFOLLOW', 0), 0o600)
                     with os.fdopen(fd, 'a', encoding='utf-8') as out:
                         out.write(json.dumps(record, separators=(',', ':')) + '\n')
