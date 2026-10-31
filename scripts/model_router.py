@@ -7,6 +7,8 @@ model family implies measured quality. SDK discovery requires an installed CLI.
 import argparse
 import asyncio
 import json
+import os
+import signal
 from pathlib import Path
 import re
 import shutil
@@ -24,6 +26,8 @@ RISK = re.compile(r'\b(auth\w*|security\w*|tenant\w*|payment\w*|refund\w*|transa
                   r'oauth\w*|jwt\w*|csrf\w*|xss\w*|rbac\w*|'
                   r'access[-_ ]?control|personal[-_ ]?data|pii|gdpr|privacy|'
                   r'deadlock|race[-_ ]?condition|toctou|injection)\b', re.I)
+DEFAULT_TIMEOUT_SECONDS = 900
+MAX_TIMEOUT_SECONDS = 3600
 KIND_FAMILIES = {'small': ('haiku', 'sonnet'), 'code': ('sonnet', 'opus'),
                  'review': ('sonnet', 'opus'), 'security': ('sonnet', 'opus'),
                  'architecture': ('sonnet', 'opus')}
@@ -115,9 +119,36 @@ async def discover_copilot(executable):
         await asyncio.wait_for(client.stop(), 10)
 
 
-def launch(plan, task, project, agent, *, execute=False, executable=None):
+def _terminate_session(process):
+    """Best-effort POSIX process-group termination; not proof of remote cancellation."""
+    try:
+        os.killpg(process.pid, signal.SIGTERM)
+    except ProcessLookupError:
+        pass
+    try:
+        process.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        pass
+    try:
+        # A child may still be running after the CLI leader has exited.
+        os.killpg(process.pid, signal.SIGKILL)
+    except ProcessLookupError:
+        pass
+    try:
+        process.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        pass
+
+
+def launch(plan, task, project, agent, *, execute=False, executable=None,
+           timeout_seconds=DEFAULT_TIMEOUT_SECONDS):
     if not execute:
         raise ValueError('explicit --execute required for a Copilot task')
+    if (isinstance(timeout_seconds, bool) or not isinstance(timeout_seconds, int)
+            or not 1 <= timeout_seconds <= MAX_TIMEOUT_SECONDS):
+        raise ValueError('session timeout must be 1..3600 whole seconds')
+    if os.name != 'posix':
+        raise RuntimeError('bounded Copilot sessions require a POSIX host')
     project = Path(project).resolve(strict=True)
     if not project.is_dir() or agent not in {meta['name'] for meta, _ in catalog()}:
         raise ValueError('explicit project and known Daeloryn agent required')
@@ -137,11 +168,24 @@ def launch(plan, task, project, agent, *, execute=False, executable=None):
     executable = executable or shutil.which('copilot')
     if executable is None:
         raise RuntimeError('installed Copilot CLI required')
-    # No shell, auto-approval flag, permission override, model-chosen argv or retry.
-    result = subprocess.run([executable, '--model=' + plan['requested_model'],
-                             '--agent=' + agent, '--prompt=' + task], cwd=project, check=False)
-    return {**plan, 'execution': 'completed' if result.returncode == 0 else 'failed',
-            'exit_code': result.returncode}
+    # A distinct process group enables best-effort cleanup of local descendants.
+    # The host may still have remote side effects; never automatically retry.
+    process = subprocess.Popen([executable, '--model=' + plan['requested_model'],
+                                '--agent=' + agent, '--prompt=' + task],
+                               cwd=project, start_new_session=True)
+    try:
+        exit_code = process.wait(timeout=timeout_seconds)
+    except subprocess.TimeoutExpired:
+        _terminate_session(process)
+        return {**plan, 'execution': 'timed_out', 'exit_code': None,
+                'outcome': 'unknown', 'local_termination': 'best_effort',
+                'timeout_seconds': timeout_seconds}
+    except BaseException:
+        _terminate_session(process)
+        raise
+    return {**plan, 'execution': 'completed' if exit_code == 0 else 'failed',
+            'exit_code': exit_code, 'outcome': 'host_exit_code_only',
+            'timeout_seconds': timeout_seconds}
 
 
 def main():
@@ -155,6 +199,8 @@ def main():
     parser.add_argument('--allowed-model', action='append')
     parser.add_argument('--execute', action='store_true')
     parser.add_argument('--project', type=Path); parser.add_argument('--agent')
+    parser.add_argument('--timeout-seconds', type=int, default=DEFAULT_TIMEOUT_SECONDS,
+                        help='POSIX session deadline (1..3600); timeout is not proof of cancellation')
     args = parser.parse_args()
     try:
         task = args.prompt_file.read_text(encoding='utf-8')
@@ -177,9 +223,10 @@ def main():
         plan.update({'catalog_origin': origin, 'selected_at_ns': time.time_ns()})
         print(json.dumps(plan, indent=2), flush=True)
         if args.execute:
-            result = launch(plan, task, args.project, args.agent, execute=True, executable=executable)
+            result = launch(plan, task, args.project, args.agent, execute=True,
+                            executable=executable, timeout_seconds=args.timeout_seconds)
             print(json.dumps(result, indent=2))
-            return 0 if result['exit_code'] == 0 else 1
+            return 0 if result['execution'] == 'completed' else 1
     except (ValueError, OSError, RuntimeError, asyncio.TimeoutError):
         parser.exit(2, 'ERROR: routing/discovery failed; no automatic fallback or task retry\n')
 
