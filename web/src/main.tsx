@@ -170,9 +170,10 @@ function App() {
             const data:unknown=await suggestion.json();
             if (data && typeof data==='object' && 'repository' in data &&
                 data.repository && typeof data.repository==='object' &&
-                'name' in data.repository && typeof data.repository.name==='string')
-              setRepositoryRecommendation(previous=>repositoryConfirmed?previous:data.repository.name);
-            else setRepositoryRecommendation('No unique repository match');
+                'name' in data.repository && typeof data.repository.name==='string') {
+              const suggestedName: string = data.repository.name;
+              if (!repositoryConfirmed) setRepositoryRecommendation(suggestedName);
+            } else if (!repositoryConfirmed) setRepositoryRecommendation('No unique repository match');
           } else setRepositoryRecommendation('Repository recommendation unavailable');
         } catch { setRepositoryRecommendation('Repository recommendation unavailable'); }
       }
