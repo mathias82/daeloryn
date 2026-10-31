@@ -24,10 +24,10 @@ python3 scripts/execution_engine.py complete --state .agent-runs/example.json --
 Repeat for dependent steps. After security and testing are completed, the `gate` step becomes `awaiting_approval`. The downstream `finalize` handoff remains `pending`.
 
 ```bash
-python3 scripts/execution_engine.py approve --state .agent-runs/example.json --step gate --actor "reviewer" --reason "Accepted test and security evidence"
+export EEA_APPROVAL_KEY="<strong-secret-provided-out-of-band>"\npython3 scripts/approval_tokens.py --state .agent-runs/example.json --step gate --actor reviewer\n# Paste the returned token into the next command (avoid shell history in shared machines):\npython3 scripts/execution_engine.py approve --state .agent-runs/example.json --step gate --actor reviewer --reason "Accepted test and security evidence" --token "<signed-token>"
 ```
 
-This action records a self-declared actor and a reason in the event log. **It is not verified identity, cryptographically tamper-proof approval, or authorization to deploy.** Protect the local state file using OS permissions and repository policy; do not commit run files or evidence containing secrets.
+Approval now requires an expiring HMAC-signed token scoped to the run, workflow hash and step. The key must be supplied out-of-band, and the signer should operate with a key unavailable to the workflow operator. This is **shared-secret authorization, not verified identity/SSO**. An operator with access to the signing key can self-approve; a state-file administrator can still tamper with the audit log. Never put keys in a repo or CI logs. Protect the local state file using OS permissions and repository policy; do not commit run files or evidence containing secrets.
 
 ## Templates and DAG planning
 
@@ -42,4 +42,4 @@ The planner computes dependency waves; the execution state machine opens and com
 
 ## Production hardening needed
 
-Identity-backed approvals, state locking/transaction isolation, durable append-only audit, credential isolation, execution adapters, cancellation, retry budgets, timeout enforcement, and authorization checks before actual deployments are **not implemented**. Do not use this tool as a production release gate.
+SSO/OIDC-based verified approver identity, state locking/transaction isolation, durable append-only audit, credential isolation, trusted sandboxed execution adapters, cancellation, retry budgets, timeout enforcement, and authorization checks before actual deployments are **not implemented**. Do not use this tool as a production release gate.
