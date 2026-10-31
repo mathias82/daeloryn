@@ -33,23 +33,37 @@ class WorkflowError(Exception):
 
 
 def project_manifest(root):
-    """Pin business context, the exact Java production file set, and all its bytes."""
+    """Pin business context, production Java file set and bytes."""
     root = Path(root).resolve(strict=True)
+
     result = {}
-    for directory in (root / 'src', root / 'src/main', root / 'src/main/java'):
+
+    for directory in (
+        root / 'src',
+        root / 'src/main',
+        root / 'src/main/java',
+    ):
         if directory.is_symlink() or not directory.is_dir():
             raise WorkflowError('real Java source tree required')
+
     paths = [root / 'README.md', root / 'pom.xml']
     paths.extend(sorted((root / 'src/main/java').rglob('*.java')))
+
     if len(paths) <= 2:
         raise WorkflowError('no production Java sources')
+
     for path in paths:
-        if path.is_symlink() or not path.is_file() or root not in path.resolve().parents:
+        if path.is_symlink() or not path.is_file():
             raise WorkflowError('missing or redirected project source')
+
+        resolved = path.resolve(strict=True)
+        if root not in resolved.parents:
+            raise WorkflowError('missing or redirected project source')
+
         relative = path.relative_to(root).as_posix()
         result[relative] = hashlib.sha256(path.read_bytes()).hexdigest()
-    return result
 
+    return result
 
 def guard_contract(before, after):
     if set(before) != set(after):
