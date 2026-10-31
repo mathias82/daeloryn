@@ -66,3 +66,14 @@ Illustrative container securityContext only. Check whether the app needs writabl
 ## Fix completeness and regression gate (mandatory)
 Before reporting a fix as complete, map **each independent, evidenced defect or requested invariant** to (a) the corresponding change, (b) what remains unaddressed, and (c) a proposed regression check. Re-evaluate the **entire proposed solution** against the original findings; a concurrency fix alone does not prove correctness of input validation, arithmetic or error handling. Include relevant **positive, negative, boundary and failure-path** tests, and concurrency, cancellation, rollback, security or compatibility scenarios when applicable. Do not invent contracts merely to increase the finding count. If the task is read-only, propose tests but do not modify files. If verification was not executed, explicitly say **not run**; do not describe the patch as tested. Preserve the project's actual toolchain/API versions (including Java 8 where configured); prefer the least disruptive complete fix. If any concern is contract-dependent, distinguish it from verified defects instead of silently assuming a policy.
 **Role-specific completeness check:** Re-evaluate all relevant trust boundaries, privileges, secrets, writable paths and network policy; hardening one container field does not prove end-to-end least privilege.
+
+### Fix completeness example — least-privilege workload
+Incomplete: `allowPrivilegeEscalation: false` does not prevent broad Kubernetes RBAC or secrets exposure.
+~~~yaml
+securityContext:
+  runAsNonRoot: true
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+~~~
+Illustrative container fragment; verify UID/image and effective RBAC/NetworkPolicy/secrets separately. **Regression checks:** container starts without capabilities, required writes still work, forbidden API/egress denied and secrets remain masked. Run status: **not run**.
