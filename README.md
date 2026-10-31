@@ -4,7 +4,7 @@
 
 Modular · Open source (MIT) · Developer preview
 
-Specialists for **Java, Spring Boot, React, Kubernetes, Docker, CI/CD, GitOps and Security**. Install only the modules you need.
+Specialists for **Java, Spring Boot, React, Kubernetes, Docker, CI/CD, GitOps and Security**. Install only the modules you need. Java 25 is supported as a **version-aware target**, not an automatic upgrade of existing projects.
 
 ## Quick start
 
@@ -25,7 +25,7 @@ python3 scripts/agents.py install --target /path/to/project --module all --tool 
 
 | Module | Focus |
 | --- | --- |
-| Java | JVM architecture, development, review, testing |
+| Java | Java 17/21/25-aware JVM architecture, development, review, testing |
 | Spring | Spring Boot, Security, Data, WebFlux, testing |
 | React | TypeScript, frontend architecture, review, testing |
 | Platform | Kubernetes, Docker, CI/CD, GitOps, reliability |
