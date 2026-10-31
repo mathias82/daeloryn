@@ -41,6 +41,10 @@ python3 scripts/agents.py install --target /path/to/project --module all --tool 
 
 Spring feature and platform release templates provide DAG planning, local state, signed approval transitions and experimental SQLite/OIDC verification and Docker isolation components. These do **not** constitute a production deployment approval service.
 
+## Unified execution service (developer preview)
+
+The new `scripts/execution_service.py` provides a common SQLite workflow CLI with dry-run, status, manual evidence completion and OIDC-verified approval entry points. `scripts/agent_adapter.py` defines a fail-closed provider boundary: **no AI provider is invoked automatically**.
+
 ## Next milestone
 
 Unify the current components into a single execution service with **real AI-provider integrations**, **controlled credentials**, **isolated execution**, **externally enforced approvals**, and **auditable state transitions**. See the [roadmap](docs/roadmap.md).
