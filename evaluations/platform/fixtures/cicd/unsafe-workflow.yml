@@ -1,0 +1,12 @@
+# INTENTIONALLY UNSAFE. Evaluation only; never use as a real workflow.
+name: unsafe-example
+on: pull_request_target
+permissions: write-all
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+      - run: echo "untrusted PR code would run here"
