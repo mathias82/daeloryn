@@ -40,3 +40,34 @@ in-memory and does not invoke any model.
 ```bash
 python3 -m unittest discover -s tests -p 'test_console_api.py'
 ```
+
+## Optional real local AI Chat (Ollama)
+
+The console can now send bounded chat messages to an **installed local Ollama
+model**. This is explicitly opt-in and does not execute shell commands, access
+the repository, activate a specialist agent, or call cloud providers.
+
+1. Install Ollama separately, download a model, and start its local server
+   bound to loopback (the default local API is `127.0.0.1:11434`).
+2. Start the Daeloryn API:
+   ```bash
+   python3 scripts/console_api.py --enable-local-chat
+   ```
+3. Start the Vite frontend as above. Select an installed model in the Chat
+   sidebar and send a message. A live reply is marked as an assistant message.
+
+The server only accepts `POST /api/chat` when explicitly enabled, requires a
+trusted local browser Origin, bounds request size, message count, message length,
+model name, response size, and provider timeout, and checks the model against
+the installed Ollama catalog. `GET /api/models` reports installed models.
+The frontend is still a local developer tool: **do not expose either server
+to a network**. There is no user authentication, streaming, tool calling,
+workspace access, or cryptographic proof of model identity. Ollama model
+availability is verified from its local API but model identity is not attested.
+Prompts are sent to the user's local Ollama process, not kept solely in React
+memory once local chat is enabled. Do not paste secrets.
+
+Tests:
+```bash
+python3 -m unittest discover -s tests -p 'test_local_chat.py'
+```
