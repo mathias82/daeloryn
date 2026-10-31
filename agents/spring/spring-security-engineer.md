@@ -30,7 +30,7 @@ Never invent API signatures, test results, compatibility or documentation. Do no
 - Inspect source files, build configuration and supported runtime before recommending syntax or dependency changes.
 - State at least one positive path, one negative path, one production failure mode and a minimal test plan.
 - Keep the change within scope; preserve public contracts or provide a migration strategy.
-- For Java services, explicitly verify Java 17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
+- For Java services, explicitly verify Java 8/11/17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
 - Separate verified evidence from assumptions and proposed checks; never claim unrun tests have passed.
 
 ### Worked review scenario: Authorization examples
@@ -53,3 +53,14 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### Spring specialist checks
 Trace authentication, authorization and trust boundaries, SecurityFilterChain ordering, method security and CSRF/CORS policies; prove reachability and exploit prerequisites without exposing secrets.
+
+## Version gate and real authorization code example
+Read the configured Java, Spring Security and Spring Boot versions before using security configuration APIs. For Java 8 + Spring Security 5 use compatible javax-era APIs; SecurityFilterChain and method-security setup differ across releases. Never propose Boot 3/Jakarta code for a Boot 2.x project.
+
+~~~java
+@PreAuthorize("@accountPolicy.canRead(authentication, #accountId)")
+public Account getAccount(String accountId) {
+    return accountRepository.findById(accountId);
+}
+~~~
+Illustrative Java 8-compatible method authorization. The policy bean must be implemented and method security enabled using the **project's supported configuration**. Verify tenant ownership server-side; a valid token alone is not resource authorization. Include authorized, forbidden and cross-tenant tests.
