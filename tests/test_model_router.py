@@ -1,5 +1,6 @@
 """Routing policy and one-shot argv tests; live Copilot behavior is not exercised."""
 from pathlib import Path
+import os
 import subprocess
 import signal
 import sys
@@ -68,6 +69,7 @@ class ModelRouterTests(unittest.TestCase):
                 select(models, 'Implement a feature')
         self.assertEqual([CATALOG[1]], model_ids([{'id': CATALOG[1]}, {'id': CATALOG[1]}]))
 
+    @unittest.skipUnless(os.name == 'posix', 'process-group launch is POSIX-only')
     def test_launch_uses_single_shell_free_call_and_preserves_host_permissions(self):
         task = 'Implement feature; $(touch should-not-run)'
         plan = select(CATALOG, task, agent='java-developer')
@@ -87,6 +89,16 @@ class ModelRouterTests(unittest.TestCase):
             self.assertEqual(900, run.return_value.wait.call_args.kwargs['timeout'])
             self.assertEqual('not_verified_by_router', result['actual_model'])
             self.assertEqual('failed', result['execution'])
+
+    @unittest.skipIf(os.name == 'posix', 'Windows fail-closed behavior')
+    def test_windows_launch_rejects_execution_without_spawning(self):
+        task = 'Implement feature'
+        plan = select(CATALOG, task, agent='java-developer')
+        with tempfile.TemporaryDirectory() as tmp, patch('model_router.subprocess.Popen') as popen:
+            with self.assertRaisesRegex(RuntimeError, 'POSIX host'):
+                launch(plan, task, tmp, 'java-developer', execute=True,
+                       executable='copilot')
+            popen.assert_not_called()
 
     def test_auto_routing_is_conservative_for_ambiguous_or_code_work(self):
         self.assertEqual(CATALOG[0], select(CATALOG, 'Translate this paragraph', kind='auto')['requested_model'])
@@ -123,6 +135,7 @@ class ModelRouterTests(unittest.TestCase):
         client.list_models.assert_awaited_once()
         client.stop.assert_awaited_once()
 
+    @unittest.skipUnless(os.name == 'posix', 'process-group launch is POSIX-only')
     def test_no_launch_without_opt_in_or_if_task_changes(self):
         task = 'Implement feature'
         plan = select(CATALOG, task, agent='java-developer')
@@ -138,6 +151,7 @@ class ModelRouterTests(unittest.TestCase):
                 launch(plan, task, tmp, 'security-reviewer', execute=True)
             self.assertEqual(0, run.call_count)
 
+    @unittest.skipUnless(os.name == 'posix', 'process-group launch is POSIX-only')
     def test_launch_fails_closed_for_missing_and_symlinked_agent_profiles(self):
         plan = select(CATALOG, 'Implement feature', agent='java-developer')
         with tempfile.TemporaryDirectory() as tmp, patch('model_router.subprocess.Popen') as run:
@@ -154,6 +168,7 @@ class ModelRouterTests(unittest.TestCase):
                        execute=True, executable='/installed/copilot')
             self.assertEqual(0, run.call_count)
 
+    @unittest.skipUnless(os.name == 'posix', 'process-group launch is POSIX-only')
     def test_timeout_terminates_local_group_without_retry_or_success_claim(self):
         task = 'Implement feature'
         plan = select(CATALOG, task, agent='java-developer')
@@ -179,6 +194,7 @@ class ModelRouterTests(unittest.TestCase):
             self.assertEqual((12345, signal.SIGTERM), killpg.call_args_list[0].args)
             self.assertEqual((12345, signal.SIGKILL), killpg.call_args_list[1].args)
 
+    @unittest.skipUnless(os.name == 'posix', 'POSIX launch timeout validation')
     def test_invalid_timeout_fails_before_process_creation(self):
         task = 'Implement feature'
         plan = select(CATALOG, task, agent='java-developer')
@@ -190,6 +206,7 @@ class ModelRouterTests(unittest.TestCase):
                            timeout_seconds=invalid)
             self.assertEqual(0, popen.call_count)
 
+    @unittest.skipUnless(os.name == 'posix', 'process-group launch is POSIX-only')
     def test_interruption_kills_local_group_and_propagates(self):
         task = 'Implement feature'
         plan = select(CATALOG, task, agent='java-developer')
