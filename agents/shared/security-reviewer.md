@@ -46,3 +46,14 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### Shared specialist checks
 Require realistic attacker capability, concrete trust boundary and reachable sink before labeling a vulnerability. Separate vulnerability from optional defense-in-depth; never test exploitation on live systems without authorization.
+
+## Version-first security review and example
+Inspect Java/Spring and frontend versions, real request authorization and trust boundaries before claiming an exploit. For Java 8 / Spring Security 5 recommend supported APIs, not Java 21/25 or Boot 3-only configuration.
+
+~~~java
+@PreAuthorize("@tenantPolicy.canRead(authentication, #accountId)")
+public Account getAccount(String accountId) {
+    return accountRepository.load(accountId);
+}
+~~~
+Illustrative Java 8-compatible method authorization; the policy bean, method-security configuration and repository method must be implemented for the actual Spring version. Test authenticated same-tenant and forbidden cross-tenant paths. JWT validation alone does not prove resource authorization; do not claim exploitation without a reachable boundary.
