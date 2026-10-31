@@ -1,6 +1,7 @@
 """Deterministic evidence-backed local source review; no code execution or edits."""
 import re
 from code_context import scan
+from architecture_inventory import inventory
 from agent_router import recommend
 
 RULES = (
@@ -27,6 +28,7 @@ def review(root, repository, task):
                                  "evidence": message, "suggested_fix": remedy,
                                  "confidence": "pattern-match"})
     return {"repository": repository, "findings": findings[:100],
+            "architecture": inventory(context),
             "agent_recommendation": recommend(task),
             "source_files_scanned": context["files_read"],
             "skipped": context["skipped"],
