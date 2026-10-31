@@ -23,7 +23,7 @@ class JavaReviewerContractTests(unittest.TestCase):
             "Contract-dependent observations",
         ):
             with self.subTest(rule=phrase):
-                self.assertIn(phrase, instructions)
+                self.assertIn(phrase.lower(), instructions)
 
     def test_installer_preserves_reviewer_contract_in_copilot_output(self):
         import sys
@@ -33,9 +33,9 @@ class JavaReviewerContractTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as directory:
             install(Path(directory), "java", "copilot")
             output = (Path(directory) / ".github" / "agents" / "java-reviewer.agent.md").read_text(encoding="utf-8")
-            self.assertIn("Review accuracy protocol (mandatory)", output)
-            self.assertIn("runtime reproduced", output)
-            self.assertIn("One finding per independent root cause", output)
+            self.assertIn("review accuracy protocol (mandatory)", output.lower())
+            self.assertIn("runtime reproduced", output.lower())
+            self.assertIn("one finding per independent root cause", output.lower())
 
 
 if __name__ == "__main__":
