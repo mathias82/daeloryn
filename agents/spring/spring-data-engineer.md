@@ -69,3 +69,13 @@ Check exactly one updated row inside the real database transaction, or reject in
 ## Fix completeness and regression gate (mandatory)
 Before reporting a fix as complete, map **each independent, evidenced defect or requested invariant** to (a) the corresponding change, (b) what remains unaddressed, and (c) a proposed regression check. Re-evaluate the **entire proposed solution** against the original findings; a concurrency fix alone does not prove correctness of input validation, arithmetic or error handling. Include relevant **positive, negative, boundary and failure-path** tests, and concurrency, cancellation, rollback, security or compatibility scenarios when applicable. Do not invent contracts merely to increase the finding count. If the task is read-only, propose tests but do not modify files. If verification was not executed, explicitly say **not run**; do not describe the patch as tested. Preserve the project's actual toolchain/API versions (including Java 8 where configured); prefer the least disruptive complete fix. If any concern is contract-dependent, distinguish it from verified defects instead of silently assuming a policy.
 **Role-specific completeness check:** Confirm atomicity across every affected row and account, isolation and rollback on exceptions, retries, optimistic locking, and consistent schema migrations.
+
+### Fix completeness example — cross-row transfer
+Incomplete: checking source balance then updating accounts in separate autocommit transactions can lose money.
+~~~sql
+UPDATE balances SET cents = cents - :amount
+WHERE id = :source AND cents >= :amount;
+UPDATE balances SET cents = cents + :amount
+WHERE id = :destination;
+~~~
+These statements are only a sketch: run under **one database transaction**, validate amount, require exactly one affected row per statement, check overflow and rollback on either failure. **Regression checks:** success, insufficient funds, invalid amount, concurrent transfers, failed second update leaves both accounts unchanged. Run status: **not run**.
