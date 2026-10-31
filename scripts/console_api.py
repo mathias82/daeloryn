@@ -4,6 +4,7 @@
 Optionally accepts bounded local-only chat prompts; never commands or credentials.
 """
 import argparse
+from copilot_chat import copilot_chat
 from local_chat import installed_models, chat, MAX_REQUEST
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -61,6 +62,9 @@ def make_handler(records_dir=None, enable_chat=False):
                 if path.path == "/api/health":
                     payload = {"status": "ok", "execution_enabled": False,
                                "provider_connected": False, "local_chat_enabled": enable_chat}
+                elif path.path == "/api/copilot/status":
+                    payload = {"enabled": enable_copilot, "provider": "github-copilot-cli",
+                               "model_discovery": "not_verified"}
                 elif path.path == "/api/agents":
                     payload = {"agents": agent_data(), "source": "repository"}
                 elif path.path == "/api/models":
@@ -134,6 +138,7 @@ def make_handler(records_dir=None, enable_chat=False):
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--port", type=int, default=8765)
+    p.add_argument("--enable-copilot-chat", action="store_true", help="opt in to Copilot CLI inference")
     p.add_argument("--enable-local-chat", action="store_true", help="opt in to local Ollama inference")
     p.add_argument("--records-dir", type=Path)
     a = p.parse_args()
