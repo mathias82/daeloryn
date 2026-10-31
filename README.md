@@ -35,7 +35,7 @@ python3 scripts/agents.py install --target /path/to/project --module all --tool 
 
 **Pros:** focused reusable specialists; technology-by-technology installation; shared definitions for four tools; testable installer and evaluation infrastructure.
 
-**Trade-offs:** no built-in orchestration or project-management workflow; host-specific capabilities differ; code review and production changes still require human oversight.
+**Trade-offs:** workflow DAG planning is available, but live agent orchestration and project-management workflows are not; host capabilities differ, and production changes require human oversight.
 
 **Why not BMAD?** Different purpose, not a claim of superiority. BMAD helps organize software delivery and planning; this toolkit focuses on specialists for everyday implementation and review. They can be used together. [Full comparison](docs/why-not-bmad.md).
 
@@ -45,7 +45,7 @@ Declarative orchestration **planning** for Spring features and platform releases
 
 ## Documentation
 
-[Getting started](docs/getting-started.md) · [Architecture](docs/architecture.md) · [Pros & cons](docs/pros-cons.md) · [Why not BMAD?](docs/why-not-bmad.md) · [Evaluations](docs/evaluations.md) · [Roadmap](docs/roadmap.md)
+[Getting started](docs/getting-started.md) · [Workflows](docs/workflows.md) · [Architecture](docs/architecture.md) · [Pros & cons](docs/pros-cons.md) · [Why not BMAD?](docs/why-not-bmad.md) · [Evaluations](docs/evaluations.md) · [Roadmap](docs/roadmap.md)
 
 **Project status:** experimental. Static validation and synthetic benchmark tests are available, but agent performance and runtime compatibility across all four tools are not yet fully verified.
 
