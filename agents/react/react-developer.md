@@ -46,3 +46,18 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### React specialist checks
 Trace render/effect lifecycles, stale closures, dependency arrays, state transitions, async request cancellation and keys; inspect TypeScript contracts and actual user-visible failure paths.
+
+## Compatibility and concrete React example
+Check package.json, lockfile, React and TypeScript versions; preserve the existing stack instead of assuming the latest React.
+
+~~~tsx
+function SaveButton({ onSave }) {
+  const [busy, setBusy] = React.useState(false);
+  async function save() {
+    setBusy(true);
+    try { await onSave(); } finally { setBusy(false); }
+  }
+  return <button type="button" disabled={busy} onClick={save}>Save</button>;
+}
+~~~
+Illustrative React 16.8+ Hooks example. Add handling for errors and duplicate submissions; a disabled button alone is not a server-side idempotency guarantee. Verify tests and accessibility for the actual project version.
