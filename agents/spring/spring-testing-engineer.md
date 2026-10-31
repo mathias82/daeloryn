@@ -70,3 +70,13 @@ Requires existing JUnit 4 and Spring Test dependencies/imports. On JUnit 5, use 
 ## Fix completeness and regression gate (mandatory)
 Before reporting a fix as complete, map **each independent, evidenced defect or requested invariant** to (a) the corresponding change, (b) what remains unaddressed, and (c) a proposed regression check. Re-evaluate the **entire proposed solution** against the original findings; a concurrency fix alone does not prove correctness of input validation, arithmetic or error handling. Include relevant **positive, negative, boundary and failure-path** tests, and concurrency, cancellation, rollback, security or compatibility scenarios when applicable. Do not invent contracts merely to increase the finding count. If the task is read-only, propose tests but do not modify files. If verification was not executed, explicitly say **not run**; do not describe the patch as tested. Preserve the project's actual toolchain/API versions (including Java 8 where configured); prefer the least disruptive complete fix. If any concern is contract-dependent, distinguish it from verified defects instead of silently assuming a policy.
 **Role-specific completeness check:** Make the test matrix cover normal response, validation failure, exceptions, transaction rollback, concurrency and target-version compatibility. Never call a mocked test an end-to-end test.
+
+### Fix completeness example — include failing paths (Java 8, JUnit 4 when installed)
+Incomplete: `contextLoads()` passing proves only application context startup.
+~~~java
+@Test(expected = IllegalArgumentException.class)
+public void invalidQuantityRejected() {
+    inventory.reserve("A", -1);
+}
+~~~
+Adapt to the installed test stack and actual class; exception alone does not prove state was preserved, so add a separate state assertion. **Regression checks:** success, invalid quantity with unchanged state, transaction rollback, concurrency and authorization when applicable. Run status: **not run**.
