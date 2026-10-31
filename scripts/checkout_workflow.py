@@ -34,6 +34,7 @@ class WorkflowError(Exception):
 
 def project_manifest(root):
     """Pin business context, the exact Java production file set, and all its bytes."""
+    root = Path(root).resolve(strict=True)
     result = {}
     for directory in (root / 'src', root / 'src/main', root / 'src/main/java'):
         if directory.is_symlink() or not directory.is_dir():
