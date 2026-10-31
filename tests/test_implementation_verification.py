@@ -10,7 +10,7 @@ import unittest
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / 'scripts'))
-from agents import catalog, install
+from agents import catalog, install, format_codex, format_claude, format_copilot, format_gemini
 from verify_implementation import prepare, verify
 
 
@@ -143,15 +143,15 @@ class AgentAcceptanceTests(unittest.TestCase):
                 paths = [f'.codex/agents/{name}.toml', f'.claude/agents/{name}.md',
                          f'.github/agents/{name}.agent.md', f'.gemini/agents/{name}.md']
                 for relative in paths:
-                    rendered = (target / relative).read_text()
-                    if relative.endswith('.toml'):
-                        rendered = tomllib.loads(rendered)['developer_instructions']
+                    actual = (target / relative).read_bytes()
+                    formatter = (format_codex if relative.endswith('.toml') else
+                                 format_claude if relative.startswith('.claude/') else
+                                 format_copilot if relative.startswith('.github/') else
+                                 format_gemini)
+                    expected = formatter(meta, body).encode('utf-8')
                     with self.subTest(agent=name, adapter=relative):
-                        # Windows Git checkouts may use CRLF while the
-                        # generated adapters use LF. Compare logical lines.
-                        # The installer writes UTF-8 bytes without newline
-                        # translation; the complete instructions must survive.
-                        self.assertIn(body, rendered)
+                        # Verify complete metadata and instructions byte-for-byte.
+                        self.assertEqual(expected, actual)
 
 
 if __name__ == '__main__':
