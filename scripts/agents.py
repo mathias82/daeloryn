@@ -4,6 +4,8 @@ import argparse
 import json
 import re
 import sys
+import os
+import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -103,10 +105,39 @@ def install(target, module, tool, force=False, dry_run=False):
         for path, _ in output:
             print(f"WOULD INSTALL {path}")
         return len(output)
-    for path, content in output:
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text(content, encoding="utf-8")
-        print(path)
+    # Stage contents before changing targets; roll back committed files on failures.
+    staged = []
+    original = {}
+    committed = []
+    try:
+        for path, content in output:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            if path.is_symlink() or path.parent.is_symlink():
+                raise ValueError(f"symlink destination rejected: {path}")
+            fd, temp_path = tempfile.mkstemp(prefix=".agent-stage-", dir=path.parent)
+            with os.fdopen(fd, "w", encoding="utf-8") as stream:
+                stream.write(content)
+            staged.append((path, Path(temp_path)))
+        for path, temp_path in staged:
+            original[path] = path.read_bytes() if path.exists() else None
+            os.replace(temp_path, path)
+            committed.append(path)
+        for path in committed:
+            print(path)
+    except BaseException:
+        for path in reversed(committed):
+            previous = original[path]
+            if previous is None:
+                path.unlink(missing_ok=True)
+            else:
+                fd, undo_path = tempfile.mkstemp(prefix=".agent-undo-", dir=path.parent)
+                with os.fdopen(fd, "wb") as stream:
+                    stream.write(previous)
+                os.replace(undo_path, path)
+        raise
+    finally:
+        for _, temp_path in staged:
+            temp_path.unlink(missing_ok=True)
     return len(output)
 
 def main():
