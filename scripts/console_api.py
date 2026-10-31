@@ -5,6 +5,7 @@ Optionally accepts bounded local-only chat prompts; never commands or credential
 """
 import argparse
 from copilot_chat import copilot_chat
+from copilot_auto import available_models, route_chat
 from local_chat import installed_models, chat, MAX_REQUEST
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -65,6 +66,16 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False):
                 elif path.path == "/api/copilot/status":
                     payload = {"enabled": enable_copilot, "provider": "github-copilot-cli",
                                "model_discovery": "not_verified"}
+                elif path.path == "/api/copilot/models":
+                    if not enable_copilot:
+                        self.reply(405, {"error": "Copilot disabled"})
+                        return
+                    try:
+                        payload = {"models": available_models(), "source": "live-copilot-sdk",
+                                   "automatic_routing": True}
+                    except (RuntimeError, OSError, ValueError, TimeoutError):
+                        self.reply(503, {"error": "Copilot model discovery unavailable"})
+                        return
                 elif path.path == "/api/agents":
                     payload = {"agents": agent_data(), "source": "repository"}
                 elif path.path == "/api/models":
@@ -106,7 +117,17 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False):
                     self.reply(413, {"error": "request too large or missing length"})
                     return
                 try:
-                    result = copilot_chat(json.loads(self.rfile.read(int(length))))
+                    request = json.loads(self.rfile.read(int(length)))
+                    routed, plan = route_chat(request)
+                    result = copilot_chat(routed)
+                    if plan is not None:
+                        result["routing"] = {
+                            "requested_model": plan["requested_model"],
+                            "effective_kind": plan["effective_kind"],
+                            "reason": plan["reason"],
+                            "risk_detected": plan["risk_detected"],
+                            "model_identity_verified": False
+                        }
                 except (ValueError, TypeError, KeyError, json.JSONDecodeError):
                     self.reply(400, {"error": "invalid Copilot request"})
                     return
