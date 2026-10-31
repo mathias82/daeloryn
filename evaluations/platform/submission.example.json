@@ -1,0 +1,17 @@
+{
+  "run_id": "replace-with-run-id",
+  "tool": "replace-with-tool",
+  "model": "replace-with-model",
+  "cases": [
+    {
+      "case_id": "docker-root",
+      "findings": [
+        {
+          "id": "docker.root-user",
+          "evidence": "USER root",
+          "rationale": "container executes as root"
+        }
+      ]
+    }
+  ]
+}
