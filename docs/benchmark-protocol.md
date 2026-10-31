@@ -216,3 +216,26 @@ the installed CLI version. Do not interpret CLI exit 0 as a verified model
 identity or agent selection. Raw transcripts can contain secrets and must
 remain private. Full unattended safe multi-provider orchestration and
 independently validated model identity remain open work.
+
+## Offline isolated provider smoke checks
+
+`scripts/isolated_provider_runner.py` provides an opt-in, digest-pinned
+Docker **offline smoke-test** for an operator-reviewed image containing a
+provider CLI. It uses no host mounts, no host credentials, no Docker socket,
+no network, a read-only root filesystem and reduced privileges.
+
+```bash
+python3 scripts/isolated_provider_runner.py \
+  --image provider-image@sha256:REPLACE_WITH_64_HEX_DIGEST \
+  --provider copilot --model MODEL_ID \
+  --output /private/offline-preview.json -- copilot --help
+```
+
+Add `--execute` and choose a new output file to run. The CLI executable
+must exist in the pinned image. The image itself must be independently
+reviewed and locally available. **This cannot contact remote AI APIs and
+must never be presented as a live model benchmark.** It does not mount
+trial workspaces, inject secrets or establish agent activation. For real
+live benchmarks use separately managed disposable workers with reviewed
+network egress, ephemeral credentials, safe workspace injection and
+independent attestation; those integrations remain outstanding.
