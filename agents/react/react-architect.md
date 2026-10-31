@@ -60,3 +60,12 @@ Illustrative browser-side URL pagination state; in SSR, read the framework's req
 ## Fix completeness and regression gate (mandatory)
 Before reporting a fix as complete, map **each independent, evidenced defect or requested invariant** to (a) the corresponding change, (b) what remains unaddressed, and (c) a proposed regression check. Re-evaluate the **entire proposed solution** against the original findings; a concurrency fix alone does not prove correctness of input validation, arithmetic or error handling. Include relevant **positive, negative, boundary and failure-path** tests, and concurrency, cancellation, rollback, security or compatibility scenarios when applicable. Do not invent contracts merely to increase the finding count. If the task is read-only, propose tests but do not modify files. If verification was not executed, explicitly say **not run**; do not describe the patch as tested. Preserve the project's actual toolchain/API versions (including Java 8 where configured); prefer the least disruptive complete fix. If any concern is contract-dependent, distinguish it from verified defects instead of silently assuming a policy.
 **Role-specific completeness check:** Check data ownership, route/back navigation, cache invalidation, loading/error/empty states, SSR/client boundaries and accessibility across the chosen design.
+
+### Fix completeness example — state ownership and navigation
+Incomplete: storing the current page only in component state breaks deep links and browser back navigation.
+~~~tsx
+const params = new URLSearchParams(location.search);
+const requested = Number(params.get('page') || '1');
+const page = Number.isInteger(requested) && requested > 0 ? requested : 1;
+~~~
+Illustrative browser-side code; in SSR use router-provided location, and synchronize pagination updates with the chosen router rather than only reading once. **Regression checks:** direct URL, invalid page, back/forward, loading/error and cache invalidation. Run status: **not run**.
