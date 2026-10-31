@@ -30,7 +30,7 @@ Never invent API signatures, test results, compatibility or documentation. Do no
 - Inspect source files, build configuration and supported runtime before recommending syntax or dependency changes.
 - State at least one positive path, one negative path, one production failure mode and a minimal test plan.
 - Keep the change within scope; preserve public contracts or provide a migration strategy.
-- For Java services, explicitly verify Java 17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
+- For Java services, explicitly verify Java 8/11/17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
 - Separate verified evidence from assumptions and proposed checks; never claim unrun tests have passed.
 
 ### Worked review scenario: Proxy semantics
@@ -53,3 +53,17 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### Spring specialist checks
 Verify actual proxies and method interception, bean scope/lifecycle, conditional configuration, exception mapping, transaction semantics and test slices before claiming a behavior.
+
+## Java 8 compatibility and concrete bean example
+Verify pom.xml, build.gradle, Java compiler target and Spring Framework version first. Keep Java 8 with Spring 5; do not suggest Spring 6, Jakarta-only packages, records or virtual threads without an approved migration.
+
+~~~java
+@Configuration
+class ClockConfig {
+    @Bean
+    public java.time.Clock clock() {
+        return java.time.Clock.systemUTC();
+    }
+}
+~~~
+Java 8 + Spring example. Check for an existing Clock bean and test bean injection before changing a real configuration.
