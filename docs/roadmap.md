@@ -9,6 +9,7 @@
 - JSON finding scorer and prompt preparation scripts
 - Declarative workflow templates, dependency validation and parallel-ready waves
 - Local manual-handoff execution state machine, evidence hashes, approval-gated transitions and scoped shared-secret approval tokens
+- Experimental SQLite transaction-safe workflow runtime, offline RS256/JWKS token validation and opt-in Docker isolation
 
 ## Not yet complete
 
