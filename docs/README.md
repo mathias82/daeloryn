@@ -1,6 +1,7 @@
 # Documentation
 
 - [Getting started](getting-started.md) — requirements, installation, adapters and commands
+- [Workflow planning](workflows.md) — DAG validation, examples and approval limitations
 - [Architecture](architecture.md) — canonical definitions, modules, adapter generation and boundaries
 - [Why not BMAD?](why-not-bmad.md) — trade-offs and when BMAD is the better fit
 - [Pros and cons](pros-cons.md) — advantages, limitations and decision guide
