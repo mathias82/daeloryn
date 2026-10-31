@@ -1,0 +1,20 @@
+# Deliberately insecure Kubernetes teaching fixture. NEVER apply.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: unsafe-demo
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: unsafe-demo
+  template:
+    metadata:
+      labels:
+        app: unsafe-demo
+    spec:
+      containers:
+        - name: demo
+          image: example.invalid/demo:latest
+          securityContext:
+            privileged: true
