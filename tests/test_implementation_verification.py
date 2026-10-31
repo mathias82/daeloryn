@@ -147,7 +147,10 @@ class AgentAcceptanceTests(unittest.TestCase):
                     if relative.endswith('.toml'):
                         rendered = tomllib.loads(rendered)['developer_instructions']
                     with self.subTest(agent=name, adapter=relative):
-                        self.assertIn(body, rendered)
+                        # Windows Git checkouts may use CRLF while the
+                        # generated adapters use LF. Compare logical lines.
+                        self.assertIn(body.splitlines(), [rendered.splitlines()[i:i + len(body.splitlines())]
+                                                          for i in range(len(rendered.splitlines()) - len(body.splitlines()) + 1)])
 
 
 if __name__ == '__main__':
