@@ -16,6 +16,7 @@ from verify_implementation import digest, prepare, read_file, verify, write_file
 
 PREFIX = 'benchmarks/hard-java8-checkout/'
 SUITE_FILES = ('run_contract.py', 'CheckoutContractSuite.java')
+RECOVERY_FILES = ('run_recovery.py', 'RecoveryContractSuite.java')
 
 
 def git(*args):
@@ -23,7 +24,7 @@ def git(*args):
 
 
 def evaluate(project, ref='origin/benchmark/hard-java8-checkout-20261031',
-             *, execute=False, sandbox_image=None):
+             *, execute=False, sandbox_image=None, recovery_checks=False):
     project = Path(project).resolve(strict=True)
     # Resolve the ref once; later branch movement cannot mix revisions in one run.
     commit = git('rev-parse', '--verify', ref + '^{commit}').decode().strip()
@@ -35,7 +36,8 @@ def evaluate(project, ref='origin/benchmark/hard-java8-checkout-20261031',
     sources = {name[len(PREFIX):]: git('show', commit + ':' + name) for name in selected}
     for name in ('README.md', 'pom.xml'):
         sources[name] = git('show', commit + ':' + PREFIX + name)
-    suite = {name: git('show', commit + ':' + PREFIX + 'evaluator/' + name) for name in SUITE_FILES}
+    suite_files = SUITE_FILES + (RECOVERY_FILES if recovery_checks else ())
+    suite = {name: git('show', commit + ':' + PREFIX + 'evaluator/' + name) for name in suite_files}
     candidate = {name: read_file(project, name) for name in sources}
     for name in ('README.md', 'pom.xml'):
         if candidate[name] != sources[name]:
@@ -47,7 +49,7 @@ def evaluate(project, ref='origin/benchmark/hard-java8-checkout-20261031',
     provenance = {'benchmark_commit': commit, 'source_sha256': {k: digest(v) for k, v in sources.items()},
                   'suite_sha256': {k: digest(v) for k, v in suite.items()},
                   'candidate_sha256': {k: digest(v) for k, v in candidate.items()},
-                  'provider_invoked': False}
+                  'provider_invoked': False, 'recovery_checks_enabled': bool(recovery_checks)}
     if not execute:
         return {**provenance, 'status': 'prepared_only_checks_not_run'}
     with tempfile.TemporaryDirectory(prefix='checkout-evaluation-') as tmp:
@@ -57,8 +59,11 @@ def evaluate(project, ref='origin/benchmark/hard-java8-checkout-20261031',
         write_files(base / 'original', sources)
         write_files(base / 'suite', suite)
         python = 'python3' if sandbox_image is not None else sys.executable
+        checks = {'checkout_contract': [python, '_suite/run_contract.py']}
+        if recovery_checks:
+            checks['recovery_contract'] = [python, '_suite/run_recovery.py']
         prepare(base / 'original', list(sources), [name for name in sources if name.endswith('.java')],
-                base / 'suite', list(suite), {'checkout_contract': [python, '_suite/run_contract.py']},
+                base / 'suite', list(suite), checks,
                 base / 'trial')
         write_files(base / 'trial/baseline', candidate)
         original = verify(base / 'trial', 'original', sandbox_image=sandbox_image)
@@ -71,11 +76,13 @@ def main():
     parser.add_argument('--project', type=Path, required=True)
     parser.add_argument('--suite-ref', default='origin/benchmark/hard-java8-checkout-20261031')
     parser.add_argument('--execute-checks', action='store_true')
+    parser.add_argument('--recovery-checks', action='store_true',
+                        help='also run five recovery checks from the same pinned benchmark commit')
     parser.add_argument('--sandbox-image')
     args = parser.parse_args()
     try:
         result = evaluate(args.project, args.suite_ref, execute=args.execute_checks,
-                          sandbox_image=args.sandbox_image)
+                          sandbox_image=args.sandbox_image, recovery_checks=args.recovery_checks)
     except (ValueError, OSError, subprocess.SubprocessError):
         parser.exit(2, 'ERROR: invalid project, unavailable benchmark Git objects or toolchain; '
                        'fetch the benchmark branch and inspect the frozen file set\n')

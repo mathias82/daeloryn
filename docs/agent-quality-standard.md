@@ -77,3 +77,12 @@ Every canonical agent now has a mandatory code-validation section and a unique s
 All 22 definitions carry the bounded repair/test feedback policy, propagated by the existing installer to all four hosts. Only authorized implementation tasks enter a repair cycle; read-only reviews and architecture proposals remain read-only. Platform/security tasks select applicable configuration and integration checks. Visible test feedback must not weaken assertions or expose frozen independent evaluator details, and unknown side effects require reconciliation before retry.
 
 The optional `engineering_cycle.py repair` command now implements a bounded visible-test repair loop after the initial implementation artifact and before independent verification. It supports explicitly selected specialists; read-only reviewers/architects cannot be repair executors. See [engineering cycle](engineering-cycle.md) for its protocol, limits and commands. Instruction packaging checks cannot demonstrate behavioral compliance or comparative model quality.
+
+## Unresolved effects and replay safety
+
+All 22 specialties now include the applicable second-attempt recovery protocol,
+with role-specific checks for unknown effects, failed compensation, full intent
+and final-patch/report consistency. The API fix task mirrors this protocol.
+The separate [recovery verification](recovery-verification.md) extension provides
+five executable post-comparison development checks; the original 23 remain frozen.
+Instruction propagation is not proof of compliance or provider superiority.

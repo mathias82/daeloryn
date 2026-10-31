@@ -42,7 +42,17 @@ source-grounded explanation, regression_assertions:[observable checks or explici
 unverified limitations]}]. Resolve every actionable finding exactly once.
 Only replace declared editable files. Do not claim tests ran. The independent
 verifier will execute separately. If a full fix needs undeclared files, report
-unresolved rather than bypassing the allowed scope.'''
+unresolved rather than bypassing the allowed scope.
+For state-changing calls, a timeout/transport error can follow a committed effect.
+Never assume idempotency because an API takes a request ID. Preserve an unresolved
+operation and block automatic retry after unknown charge/persist/compensation outcomes
+until an evidenced query, reconciliation or explicit provider guarantee settles them.
+Check a second same-ID attempt after failed compensation, including effect counters.
+Persist request identity/fingerprint with the outcome if replay crosses service instances;
+a matching amount alone cannot establish identical intent. Do not bind a missing stored
+fingerprint to a new request as proof. If existing interfaces cannot establish safety,
+report the limitation/unresolved finding rather than inventing APIs or claiming recovery.
+Final assertions must match emitted patch behavior, not only the planned design.'''
 
 
 def encoded(value):

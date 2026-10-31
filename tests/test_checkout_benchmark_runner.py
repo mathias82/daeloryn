@@ -70,6 +70,30 @@ class CheckoutRunnerTests(unittest.TestCase):
         self.assertEqual(b'original-build', (self.project / 'pom.xml').read_bytes())
         self.assertEqual([], list(actual.iterdir()))
 
+    def test_opt_in_recovery_checks_are_frozen_and_gate_acceptance(self):
+        self.suite['run_recovery.py'] = (
+            b"from pathlib import Path\nassert Path('src/main/java/Example.java').read_text() == 'reconciled'\n")
+        self.suite['RecoveryContractSuite.java'] = b'// synthetic recovery wrapper fixture\n'
+        (self.project / 'src/main/java/Example.java').write_text('corrected')
+        result = evaluate(self.project, execute=True, recovery_checks=True)
+        self.assertTrue(result['recovery_checks_enabled'])
+        self.assertEqual('passed', result['candidate']['checks']['checkout_contract']['status'])
+        self.assertEqual('failed', result['candidate']['checks']['recovery_contract']['status'])
+        self.assertEqual('failed', result['status'])
+        self.assertIn('RecoveryContractSuite.java', result['suite_sha256'])
+        self.assertEqual(result['suite_sha256'], result['candidate']['suite_sha256'])
+        self.assertEqual('corrected', (self.project / 'src/main/java/Example.java').read_text())
+
+    def test_recovery_suite_missing_from_pinned_ref_is_not_silently_skipped(self):
+        import subprocess
+        from check_checkout_benchmark import git
+        def missing(*args):
+            if args[0] == 'show' and args[1].endswith('/run_recovery.py'):
+                raise subprocess.CalledProcessError(128, 'git show recovery suite')
+            return git(*args)
+        with patch('check_checkout_benchmark.git', side_effect=missing), self.assertRaises(subprocess.CalledProcessError):
+            evaluate(self.project, execute=True, recovery_checks=True)
+
     def test_original_copy_fails_same_independent_suite(self):
         result = evaluate(self.project, execute=True)
         self.assertEqual('failed', result['status'])
