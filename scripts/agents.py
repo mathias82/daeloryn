@@ -6,6 +6,7 @@ import re
 import sys
 import os
 import tempfile
+import difflib
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -74,7 +75,7 @@ def format_copilot(meta, body):
 def format_gemini(meta, body):
     return "---\nname: " + meta["name"] + "\ndescription: " + meta["description"] + "\nkind: local\n---\n\n" + body + "\n"
 
-def install(target, module, tool, force=False, dry_run=False):
+def install(target, module, tool, force=False, dry_run=False, show_diff=False):
     if target.is_symlink():
         raise ValueError("target cannot be a symlink")
     target = target.resolve()
@@ -99,11 +100,16 @@ def install(target, module, tool, force=False, dry_run=False):
             if target not in candidate.parents:
                 raise ValueError(f"destination escaped target: {path}")
             candidate = candidate.parent
-        if path.exists() and not force:
+        if path.exists() and not (force or dry_run or show_diff):
             raise FileExistsError(f"already exists (use --force): {path}")
-    if dry_run:
-        for path, _ in output:
-            print(f"WOULD INSTALL {path}")
+    if dry_run or show_diff:
+        for path, content in output:
+            if show_diff:
+                previous = path.read_text(encoding="utf-8").splitlines(keepends=True) if path.exists() else []
+                proposed = content.splitlines(keepends=True)
+                print("".join(difflib.unified_diff(previous, proposed, fromfile=str(path) + " (current)", tofile=str(path) + " (proposed)")), end="")
+            else:
+                print(f"WOULD INSTALL {path}")
         return len(output)
     # Stage contents before changing targets; roll back committed files on failures.
     staged = []
@@ -150,12 +156,13 @@ def main():
     cmd.add_argument("--tool", choices=["codex", "claude", "copilot", "gemini", "both", "all"], default="both")
     cmd.add_argument("--force", action="store_true")
     cmd.add_argument("--dry-run", action="store_true", help="preview installation without writing files")
+    cmd.add_argument("--diff", action="store_true", help="show unified diff without writing files")
     args = parser.parse_args()
     try:
         if args.command == "validate":
             print(f"Validated {len(catalog())} agent definitions.")
         else:
-            print(f"Installed {install(args.target, args.module, args.tool, args.force, args.dry_run)} adapter files.")
+            print(f"Installed {install(args.target, args.module, args.tool, args.force, args.dry_run, args.diff)} adapter files.")
     except (OSError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
