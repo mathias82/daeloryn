@@ -64,3 +64,17 @@ class CustomerService {
 }
 ~~~
 Java 8 design seam; review timeouts, idempotency and error contracts. Customer is a domain placeholder.
+
+
+## Java baseline gate and concrete example
+Check Maven/Gradle compiler target, CI JDK and runtime before designing. Keep Java 8 projects on Java 8; no records, var or virtual threads without an explicit compatible migration.
+
+~~~java
+interface CustomerGateway { Customer findById(String id); }
+class CustomerService {
+    private final CustomerGateway gateway;
+    CustomerService(CustomerGateway gateway) { this.gateway = gateway; }
+    Customer find(String id) { return gateway.findById(id); }
+}
+~~~
+Illustrative Java 8 architecture boundary: verify error behavior, idempotency, timeout and contract tests; Customer is a domain type to be defined by the project.
