@@ -148,3 +148,27 @@ This is a coverage/reporting stage. Fully unattended, securely isolated
 provider execution across all 22 agents remains a separate integration task,
 requiring each provider's supported CLI/SDK contract, authorized credentials,
 per-agent benchmark tasks, trusted external isolation and human review.
+
+## Join live CLI capture with independent evaluator results
+
+After both provider captures and `compare_implementation_trials.py` finish,
+assemble a single machine-readable record:
+
+```bash
+python3 scripts/assemble_benchmark_trial.py \
+  --agent java-reviewer --provider copilot --run-id java-review-r1 \
+  --comparison /private/reports/java-review-r1.json \
+  --baseline-capture /private/records/baseline.json \
+  --daeloryn-capture /private/records/daeloryn.json \
+  --output /private/trials/java-review-r1.json
+python3 scripts/benchmark_matrix.py /private/trials/java-review-r1.json
+```
+
+The assembler rejects incomplete CLI captures, provider mismatches and missing
+or incomplete evaluator arms. It hashes input capture files and **never**
+claims to have verified the actual model, selected agent or sandbox isolation.
+The output is an unverified record for coverage tracking; it does not
+establish comparative AI performance. Capture logs can contain sensitive
+information: keep all trial files private. Real unattended execution still
+requires provider-specific adapters, credentials and externally enforced
+isolation; this command does not bypass those requirements.
