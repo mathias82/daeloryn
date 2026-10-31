@@ -23,7 +23,7 @@ class AgentTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as temp:
             path = Path(temp) / "java" / "java-developer.md"
             path.parent.mkdir()
-            path.write_text("---\\nname: java-developer\\ndescription: Demo\\nscope: java\\n---\\n"
+            path.write_text("---\nname: java-developer\ndescription: Demo\nscope: java\n---\n"
                             + "Example: good design. " * 30)
             with self.assertRaisesRegex(ValueError, "quality sections"):
                 parse(path)
