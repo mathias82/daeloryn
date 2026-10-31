@@ -2,22 +2,32 @@
 
 ## Implemented
 
-- Canonical Markdown agent definitions for Java, Spring, React, Platform and Shared specialties
+- Canonical agent definitions for Java, Spring, React, Platform and Shared specialties
 - Installer adapters for Codex, Claude Code, GitHub Copilot and Gemini CLI
-- Offline installation/catalog unit tests, security policy and GitHub Actions validation
-- Deliberately unsafe Platform fixtures with offline reference checker
-- JSON finding scorer and prompt preparation scripts
-- Declarative workflow templates, dependency validation and parallel-ready waves
-- Local manual-handoff execution state machine, evidence hashes, approval-gated transitions and scoped shared-secret approval tokens
-- Experimental SQLite transaction-safe workflow runtime, offline RS256/JWKS token validation and opt-in Docker isolation
+- Static catalog validation, installer unit tests and GitHub Actions checks
+- Deliberately unsafe Platform fixtures, reference checker and JSON finding scorer
+- Declarative DAG workflow templates and dependency-aware planning
+- Local manual-handoff execution state machine with evidence hashes and HMAC-signed approval tokens
+- Experimental SQLite transactional workflow runtime, RS256/JWKS verification component and opt-in Docker isolation
 
-## Not yet complete
+## Next major milestone: unified execution service
 
-- Actual AI invocation adapters, SSO/OIDC approvals, concurrency-safe persistence, retry budgets and secure production authorization
-- Reproducible end-to-end agent invocation tests in all four coding tools
-- Independent benchmark runs with hidden reference labels and human adjudication
-- More comprehensive Spring/Java/React regression fixtures
-- Version compatibility matrix and release automation
-- Signed, versioned releases and distribution packaging
+Bring the current planning, state, approval and sandbox components under one service, with:
 
-Prioritize measurable correctness, safe installation and security over agent count.
+1. **AI-provider adapters** — explicit, version-tested integrations for supported CLIs/APIs, without assuming all tools share an execution interface.
+2. **Controlled credentials** — separate provider credentials, short-lived access where supported, secret redaction and environment-scoped permissions.
+3. **Isolated execution** — opt-in sandboxed runs, restricted filesystem/network access, resource limits, timeouts and cancellation.
+4. **Externally enforced approvals** — trusted identity-provider integration, authorization policies and protected execution boundaries. The current JWT verifier is not a complete OIDC login or release authorization service.
+5. **Concurrency-safe persistence** — consolidate SQLite transactions with run lifecycle, retry semantics, idempotency, crash recovery and integrity-protected audit events.
+6. **Integration tests and observability** — verified approval blocking, negative security scenarios, adapter contracts, structured logs and traceable outcomes.
+
+The unified service is **not implemented yet**. Existing components are experimental and must not independently authorize production deployments.
+
+## Further work
+
+- Independent benchmarks with blinded reference labels and human adjudication
+- More Java/Spring/React regression fixtures
+- End-to-end compatibility testing across four coding tools
+- Versioned releases and distribution packaging
+
+Prioritize correctness and safety over agent count.
