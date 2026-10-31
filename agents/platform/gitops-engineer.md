@@ -50,3 +50,15 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### Platform specialist checks
 Compare desired manifests with observed sync/health information if available. Consider controller versions, drift, reconciliation, promotion, rollout failure, rollback and blast radius; do not claim deployment success from YAML.
+
+## Compatibility gate and concrete GitOps example
+Check actual Argo CD/Flux, Kubernetes/CRD and Helm/Kustomize versions, plus container runtime requirements. Java 8 applications must retain compatible JVM images unless migrated explicitly; do not assume a Java 25 image. Validate a diff before any sync.
+
+~~~yaml
+spec:
+  syncPolicy:
+    automated:
+      prune: false
+      selfHeal: true
+~~~
+Illustrative fragment of an Argo CD Application, **not** a complete manifest. Confirm supported schema and resource ownership; disabling automatic pruning reduces accidental deletion risk but is not a replacement for a review and rollback plan.
