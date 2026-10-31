@@ -9,6 +9,7 @@ from copilot_auto import available_models, route_chat
 from agent_router import recommend
 from repository_router import discover, suggest
 from github_repository_catalog import list_github_repositories
+from project_analysis import analyze_local
 from local_chat import installed_models, chat, MAX_REQUEST
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -90,6 +91,9 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     except (RuntimeError, OSError, ValueError):
                         self.reply(503, {"error": "GitHub discovery unavailable"})
                         return
+                elif path.path == "/api/project-analysis":
+                    self.reply(405, {"error": "POST required"})
+                    return
                 elif path.path == "/api/repositories":
                     payload = {"repositories": discover(repository_roots), "source": "configured-local-checkouts",
                                "execution_enabled": False}
@@ -124,6 +128,28 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                                                   "http://127.0.0.1:" + str(self.server.server_port),
                                                   "http://localhost:" + str(self.server.server_port)):
                 self.reply(403, {"error": "untrusted request origin"})
+                return
+            if self.path == "/api/project-analysis":
+                if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                    self.reply(415, {"error": "JSON required"})
+                    return
+                length = self.headers.get("Content-Length", "")
+                if not length.isdigit() or not 0 < int(length) <= 4096:
+                    self.reply(413, {"error": "invalid request size"})
+                    return
+                try:
+                    payload = json.loads(self.rfile.read(int(length)))
+                    if not isinstance(payload, dict) or set(payload) != {"repository"}:
+                        raise ValueError("repository required")
+                    matches = [root for root in repository_roots
+                               if any(r["name"] == payload["repository"] for r in discover([root]))]
+                    if len(matches) != 1:
+                        raise ValueError("repository must resolve uniquely under configured roots")
+                    result = analyze_local(matches[0], payload["repository"])
+                except (ValueError, TypeError, KeyError, json.JSONDecodeError, OSError):
+                    self.reply(400, {"error": "invalid or ambiguous local repository"})
+                    return
+                self.reply(200, result)
                 return
             if self.path == "/api/repository-routing":
                 if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
