@@ -2,9 +2,9 @@
 
 **Technology-focused AI engineering agents for Codex, Claude Code, GitHub Copilot and Gemini CLI.**
 
-Independent of BMAD · Modular · Open source (MIT) · Experimental
+Modular · Open source (MIT) · Developer preview
 
-Specialists for **Java, Spring Boot, React, Kubernetes, Docker, CI/CD, GitOps and Security**. Install only the modules you need; each agent follows evidence-based engineering and review guidance.
+Specialists for **Java, Spring Boot, React, Kubernetes, Docker, CI/CD, GitOps and Security**. Install only the modules you need.
 
 ## Quick start
 
@@ -26,27 +26,29 @@ python3 scripts/agents.py install --target /path/to/project --module all --tool 
 | Module | Focus |
 | --- | --- |
 | Java | JVM architecture, development, review, testing |
-| Spring | Boot, Framework, Security, Data, WebFlux, testing |
+| Spring | Spring Boot, Security, Data, WebFlux, testing |
 | React | TypeScript, frontend architecture, review, testing |
 | Platform | Kubernetes, Docker, CI/CD, GitOps, reliability |
 | Shared | Security and integration review |
 
 ## Why use it?
 
-**Pros:** focused reusable specialists; technology-by-technology installation; shared definitions for four tools; testable installer and evaluation infrastructure.
+**Pros:** reusable specialists, modular installation, common definitions for four tools, testable installer and evaluations.
 
-**Trade-offs:** workflow DAG planning is available, but live agent orchestration and project-management workflows are not; host capabilities differ, and production changes require human oversight.
-
-**Why not BMAD?** Different purpose, not a claim of superiority. BMAD helps organize software delivery and planning; this toolkit focuses on specialists for everyday implementation and review. They can be used together. [Full comparison](docs/why-not-bmad.md).
+**Trade-offs:** the current workflow engine supports dependency planning and approval-gated manual handoffs, **not** automatic AI agent execution. Tool compatibility and agent effectiveness still need end-to-end verification.
 
 ## Workflows
 
-DAG planning and local, signed-approval-gated **manual agent handoffs** for Spring features and platform releases. No automatic AI invocation or deployments. Experimental SQLite, OIDC JWT verification and opt-in Docker sandbox components are documented separately. See [Workflow orchestration](docs/workflows.md).
+Spring feature and platform release templates provide DAG planning, local state, signed approval transitions and experimental SQLite/OIDC verification and Docker isolation components. These do **not** constitute a production deployment approval service.
+
+## Next milestone
+
+Unify the current components into a single execution service with **real AI-provider integrations**, **controlled credentials**, **isolated execution**, **externally enforced approvals**, and **auditable state transitions**. See the [roadmap](docs/roadmap.md).
 
 ## Documentation
 
-[Getting started](docs/getting-started.md) · [Workflows](docs/workflows.md) · [Architecture](docs/architecture.md) · [Pros & cons](docs/pros-cons.md) · [Why not BMAD?](docs/why-not-bmad.md) · [Evaluations](docs/evaluations.md) · [Roadmap](docs/roadmap.md)
+[Getting started](docs/getting-started.md) · [Workflows](docs/workflows.md) · [Architecture](docs/architecture.md) · [Pros & cons](docs/pros-cons.md) · [Evaluations](docs/evaluations.md) · [Roadmap](docs/roadmap.md)
 
-**Project status:** experimental. Static validation and synthetic benchmark tests are available, but agent performance and runtime compatibility across all four tools are not yet fully verified.
+**Status:** developer preview. Static validation and synthetic evaluation tests exist, but production readiness and cross-provider runtime behavior are not verified.
 
 [Security](SECURITY.md) · [Contributing](CONTRIBUTING.md) · [MIT License](LICENSE)
