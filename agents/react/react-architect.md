@@ -46,3 +46,13 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### React specialist checks
 Verify actual React/TypeScript/router versions, client/server boundaries, state ownership, cache invalidation, effect lifecycle and backwards compatibility before recommending architecture changes.
+
+## Version-first architecture and code example
+Read package.json, lockfile, tsconfig, React/router versions and rendering mode first. Preserve older supported React APIs and TypeScript syntax; do not add React 19-only APIs or new state libraries to an older project without approved migration.
+
+~~~tsx
+const params = new URLSearchParams(window.location.search);
+const rawPage = Number(params.get('page') || '1');
+const page = Number.isInteger(rawPage) && rawPage > 0 ? rawPage : 1;
+~~~
+Illustrative browser-side URL pagination state; in SSR, read the framework's request/router state instead of window. Keep transient selection state local and server data in the existing fetching/cache layer. Test invalid query parameters and back navigation.
