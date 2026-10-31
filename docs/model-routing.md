@@ -14,7 +14,12 @@ reviewable Daeloryn policy, not a claim that routing is unique or superior.
   `architecture` prefer available Sonnet, then Opus. These are operator policy
   preferences, not measured quality or price guarantees for every family/version.
 - Recognized financial/security/retry/concurrency indicators (including selected
-  Greek terms) or a declared previous failure exclude Haiku from the small tier.
+  Greek terms and code identifiers such as `tenant_id`, OAuth and JWT) or a
+  declared previous failure exclude Haiku from the small tier.
+- Selecting any of the 22 current engineering specialists with `--agent` also
+  excludes Haiku, even for lightweight-looking prompts or explicit `--kind small`.
+  The chosen agent is bound to the routing decision; changing it before launch
+  fails. This is a conservative quality floor, not a claim about model capability.
   A previous failure prefers Opus, then Sonnet; it never automatically replays a task.
 - Only IDs in the returned catalog (excluding explicit disabled/unconfigured policies) and optional exact `--allowed-model` allowlist
   can be selected. Within a family the runtime's catalog order is retained; no
@@ -63,7 +68,10 @@ python3 scripts/model_router.py --discover-copilot --kind code \
 ```
 
 Use `--allowed-model EXACT_ID` repeatedly to restrict acceptable models. The agent
-must already be installed in the target host project. The router runs shell-free
+must already be installed in the target host project under
+`.github/agents/<agent>.agent.md`. Missing or symlinked profiles fail before
+the CLI is launched; other host configuration and native permissions still apply.
+The router runs shell-free
 argv with `--model`, `--agent`, `--prompt`, preserving native host permissions and
 interactive approvals. It does not automatically install definitions or approve
 commands, change directory outside the explicit project, commit or deploy.
