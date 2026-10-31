@@ -170,7 +170,10 @@ class CheckoutWorkflowTests(unittest.TestCase):
             self.assertEqual(['verify', 'review', 'IMPLEMENT', 'fix', 'VERIFY', 'verify'], calls)
             data = __import__('json').loads(report_file.read_text())
             self.assertEqual('PASS', data['status'])
-            self.assertEqual(0o600, report_file.stat().st_mode & 0o777)
+            # POSIX mode bits are not a Windows ACL guarantee. Keep the
+            # exclusive-create assertion below on every platform.
+            if os.name == 'posix':
+                self.assertEqual(0o600, report_file.stat().st_mode & 0o777)
             with self.assertRaises(FileExistsError):
                 # Refuses to replace an existing quality gate artifact.
                 flags = os.O_CREAT | os.O_EXCL | os.O_WRONLY
