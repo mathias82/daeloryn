@@ -73,3 +73,18 @@ python3 scripts/sandbox_runner.py --image example.invalid/review@sha256:DIGEST -
 ```
 
 Replace `DIGEST` with an actual 64-character lowercase hexadecimal digest of a trusted, pre-reviewed image. Docker isolation is not a security guarantee against malicious containers; use rootless Docker or stronger sandboxing on a dedicated host for adversarial inputs. No production deployments are authorized.
+
+## Unified execution service (developer preview)
+
+The new `scripts/execution_service.py` combines workflow planning, SQLite state, evidence completion and OIDC-verified approvals behind a single CLI. Unlike the older `execution_engine.py`, the unified service uses transactional SQLite state. It **does not run AI models, containers or deployments**.
+
+```bash
+python3 scripts/execution_service.py plan workflows/spring-feature.json
+python3 scripts/execution_service.py start workflows/spring-feature.json --execute
+python3 scripts/execution_service.py status --run RUN_ID
+python3 scripts/execution_service.py complete --run RUN_ID --step design --evidence /path/to/review.txt
+```
+
+The `approve` command takes an operator-provisioned trusted JWKS, expected issuer, audience and allowed subjects. For safety, provider adapters currently support validation and dry-run metadata only; `execute()` explicitly rejects real execution. Provider credentials are not read or managed by this project yet. See `scripts/agent_adapter.py`.
+
+**Security boundary:** the Python library and local SQLite database must only be accessible to trusted operators. A caller with direct database access can bypass application-level approval checks. OIDC verification on the CLI is not a remote identity service or production release authorization mechanism.
