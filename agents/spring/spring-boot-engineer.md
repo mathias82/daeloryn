@@ -73,3 +73,14 @@ Requires the project's Spring Web starter and imports. Check actual routing, sta
 ## Fix completeness and regression gate (mandatory)
 Before reporting a fix as complete, map **each independent, evidenced defect or requested invariant** to (a) the corresponding change, (b) what remains unaddressed, and (c) a proposed regression check. Re-evaluate the **entire proposed solution** against the original findings; a concurrency fix alone does not prove correctness of input validation, arithmetic or error handling. Include relevant **positive, negative, boundary and failure-path** tests, and concurrency, cancellation, rollback, security or compatibility scenarios when applicable. Do not invent contracts merely to increase the finding count. If the task is read-only, propose tests but do not modify files. If verification was not executed, explicitly say **not run**; do not describe the patch as tested. Preserve the project's actual toolchain/API versions (including Java 8 where configured); prefer the least disruptive complete fix. If any concern is contract-dependent, distinguish it from verified defects instead of silently assuming a policy.
 **Role-specific completeness check:** Check configuration profiles, error responses, validation, startup failure, migrations, and backward-compatible service contracts.
+
+### Fix completeness example — Java 8 / Spring Boot 2.x endpoint
+Incomplete: catch an exception and return HTTP 200; the error contract is still broken.
+~~~java
+@PostMapping("/orders")
+public ResponseEntity<?> create(@Valid @RequestBody OrderRequest input) {
+    Order created = service.create(input);
+    return ResponseEntity.status(201).body(created);
+}
+~~~
+Illustrative Spring MVC code; verify actual imports, DTO constraints, error handler and transaction behavior. **Regression checks:** valid 201, validation 400, dependency failure 5xx, no partial persistence, backward-compatible JSON. Run status: **not run**.
