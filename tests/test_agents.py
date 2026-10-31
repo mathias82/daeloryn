@@ -28,6 +28,20 @@ class AgentTests(unittest.TestCase):
             self.assertEqual(install(target, "react", "claude"), 4)
             self.assertTrue((target / ".claude/agents/react-reviewer.md").exists())
 
+    def test_install_copilot(self):
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp)
+            self.assertEqual(install(target, "shared", "copilot"), 2)
+            output = (target / ".github/agents/security-reviewer.agent.md").read_text()
+            self.assertIn("description: ", output)
+            self.assertIn("Threat", output)
+
+    def test_install_all_tools(self):
+        with tempfile.TemporaryDirectory() as temp:
+            target = Path(temp)
+            self.assertEqual(install(target, "java", "all"), 12)
+            self.assertTrue((target / ".github/agents/java-developer.agent.md").is_file())
+
     def test_no_overwrite_without_force(self):
         with tempfile.TemporaryDirectory() as temp:
             target = Path(temp)
