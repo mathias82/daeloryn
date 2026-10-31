@@ -35,6 +35,18 @@ Supported modules: `java`, `spring`, `react`, `platform`, `shared`. Supported to
 
 The installer refuses overwrites by default. Use `--force` only after reviewing generated changes. The target directory must already exist. Installed agents require a supported version of the corresponding host tool; file generation alone does not prove runtime compatibility. Configure tool permissions and sandboxing in the host application. Agents do not automatically invoke each other or gain separate models.
 
+### Workflow planning
+
+Plan the included workflows without running agents, commands or deployments:
+
+```bash
+python3 scripts/workflows.py --validate-all
+python3 scripts/workflows.py workflows/spring-feature.json
+python3 scripts/workflows.py workflows/platform-release.json
+```
+
+These commands only validate workflow dependencies and print execution waves. Approval steps are descriptive, **not enforced**. See [workflow documentation](workflows.md).
+
 ### Troubleshooting
 
 If validation fails, check the agent frontmatter (`name`, `description`, `scope`) and matching `agents/<module>/<name>.md` path. If an installation fails, check the target path and existing generated files. For CI failures, inspect the exact commit and failed step; old red runs do not update after a fix.
