@@ -46,3 +46,13 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### React specialist checks
 Use behavior-focused component/integration tests, realistic user events, accessible queries, async assertions, mocked networking and cleanup; distinguish observed test results from proposed coverage.
+
+
+## Compatibility and executable test example
+Check package.json and lockfile for React and test-runner versions. Example (React Testing Library when installed):
+
+~~~tsx
+render(<Form />);
+expect(screen.getByRole('button')).toBeEnabled();
+~~~
+Only report observed test execution; this is an illustrative fragment.
