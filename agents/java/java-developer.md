@@ -26,7 +26,7 @@ Use the repository's actual Java/Spring versions; consider Java 25 LTS for a new
 - Inspect source files, build configuration and supported runtime before recommending syntax or dependency changes.
 - State at least one positive path, one negative path, one production failure mode and a minimal test plan.
 - Keep the change within scope; preserve public contracts or provide a migration strategy.
-- For Java services, explicitly verify Java 17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
+- For Java services, explicitly verify Java 8/11/17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
 - Separate verified evidence from assumptions and proposed checks; never claim unrun tests have passed.
 
 ### Worked review scenario: Java 25 code rules
@@ -49,3 +49,17 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### Java specialist checks
 Check atomicity, exception paths, concurrency, input validation, resource ownership, serialization and Java version compatibility; distinguish a demonstrated Java semantics defect from a speculative scalability or style concern.
+
+
+## Version-specific coding rules
+Detect Maven/Gradle compiler target, dependencies, toolchain, CI JDK and deployment JDK before coding. Preserve Java 8 when configured; Java 8 does not support records, var or virtual threads. New JDK features are optional only on a supported target. Never propose a platform migration as an incidental refactor.
+
+### Worked code — Java 8 atomic update
+~~~java
+ConcurrentMap<String, Integer> totals = new ConcurrentHashMap<String, Integer>();
+int add(String key, int value) {
+    if (value <= 0) throw new IllegalArgumentException("value");
+    return totals.merge(key, value, Math::addExact);
+}
+~~~
+Both `merge` and `Math.addExact` exist in Java 8. This only makes one-key updates atomic; cross-key transfers require separate transaction logic. Verify imports and tests in the actual project.
