@@ -35,7 +35,9 @@ function App() {
   const [chatEnabled,setChatEnabled] = useState(false);
   const [copilotEnabled,setCopilotEnabled] = useState(false);
   const [provider,setProvider] = useState<'copilot' | 'ollama'>('copilot');
-  const [copilotModel,setCopilotModel] = useState('');
+  const [copilotModel,setCopilotModel] = useState('auto');
+  const [copilotModels,setCopilotModels] = useState<string[]>([]);
+  const [copilotDiscoveryError,setCopilotDiscoveryError] = useState('');
   const [sending,setSending] = useState(false);
   const [search,setSearch] = useState('');
   const [remoteAgents,setRemoteAgents] = useState<Agent[] | null>(null);
@@ -59,7 +61,20 @@ function App() {
         const copilotStatus = await fetch('/api/copilot/status',{signal:controller.signal});
         if (copilotStatus.ok) {
           const state: unknown = await copilotStatus.json();
-          if (state && typeof state==='object' && 'enabled' in state && state.enabled===true) setCopilotEnabled(true);
+          if (state && typeof state==='object' && 'enabled' in state && state.enabled===true) {
+            setCopilotEnabled(true);
+            try {
+              const discovered = await fetch('/api/copilot/models',{signal:controller.signal});
+              if (!discovered.ok) throw new Error('Live Copilot model discovery unavailable');
+              const catalog: unknown = await discovered.json();
+              if (!catalog || typeof catalog!=='object' || !('models' in catalog) ||
+                  !Array.isArray(catalog.models) || !catalog.models.every((m: unknown)=>typeof m==='string'))
+                throw new Error('Invalid Copilot model catalog');
+              setCopilotModels(catalog.models as string[]);
+            } catch (error) {
+              if (!controller.signal.aborted) setCopilotDiscoveryError(error instanceof Error?error.message:'Discovery unavailable');
+            }
+          }
         }
         const modelsData: unknown = await modelsResponse.json();
         if (!healthData || typeof healthData!=='object' || !('execution_enabled' in healthData) || healthData.execution_enabled!==false) throw new Error('Unexpected execution state');
@@ -99,7 +114,7 @@ function App() {
     const text=draft.trim();
     if (!text || sending) return;
     const stamp=Date.now(), targetSession=sessionId;
-    const selectedModel=provider==='copilot'?copilotModel.trim():model;
+    const selectedModel=provider==='copilot'?copilotModel:model;
     const enabled=provider==='copilot'?copilotEnabled:chatEnabled;
     const history=session.messages.filter(m=>m.role==='user'||m.role==='assistant')
       .slice(-10).map(m=>({role:m.role,content:m.text}));
@@ -121,9 +136,12 @@ function App() {
       const result: unknown=await response.json();
       if (!result||typeof result!=='object') throw new Error('Invalid response');
       const answer='reply' in result?result.reply:null;
+      const routing='routing' in result && result.routing && typeof result.routing==='object' &&
+        'requested_model' in result.routing && typeof result.routing.requested_model==='string'
+        ? result.routing.requested_model : null;
       if (typeof answer!=='string') throw new Error('Missing assistant reply');
       setSessions(previous=>previous.map(s=>s.id===targetSession?{...s,messages:[...s.messages,
-        {id:stamp+1,role:'assistant',text:answer}]}:s));
+        {id:stamp+1,role:'assistant',text:routing?'[Auto-selected model: '+routing+']\\n\\n'+answer:answer}]}:s));
     } catch(error) {
       setSessions(previous=>previous.map(s=>s.id===targetSession?{...s,messages:[...s.messages,
         {id:stamp+1,role:'status',text:error instanceof Error?error.message:'Provider unavailable'}]}:s));
@@ -154,7 +172,7 @@ function App() {
         <div className="chat-layout"><section className="chat-panel"><div className="chat-toolbar"><div><span className="chat-orb">✧</span><strong>{session.name}</strong><small>Local conversation</small></div><button className="icon-button" onClick={()=>setShowDetails(!showDetails)} aria-label="Toggle session details">☷</button></div>
           <div className="chat-messages" aria-live="polite">{session.messages.map(m=><article key={m.id} className={'bubble '+m.role}><div className="bubble-author">{m.role==='user'?'YOU':'DAELORYN · SYSTEM STATUS'}</div><p>{m.text}</p></article>)}</div>
           <form className="composer" onSubmit={send}><label htmlFor="task-input">Message</label><textarea id="task-input" value={draft} onChange={e=>setDraft(e.target.value)} placeholder="Ask Daeloryn to review code, plan a workflow, or assess architecture…" rows={3}/><div className="composer-footer"><span>⌁ {chatEnabled ? 'Local Ollama · no tools or repository access' : 'No selected provider connected'}</span><button disabled={!draft.trim() || sending} type="submit">{sending ? "Generating…" : "Send message"} <span>↗</span></button></div></form>
-        </section>{showDetails&&<aside className="details-panel"><h3>Session configuration</h3><p className="muted">Preview-only selections</p><label>Agent<select value={agent} onChange={e=>setAgent(e.target.value)}><option>Automatic (preview)</option>{displayedAgents.map(a=><option key={a.name}>{a.name}</option>)}</select></label><label>Provider<select value={provider} onChange={e=>setProvider(e.target.value as 'copilot'|'ollama')}><option value="copilot">GitHub Copilot</option><option value="ollama">Local Ollama</option></select></label>{provider==='copilot'?<label>Copilot model ID<input aria-label="Copilot model ID" value={copilotModel} onChange={e=>setCopilotModel(e.target.value)} placeholder="Model ID from Copilot CLI" maxLength={127}/></label>:<label>Model<select value={model} onChange={e=>setModel(e.target.value)}><option value="">No model selected</option>{installedModels.map(m=><option key={m} value={m}>{m}</option>)}</select></label>}<div className="detail-divider"/><h3>Execution safeguards</h3><StatusLine label="Provider" state="Disconnected"/><StatusLine label="Workspace access" state="Disabled"/><StatusLine label="Code modifications" state="Disabled"/><StatusLine label="Approval gates" state="Not active"/><div className="details-note">Model selection can invoke local Ollama only when explicitly enabled. Agent selection is still preview-only; no tools or repository modifications.</div></aside>}</div>
+        </section>{showDetails&&<aside className="details-panel"><h3>Session configuration</h3><p className="muted">Preview-only selections</p><label>Agent<select value={agent} onChange={e=>setAgent(e.target.value)}><option>Automatic (preview)</option>{displayedAgents.map(a=><option key={a.name}>{a.name}</option>)}</select></label><label>Provider<select value={provider} onChange={e=>setProvider(e.target.value as 'copilot'|'ollama')}><option value="copilot">GitHub Copilot</option><option value="ollama">Local Ollama</option></select></label>{provider==='copilot'?<label>Copilot model<select value={copilotModel} onChange={e=>setCopilotModel(e.target.value)}><option value="auto">Automatic (task-based)</option>{copilotModels.map(m=><option key={m} value={m}>{m}</option>)}</select></label>:<label>Model<select value={model} onChange={e=>setModel(e.target.value)}><option value="">No model selected</option>{installedModels.map(m=><option key={m} value={m}>{m}</option>)}</select></label>}{provider==='copilot' && copilotDiscoveryError && <p className="muted">{copilotDiscoveryError} — automatic routing will fail closed.</p>}<div className="detail-divider"/><h3>Execution safeguards</h3><StatusLine label="Provider" state="Disconnected"/><StatusLine label="Workspace access" state="Disabled"/><StatusLine label="Code modifications" state="Disabled"/><StatusLine label="Approval gates" state="Not active"/><div className="details-note">Model selection can invoke local Ollama only when explicitly enabled. Agent selection is still preview-only; no tools or repository modifications.</div></aside>}</div>
       </>}
       {view==='Agents'&&<><PageHeading eyebrow="SPECIALIST DIRECTORY" title="Agent catalog" description="Explore engineering roles. The full repository catalog will be loaded by the future API."/><div className="filter-bar"><input aria-label="Search agents" value={search} onChange={e=>setSearch(e.target.value)} placeholder="⌕  Search specialists…"/><span>{remoteAgents ? 'Repository catalog · '+remoteAgents.length+' agents' : 'Illustrative profiles · API offline'}</span></div><div className="agent-grid">{filteredAgents.map(a=><article className="agent-card" key={a.name}><div className="agent-card-top"><span className="agent-symbol">✧</span><span className="subtle-tag">{a.scope}</span></div><h3>{a.name}</h3><p>{a.description}</p><div className="agent-bottom"><span>○ Not connected</span><button onClick={()=>{setAgent(a.name);setView('Chat')}}>Select for chat →</button></div></article>)}</div>{filteredAgents.length===0&&<Empty text="No agents match your search."/>}</>}
       {view==='Workflows'&&<><PageHeading eyebrow="EXECUTION ORCHESTRATION" title="Workflows" description="Track request lifecycle, approvals and execution events once the backend is connected."/><div className="notice"><span className="notice-icon">ⓘ</span><div><strong>Execution disabled</strong><p>No workflows are running. The following pipeline is an interface preview only.</p></div></div><section className="surface"><div className="surface-head"><h2>Workflow lifecycle</h2><span className="subtle-tag">REFERENCE DESIGN</span></div><div className="workflow-grid">{['Request submitted','Route to specialist','Review proposed changes','Explicit human approval','Isolated execution','Independent verification'].map((s,i)=><div key={s} className="workflow-stage"><span>0{i+1}</span><strong>{s}</strong><small>Not started</small></div>)}</div></section><Empty text="No real workflow history is available."/></>}
