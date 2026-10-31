@@ -72,7 +72,7 @@ def format_copilot(meta, body):
 def format_gemini(meta, body):
     return "---\nname: " + meta["name"] + "\ndescription: " + meta["description"] + "\nkind: local\n---\n\n" + body + "\n"
 
-def install(target, module, tool, force=False):
+def install(target, module, tool, force=False, dry_run=False):
     if target.is_symlink():
         raise ValueError("target cannot be a symlink")
     target = target.resolve()
@@ -99,6 +99,10 @@ def install(target, module, tool, force=False):
             candidate = candidate.parent
         if path.exists() and not force:
             raise FileExistsError(f"already exists (use --force): {path}")
+    if dry_run:
+        for path, _ in output:
+            print(f"WOULD INSTALL {path}")
+        return len(output)
     for path, content in output:
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content, encoding="utf-8")
@@ -114,12 +118,13 @@ def main():
     cmd.add_argument("--module", choices=["all", *sorted(MODULES)], default="all")
     cmd.add_argument("--tool", choices=["codex", "claude", "copilot", "gemini", "both", "all"], default="both")
     cmd.add_argument("--force", action="store_true")
+    cmd.add_argument("--dry-run", action="store_true", help="preview installation without writing files")
     args = parser.parse_args()
     try:
         if args.command == "validate":
             print(f"Validated {len(catalog())} agent definitions.")
         else:
-            print(f"Installed {install(args.target, args.module, args.tool, args.force)} adapter files.")
+            print(f"Installed {install(args.target, args.module, args.tool, args.force, args.dry_run)} adapter files.")
     except (OSError, ValueError) as exc:
         print(f"ERROR: {exc}", file=sys.stderr)
         sys.exit(1)
