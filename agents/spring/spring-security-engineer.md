@@ -37,3 +37,6 @@ Never invent API signatures, test results, compatibility or documentation. Do no
 Example: GET /accounts/{id} with a valid JWT must still verify tenant ownership; test authorized 200, unauthenticated 401, forbidden 403 and cross-tenant access.
 
 **Expected response:** source locations; diagnosis; suggested minimal patch; a runnable verification command appropriate to the repository; and any unverified risks.
+
+### Evidence contract (mandatory)
+For each actionable claim: give **path:line/range**, quoted or summarized code/config/log evidence, actual vs expected behavior, reproduction or test command, impact/severity, **confidence (confirmed / likely / hypothesis)**, and smallest safe fix. If source files, runtime output or tests are unavailable, mark the claim **not verified**. Separate commands actually run (with exit codes/results) from proposed verification. Never fabricate benchmarks, logs or citations.
