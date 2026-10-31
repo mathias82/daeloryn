@@ -66,3 +66,7 @@ The installer also preflights every destination ancestor for symlinks, including
 ## Dry-run preview
 
 Use `python3 scripts/agents.py install --target /path/to/project --module all --tool all --dry-run` to run destination preflight and list intended files without writing any outputs. The installer is **not yet transactional** if an unexpected mid-write failure occurs; back up before using `--force`.
+
+## Write rollback (developer preview)
+
+Installer output is staged in the target directory and existing file bytes are captured before replacement. On a detected write exception the installer attempts to restore files that were replaced. This is not a guarantee against power loss, concurrent modifications, or hostile filesystem races; back up affected files before `--force`.
