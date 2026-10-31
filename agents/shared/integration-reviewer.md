@@ -46,3 +46,18 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### Shared specialist checks
 Verify end-to-end contracts: schema evolution, ordering, idempotency, retries, dead letters, authorization boundaries, correlation IDs and partial failure; distinguish upstream/downstream assumptions.
+
+## Version gate and concrete API contract example
+Compare actual OpenAPI schema, backend Java/Spring version, frontend TypeScript/React versions and generated client before proposing changes. A Java 8/Spring Boot 2.x API must not be migrated to Jakarta or Java 17 merely to fix contract drift.
+
+~~~typescript
+interface BalanceResponse { balanceCents: number }
+function parseBalance(value: unknown): BalanceResponse {
+  if (!value || typeof value !== 'object' ||
+      typeof (value as BalanceResponse).balanceCents !== 'number') {
+    throw new Error('Invalid balance response');
+  }
+  return value as BalanceResponse;
+}
+~~~
+Illustrative TypeScript runtime boundary check for a numeric JSON field. Verify whether the actual API serializes monetary values as strings, numbers or integer minor units; align OpenAPI, server DTO, client types and contract tests rather than guessing.
