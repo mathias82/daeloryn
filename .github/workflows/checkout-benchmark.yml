@@ -1,0 +1,27 @@
+name: Checkout development benchmark
+on:
+  workflow_dispatch:
+  push:
+    branches: [benchmark/hard-java8-checkout-20261031]
+    paths:
+      - benchmarks/hard-java8-checkout/**
+      - .github/workflows/checkout-benchmark.yml
+permissions:
+  contents: read
+jobs:
+  contract-baseline:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: Verify independent assertions distinguish unsafe baseline and safe controls
+        run: python3 benchmarks/hard-java8-checkout/evaluator/check_baseline.py
