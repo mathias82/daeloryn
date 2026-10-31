@@ -30,7 +30,7 @@ Never invent API signatures, test results, compatibility or documentation. Do no
 - Inspect source files, build configuration and supported runtime before recommending syntax or dependency changes.
 - State at least one positive path, one negative path, one production failure mode and a minimal test plan.
 - Keep the change within scope; preserve public contracts or provide a migration strategy.
-- For Java services, explicitly verify Java 17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
+- For Java services, explicitly verify Java 8/11/17/21/25 source, bytecode and runtime compatibility instead of upgrading automatically.
 - Separate verified evidence from assumptions and proposed checks; never claim unrun tests have passed.
 
 ### Worked review scenario: Reactive examples
@@ -53,3 +53,14 @@ This section supersedes any less precise confidence wording elsewhere in the age
 
 ### Spring specialist checks
 Separate Netty event-loop blocking from other thread contexts; inspect Reactor context, backpressure, cancellation, timeouts, hot/cold publishers and blocking driver calls with concrete evidence.
+
+## Version-first WebFlux example
+Check Java target, Spring Boot, Reactor and Netty versions before changing an application. For Java 8 + supported Spring 5/WebFlux, use available Reactor APIs and never recommend virtual threads. For a Spring MVC project, do not introduce WebFlux without a justified architectural change.
+
+~~~java
+Mono<Customer> loadCustomer(String id) {
+    return Mono.fromCallable(() -> blockingRepository.findById(id))
+        .subscribeOn(Schedulers.boundedElastic());
+}
+~~~
+Illustrative Spring WebFlux/Reactor example on a version that provides boundedElastic. It moves a blocking call off the event loop but does **not** make JDBC nonblocking or remove connection-pool limits. Verify Reactor version, null handling and cancellation/timeout behavior; prefer a reactive driver when appropriate.
