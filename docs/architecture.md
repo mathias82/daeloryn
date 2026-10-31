@@ -1,6 +1,6 @@
 # Architecture and design
 
-The framework distributes focused, independent coding-agent definitions. It is **not** an orchestration engine or a hosted inference service.
+The framework distributes focused, independent coding-agent definitions. It includes a deterministic workflow DAG planner, but **not** a live agent orchestration engine or hosted inference service.
 
 ```text
 agents/{java,spring,react,platform,shared}/*.md
@@ -25,7 +25,7 @@ Each definition uses a small metadata header and original technical instructions
 
 ### Module boundaries
 
-Java covers language/JVM engineering; Spring covers application framework semantics; React covers frontend architecture and behavior; Platform covers containers, Kubernetes, delivery and reliability; Shared covers cross-cutting security and integration. Overlap is intentional only when expertise crosses domains. There is no autonomous coordinator deciding which agents to run.
+Java covers language/JVM engineering; Spring covers application framework semantics; React covers frontend architecture and behavior; Platform covers containers, Kubernetes, delivery and reliability; Shared covers cross-cutting security and integration. Overlap is intentional only when expertise crosses domains. The optional planner orders declared agent steps; there is no autonomous coordinator invoking agents.
 
 ### Limitations
 
