@@ -6,6 +6,24 @@
 
 Use the four deliberately unsafe fixtures in `evaluations/engineering`: Java 25, Spring, React and Kubernetes. They contain eight planted findings. Keep the gold labels in `cases.json` **out of the model context**. Run each case twice using the same exact provider/model version and environment: (a) normal baseline instructions and (b) the corresponding installed specialized agent. Randomize order and repeat across several runs; keep full responses, exact prompts, tool versions, execution time, token use where actually measurable, and any failures. Do not compare different providers as if they were controlled same-model baseline comparisons.
 
+## Blinded Java review workspaces (Copilot)
+
+For Java review comparisons, prepare each repetition as a **new** isolated trial directory outside the Daeloryn checkout. The preparation script copies only the requested Java source into the two model-visible workspaces and installs **only** the Java reviewer definition in the specialist arm. It writes SHA-256 provenance to a manifest outside both arms; it does not invoke AI models or generate results.
+
+```bash
+python3 scripts/prepare_blind_java_review.py \\
+  --source /absolute/path/to/UNSEEN/JavaCase.java \\
+  --output "$HOME/daeloryn-trials/java-case-r1"
+```
+
+The Java source must exist. The output path must be new and outside this repository. Do **not** copy `*-ground-truth.md`, `cases.json`, other evaluation answers, old run transcripts or review instructions into either arm. The preparation script does not prevent a coding host from accessing global memory, parent-directory instructions or other configured connectors; inspect its search/read logs and discard contaminated trials.
+
+Run Copilot CLI from `.../java-case-r1/baseline` for the baseline, and from `.../java-case-r1/daeloryn` for the specialist. In the latter, select `/agent` → `java-reviewer` and verify the host reports the custom agent as selected; otherwise the run is **not** a Daeloryn trial. For the baseline, verify no custom agent or project-specific instructions were activated. Use the same host, model ID/version, read-only prompt, tool permissions and fresh session for each arm.
+
+Record each run's original transcript, source hash, agent hash (from `manifest.json`), model version, evidence, duration if observed, and reviewer adjudication **outside** the model-visible workspaces. Review source-line claims and duplicate root causes before computing scores. Mark unverified times and token costs as missing; never estimate them.
+
+**Holdout rule:** Fixtures used while tuning `java-reviewer` (including `Java25Worker.java` and `Java25Ledger.java`) are development examples, **not** unseen holdouts. Do not use subsequent tests on those fixtures as independent proof of superiority. Collect new consented/independently-authored cases and preregister expected findings before revealing either arm's output.
+
 ## Capture protocol
 
 1. Generate a blinded case prompt: `python3 scripts/evaluate_engineering.py --prompt java25-interruption`.
