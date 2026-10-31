@@ -62,3 +62,7 @@ Every agent definition contains an example and an evidence contract: concrete re
 `python3 scripts/agents.py validate` now rejects canonical agents that lack an **evidence contract** or a concrete **example**. Validation checks that these sections exist; it cannot establish that an LLM actually produces correct findings or follows these rules at runtime.
 
 The installer also preflights every destination ancestor for symlinks, including nested host agent directories, and refuses any symlinked destination. It still writes to the explicitly selected target directory only. Use a disposable checkout to verify host compatibility and review diffs before using `--force`.
+
+## Dry-run preview
+
+Use `python3 scripts/agents.py install --target /path/to/project --module all --tool all --dry-run` to run destination preflight and list intended files without writing any outputs. The installer is **not yet transactional** if an unexpected mid-write failure occurs; back up before using `--force`.
