@@ -62,7 +62,7 @@ export function InlineContextReview({selection,onCompleted,onCancelled,onInspect
           setPrepared(data as Manifest);
           const item=data as Manifest;
           updateInspector({
-            repository:item.repository,sha256:item.sha256,
+            repository:item.repository,sha256:item.sha256,model:item.model,
             sources:manifestSources(item.prompt,item.files),references:[],
             completed:0,total:item.batch_count,status:'Prepared · awaiting source approval'
           });

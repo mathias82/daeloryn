@@ -48,3 +48,11 @@ test('escaped source path strings do not become arbitrary regex matches',()=>{
  assert.equal(refs[0].file,file);
  assert.equal(refs[0].line,3);
 });
+
+test('Greek basename citations resolve only uniquely approved files and exact ranges',()=>{
+ const refs=extractSourceReferences('Στο App.java, γραμμές 2–3, προτείνω αλλαγή.',1,blocks);
+ assert.equal(refs.length,1);assert.equal(refs[0].file,file);assert.equal(refs[0].line,2);assert.equal(refs[0].endLine,3);assert.equal(refs[0].verified,true);
+ assert.equal(extractSourceReferences('App.java, γραμμή 2',1,[...blocks,{...blocks[0],file:'other/App.java'}]).length,0);
+ assert.equal(extractSourceReferences('evil/App.java, γραμμή 2',1,blocks).length,0);
+ assert.equal(extractSourceReferences('App.java, γραμμές 2–999',1,blocks)[0].verified,false);
+});

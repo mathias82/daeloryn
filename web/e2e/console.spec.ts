@@ -883,3 +883,26 @@ test('review hands findings to developer with separate approval and proposed dif
  await card.getByRole('button',{name:'Generate proposed patch'}).click();
  await expect(card).toContainText('+int x=1;');expect(calls).toBe(1);
 });
+
+test('Greek citation opens Inspector lines and preselects developer target',async({page})=>{
+ const file='src/App.java';
+ await page.route('**/api/copilot/review/prepare',async route=>{const body=route.request().postDataJSON();await route.fulfill({json:{...body,prompt:JSON.stringify({file,line:1,column:1,end_line:4,source:'class App {\n int x;\n int read(){return x;}\n}\n'}),sha256:'a'.repeat(64),files:[file],warning:'Fixture',agent_profile:null,agent_profile_sha256:null,batch_count:1,approval_required:true}});});
+ await page.route('**/api/copilot/review/execute',route=>route.fulfill({json:{status:'completed',completed_batches:1,total_batches:1,review:{reply:'Στο App.java, γραμμές 2–3, προτείνω αλλαγή.'}}}));
+ await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+ await page.getByLabel(/^Agent/).selectOption('java-reviewer');
+ await page.getByLabel(/^Copilot model/).selectOption(models[0]);
+ await page.getByLabel(/^Local repository/).selectOption('demo');
+ await page.getByRole('textbox',{name:'Message',exact:true}).fill('Review bugs in App.java');
+ await page.getByRole('textbox',{name:'Message',exact:true}).press('Enter');
+ await page.getByRole('checkbox',{name:/I inspected the exact source/}).check();
+ await page.getByRole('button',{name:'Approve and analyze project',exact:true}).click();
+ await page.locator('.bubble.assistant').getByRole('button',{name:'App.java, γραμμές 2–3',exact:true}).click();
+ const inspector=page.getByRole('complementary',{name:'Code Inspector'});
+ await expect(inspector.getByLabel('Inspected source file')).toHaveValue(file);
+ await expect(inspector.locator('.inspector-code-target')).toContainText('int x;');
+ await expect(inspector.locator('.inspector-code-citation')).toHaveCount(2);
+ await inspector.getByRole('button',{name:'Propose changes with developer'}).click();
+ await expect(page.getByLabel('Reviewed file path')).toHaveValue(file);
+ const footer=await inspector.locator('footer').boundingBox(),code=await inspector.locator('.inspector-source').boundingBox();
+ expect(footer!.y).toBeGreaterThanOrEqual(code!.y+code!.height);
+});

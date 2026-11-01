@@ -246,6 +246,7 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
                 if stream_replies:
                     # Completed model replies are streamed per batch, not per token.
                     progress({'type': 'batch_reply', 'batch': index+1, 'reply': response['reply']})
+    execution_complete = not failure and not (cancel_event is not None and cancel_event.is_set())
     if not failure and prepared.get('scope', 'full') == 'full' and not prepared.get('coverage', {}).get('all_eligible_files_included', False):
         failure = 'Some eligible sources were omitted; see coverage. This is not a complete project review.'
     if cancel_event is not None and cancel_event.is_set():
@@ -265,6 +266,7 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
             'status': ('stopped' if cancel_event is not None and cancel_event.is_set() else
                        'partial' if failure else 'completed'), 'failure': failure,
             'source_transmitted': newly_started > 0, 'approved_sha256': digest,
+            'execution_complete': execution_complete and complete_count == len(prompts),
             'completed_batches': complete_count, 'total_batches': len(prompts),
             'remaining_not_run': max(0, len(prompts) - len(resume_batches) - newly_started), 'coverage': prepared.get('coverage'),
             'patch_applied': False, 'tests_executed': False, 'pull_request_created': False,

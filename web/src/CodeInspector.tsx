@@ -2,11 +2,11 @@ import {useEffect,useMemo,useRef,useState} from 'react';
 import {nearbyDeclaration,sourcePreview} from './sourceInspector';
 import {draftPatch,startSuggestion} from './suggestionDraft';
 import type {SuggestionDraft} from './suggestionDraft';
-import type {InspectorSnapshot} from './sourceInspector';
+import type {InspectorSnapshot,SourceReference} from './sourceInspector';
 
 /** Read-only navigation over the exact, approved code snapshot. */
-export function CodeInspector({snapshot,onClose}:{
-  snapshot:InspectorSnapshot;onClose:()=>void;
+export function CodeInspector({snapshot,onClose,target,onDeveloper}:{
+  snapshot:InspectorSnapshot;onClose:()=>void;target?:SourceReference;onDeveloper?:(ref:SourceReference)=>void;
 }){
   const files=useMemo(()=>[...new Set(snapshot.sources.map(s=>s.file))],[snapshot.sources]);
   const [file,setFile]=useState('');
@@ -44,6 +44,7 @@ export function CodeInspector({snapshot,onClose}:{
 
   useEffect(()=>{setFile(files[0]||'');setLine(1);setLineInput('1');setDraft(null);setEditMode(false);setDraftMessage('');},
     [snapshot.sha256,files[0]]);
+  useEffect(()=>{if(target?.verified){setFile(target.file);setLine(target.line);setLineInput(String(target.line));}},[target,snapshot.sha256]);
   useEffect(()=>{
     if(!expanded)return;
     const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape')setExpanded(false);};
@@ -79,6 +80,8 @@ export function CodeInspector({snapshot,onClose}:{
       <span>{snapshot.status}</span><span>{snapshot.completed}/{snapshot.total} batches</span>
     </div>
     <div className="inspector-findings">
+    {active&&<section className="surface"><p>{active.excerpt}</p><button type="button" onClick={()=>onDeveloper?.(active)}>Propose changes with developer</button></section>}
+
       <strong>Model-highlighted findings and suggested changes</strong>
       <p className="muted">Highlighted lines are cited by the model and located in the approved snapshot. They are not confirmed bugs or approved edits.</p>
       {valid.length===0&&<p className="muted">No matching file:line references yet. References appear when a batch finishes.</p>}

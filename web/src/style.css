@@ -207,3 +207,14 @@
 .code-inspector-fullscreen .inspector-suggestion-panel{max-height:40vh}
 @media(max-width:760px){.inspector-suggestion-grid{grid-template-columns:1fr}
   .inspector-suggestion-panel{max-height:38vh}}
+
+/* Keep controls and footer out of the source/draft scroll area. */
+.code-inspector{min-width:0}
+.code-inspector .inspector-header,.code-inspector .inspector-progress,.code-inspector footer{flex-shrink:0}
+.code-inspector .inspector-source{overflow:auto;min-width:0}
+.code-inspector .inspector-source>*{flex-shrink:0}
+.code-inspector .inspector-code{flex:none;height:280px;min-height:140px}
+.code-inspector .inspector-suggestion-panel{max-height:none;overflow:visible}
+.code-inspector:not(.code-inspector-fullscreen) .inspector-suggestion-grid{grid-template-columns:minmax(0,1fr)}
+.code-inspector footer{position:static;background:#101625;z-index:1}
+.source-citation{display:inline;padding:0;border:0;background:transparent;color:#c7b6ff;text-decoration:underline;font:inherit;cursor:pointer}

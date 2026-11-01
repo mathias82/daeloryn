@@ -56,6 +56,24 @@ class PairedBenchmarkTests(unittest.TestCase):
         self.assertFalse(result["independent_checks_executed"])
         self.assertEqual(2, len([e for e in events if e["type"] == "batch_reply"]))
 
+    def test_coverage_partial_baseline_does_not_block_challenger_on_resume(self):
+        (self.project / 'Large.java').write_bytes(b'x' * (300 * 1024))
+        manifest = prepare(self.root, **self.selection())
+        calls=[]
+        def provider(request, **kwargs):
+            calls.append(request)
+            return {'reply': 'App.java:1 finding'}
+        result=execute(manifest,manifest['sha256'],transport=provider,
+                       resume_completed={'baseline':{1:'Previously completed baseline'}})
+        self.assertEqual(1,len(calls))
+        self.assertEqual('java-reviewer',calls[0]['agent'])
+        self.assertEqual('partial',result['status'])
+        self.assertEqual({'baseline','daeloryn'},set(result['arms']))
+        self.assertTrue(result['arms']['baseline']['execution_complete'])
+        self.assertTrue(result['arms']['daeloryn']['execution_complete'])
+        self.assertFalse(result['arms']['baseline']['coverage']['all_eligible_files_included'])
+        self.assertEqual('not_determined',result['winner'])
+
     def test_wrong_digest_prevents_every_provider_call(self):
         manifest = prepare(self.root, **self.selection())
         with self.assertRaises(PermissionError):

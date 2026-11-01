@@ -120,7 +120,7 @@ def execute(prepared, approved_sha256, *, transport=copilot_chat, progress=None,
         completed[arm] = outcome
         if progress:
             progress({"type": "arm_finished", "arm": arm, "status": outcome["status"]})
-        if outcome["status"] != "completed":
+        if not outcome.get("execution_complete", outcome["status"] == "completed"):
             break
     success = len(completed) == 2 and all(
         row["status"] == "completed" for row in completed.values())
