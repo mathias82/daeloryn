@@ -6,7 +6,7 @@ export type SourceLink={file:string;ranges:SourceRange[]};
 export type LinkedSegment={text:string;reference?:SourceLink;range?:SourceRange};
 const FILE_PATTERN=/(?:[\w.$-]+\/)*[\w.$-]+\.(?:java|kt|ts|tsx|js|jsx|py|go|xml|yaml|yml|properties|md)\b/g;
 const LINE_CLAIM=/\b(?:lines?|around lines?)\s+(\d{1,6})(?:\s*[-–]\s*(\d{1,6}))?/gi;
-const OTHER_RANGE=/(?:\s*(?:,|and|or|\(imports?\))\s*)(\d{1,6})(?:\s*[-–]\s*(\d{1,6}))?)/gi;
+const OTHER_RANGE=/(?:\s*(?:,|and|or|\(imports?\)))+\s*(\d{1,6})(?:\s*[-–]\s*(\d{1,6}))?/gi;
 
 function resolvedFilename(name:string,files:string[]):string|null{
  const exact=files.filter(file=>file===name);
