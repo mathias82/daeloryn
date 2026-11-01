@@ -15,7 +15,7 @@ type PreparedPair={
   baseline:PreparedArm;daeloryn:PreparedArm;total_model_calls:number;warning:string;
 };
 type ArmReceipt={status:string;completed_batches:number;total_batches:number;failure?:string|null;review?:{reply:string}};
-type SavedArm={status:string;completed_batches:number;total_batches:number;reply:string;failure?:string|null;batches?:Record<string,{status:string;reply:string}>};
+type SavedArm={status:string;completed_batches:number;total_batches:number;reply:string;failure?:string|null;failure_code?:string|null;batches?:Record<string,{status:string;reply:string;error_code?:string}>};
 type Reference={file:string;line:number;status:string;source_kind?:string};
 type EvidenceArm={evidence_traceability_score:number;cited_references:number;source_matched_references:number;unique_code_locations:number;unsupported_references:number;duplicate_matched_citations:number;citation_precision_percent:number|null;references:Reference[]};
 type EvidenceComparison={kind:string;method:string;status:string;comparable_completed_arms:boolean;provisional_evidence_lead:string;verified_winner:null;score_definition:string;warning:string;source_files_inspected:number;arms:Record<Arm,EvidenceArm>};
@@ -394,7 +394,14 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat,campa
         {(['baseline','daeloryn'] as const).map(arm=><article className="benchmark-arm" key={arm}>
           <h3>{arm==='baseline'?'Plain Copilot':'Copilot + Daeloryn'}</h3>
           <p>{runReceipt?.arms[arm]?runReceipt.arms[arm].status+' · '+runReceipt.arms[arm].completed_batches+'/'+runReceipt.arms[arm].total_batches+' batches':'Pending / in progress'}</p>
-          {runReceipt?.arms[arm]?.failure&&<p role="alert">Failure: {runReceipt.arms[arm].failure}</p>}
+          {runReceipt?.arms[arm]?.failure&&<p role="alert">
+            Failure{runReceipt.arms[arm].failure_code?' ('+runReceipt.arms[arm].failure_code+')':''}:
+            {' '}{runReceipt.arms[arm].failure}
+          </p>}
+          {runReceipt?.arms[arm]&&Object.entries(runReceipt.arms[arm].batches||{}).some(([,v])=>v.error_code)&&
+            <p className="muted">Failed batches: {Object.entries(runReceipt.arms[arm].batches||{})
+              .filter(([,v])=>v.error_code).map(([i,v])=>'#'+i+' '+v.error_code).join(' · ')}
+              . No retry without explicit Resume approval.</p>}
           <pre>{runReceipt?.arms[arm]?.reply||result?.arms[arm]?.review?.reply||partial[arm]||'No model response yet'}</pre>
         </article>)}
       </div>
