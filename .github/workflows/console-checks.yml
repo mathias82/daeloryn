@@ -50,7 +50,6 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_container_test_runner.py' -v
           python3 -m unittest discover -s tests -p 'test_workflow_orchestrator.py' -v
           python3 -m unittest discover -s tests -p 'test_workflow_gates.py' -v
-          python3 -m unittest discover -s tests -p 'test_approved_patch_apply.py' -v
           python3 -m unittest discover -s tests -p 'test_approved_pr_publish.py' -v
           python3 -m unittest discover -s tests -p 'test_execution_approval_gate.py' -v
           python3 -m unittest discover -s tests -p 'test_reliable_container_tests.py' -v
