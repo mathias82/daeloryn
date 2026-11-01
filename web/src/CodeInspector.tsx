@@ -16,14 +16,21 @@ export function CodeInspector({snapshot,onClose}:{
   const [editMode,setEditMode]=useState(false);
   const [draft,setDraft]=useState<SuggestionDraft|null>(null);
   const [draftMessage,setDraftMessage]=useState('');
+  const [fullSource,setFullSource]=useState<{file:string;lines:string[];redacted_lines:number[];line_count:number}|null>(null);
+  const [sourceLoading,setSourceLoading]=useState(false);
+  const [sourceError,setSourceError]=useState('');
   const markedRef=useRef<HTMLDivElement|null>(null);
   const selected=files.includes(file)?file:files[0]||'';
   const visibleCount=expanded?180:42;
-  const preview=useMemo(()=>sourcePreview(snapshot.sources,selected,line,visibleCount),
-    [snapshot.sources,selected,line,visibleCount]);
+  const preview=useMemo(()=>fullSource?.file===selected?
+    fullSource.lines.map((text,index)=>({line:index+1,text})):
+    sourcePreview(snapshot.sources,selected,line,visibleCount),
+    [fullSource,snapshot.sources,selected,line,visibleCount]);
   const valid=snapshot.references.filter(r=>r.verified);
   const unverified=snapshot.references.filter(r=>!r.verified);
   const marks=valid.filter(r=>r.file===selected);
+  const focused=snapshot.navigation?.file===selected?snapshot.navigation:null;
+  const focusRanges=focused?.ranges||[];
   const active=marks.find(r=>line>=r.line&&line<=r.endLine);
   const patch=draft&&draft.snapshotSha256===snapshot.sha256?draftPatch(draft):null;
   const matchingSuggestion=active&&draft&&draft.file===active.file&&draft.start===active.line&&draft.end===active.endLine
@@ -45,13 +52,55 @@ export function CodeInspector({snapshot,onClose}:{
   useEffect(()=>{setFile(files[0]||'');setLine(1);setLineInput('1');setDraft(null);setEditMode(false);setDraftMessage('');},
     [snapshot.sha256,files[0]]);
   useEffect(()=>{
+    const nav=snapshot.navigation;
+    if(nav&&files.includes(nav.file)&&Number.isSafeInteger(nav.line)&&nav.line>0){
+      setFile(nav.file);setLine(nav.line);setLineInput(String(nav.line));
+    }
+  },[snapshot.navigation?.revision]);
+  useEffect(()=>{
+    const selection=snapshot.sourceAccess;
+    if(!selection||!selected){setFullSource(null);setSourceError('');return;}
+    const controller=new AbortController();
+    setFullSource(null);setSourceLoading(true);setSourceError('');
+    async function openApprovedClass(){
+      try{
+        const response=await fetch('/api/copilot/review/source',{
+          method:'POST',signal:controller.signal,
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({...selection,file:selected})
+        });
+        const data:unknown=await response.json();
+        if(!response.ok){
+          const detail=data&&typeof data==='object'&&'error' in data&&
+            typeof data.error==='string'?data.error:'Source view unavailable ('+response.status+')';
+          throw new Error(detail);
+        }
+        if(!data||typeof data!=='object'||!('file' in data)||data.file!==selected||
+            !('lines' in data)||!Array.isArray(data.lines)||
+            !data.lines.every((line:unknown)=>typeof line==='string')||
+            !('redacted_lines' in data)||!Array.isArray(data.redacted_lines)||
+            !('local_only' in data)||data.local_only!==true||
+            !('model_calls' in data)||data.model_calls!==0)
+          throw new Error('Invalid local source preview response');
+        if(!controller.signal.aborted)
+          setFullSource(data as {file:string;lines:string[];redacted_lines:number[];line_count:number});
+      }catch(e){
+        if(!controller.signal.aborted)
+          setSourceError('Full-class preview unavailable: '+(e instanceof Error?e.message:'unknown error')+
+            '. Only approved review excerpts are shown.');
+      }finally{if(!controller.signal.aborted)setSourceLoading(false);}
+    }
+    void openApprovedClass();
+    return()=>controller.abort();
+  },[selected,snapshot.sha256,snapshot.sourceAccess?.approved_sha256]);
+  useEffect(()=>{
     if(!expanded)return;
     const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape')setExpanded(false);};
     window.addEventListener('keydown',onKey);
     return()=>window.removeEventListener('keydown',onKey);
   },[expanded]);
   useEffect(()=>{markedRef.current?.scrollIntoView({block:'center',behavior:'instant'});},
-    [line,selected,expanded]);
+    [line,selected,expanded,fullSource]);
   function jump(path:string,at:number){
     if(!files.includes(path)||!Number.isSafeInteger(at)||at<1)return;
     setFile(path);setLine(at);setLineInput(String(at));
@@ -104,11 +153,12 @@ export function CodeInspector({snapshot,onClose}:{
       {selected&&<>
         <div className="inspector-source-caption">
           <strong>{selected}</strong>
-          <small>{nearbyDeclaration(snapshot.sources,selected,line)||'Source excerpt · original line numbers'}</small>
+          <small>{fullSource?.file===selected?'Full class/file · '+fullSource.line_count+' lines · local only · 0 model calls':
+            nearbyDeclaration(snapshot.sources,selected,line)||'Approved source excerpt · original line numbers'}</small>
         </div>
-        {active&&<p className="inspector-target-note" role="status">
-          Highlighted: {active.kind==='bug'?'possible bug':active.kind==='change'?'suggested method/code change':'source citation'}
-          {' · '}line {active.line}{active.endLine>active.line?'–'+active.endLine:''}
+        {(active||focused)&&<p className="inspector-target-note" role="status">
+          Highlighted: {active?.kind==='bug'?'possible bug':active?.kind==='change'?'suggested method/code change':'model-cited source'}
+          {' · '}line {focused?.line??active?.line}{(focused?.endLine??active?.endLine??0)>(focused?.line??active?.line??0)?'–'+(focused?.endLine??active?.endLine):''}
           {' · '}not independently verified
         </p>}
         <div className="inspector-source-actions">
@@ -124,20 +174,25 @@ export function CodeInspector({snapshot,onClose}:{
           <button type="button" className="outline-button" onClick={()=>moveWindow(visibleCount)}
             aria-label="Next source lines">Next lines</button>
         </div>
-        <div className="inspector-code" role="region" aria-label="Read-only source excerpt">
+        {sourceLoading&&<p className="inspector-source-loading" role="status">Loading entire class locally (no provider call)…</p>}
+        {sourceError&&<p role="alert" className="inspector-source-error">{sourceError}</p>}
+        <div className="inspector-code" role="region" aria-label={fullSource?.file===selected?'Full local source file':'Read-only source excerpt'}>
           {preview.length?preview.map((row,index)=>{
             const cites=marks.filter(r=>row.line>=r.line&&row.line<=r.endLine);
+            const focusedCite=focusRanges.some(r=>row.line>=r.line&&row.line<=r.endLine);
             const isCurrent=row.line===line;
+            const isCited=cites.length>0||focusedCite;
             return <div
               className={'inspector-code-line'+(isCurrent?' inspector-code-target':'')+
                 (cites.some(r=>r.kind==='bug')?' inspector-code-bug':
                  cites.some(r=>r.kind==='change')?' inspector-code-change':
-                 cites.length?' inspector-code-citation':'')}
+                 isCited?' inspector-code-citation':'')+
+                (focusedCite?' inspector-code-focused':'')}
               key={row.line+'|'+index}
               ref={isCurrent?markedRef:undefined}
-              aria-label={cites.length?'Line '+row.line+' marked by model result':'Line '+row.line}>
+              aria-label={isCited?'Line '+row.line+' cited by model (not independently verified)':'Line '+row.line}>
               <span>{row.line}</span><code>{row.text||' '}</code>
-              {cites.length>0&&<span className="inspector-line-marker" aria-label="Model-cited line">●</span>}
+              {isCited&&<span className="inspector-line-marker" aria-label="Model-cited line">●</span>}
             </div>;
           }):<p>Source lines unavailable in this approved snapshot.</p>}
         </div>
