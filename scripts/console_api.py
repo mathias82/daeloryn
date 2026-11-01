@@ -15,6 +15,7 @@ from code_review import review
 from approved_copilot_review import prepare as prepare_ai_review, execute as execute_ai_review
 from paired_review_benchmark import prepare as prepare_pair, execute as execute_pair, TASKS as BENCHMARK_TASKS
 from threading import Lock
+from benchmark_run_store import RunStore
 from patch_workspace import preview as preview_patch
 from repair_agent import suggest as diagnose_failure
 from workflow_recovery import inspect_interrupted
@@ -75,9 +76,10 @@ def benchmark_data(records_dir=None):
     return {**report, "trials": trials}
 
 
-def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repository_roots=(), enable_github_repositories=False, workflow_dir=None, projects_file=None, project_picker_roots=None):
+def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repository_roots=(), enable_github_repositories=False, workflow_dir=None, projects_file=None, project_picker_roots=None, benchmark_runs_dir=None):
     registry = ProjectRegistry(projects_file, project_picker_roots) if projects_file is not None else None
-    benchmark_run_lock = Lock()  # No overlapping potentially billable A/B provider calls.
+    benchmark_run_lock = Lock()  # Legacy streaming endpoint.
+    run_store = RunStore(benchmark_runs_dir)
 
     def repository_catalog():
         rows = discover(repository_roots)
@@ -162,6 +164,16 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                         return
                     payload = {"interrupted": inspect_interrupted(workflow_dir),
                                "read_only": True, "execution_enabled": False}
+                elif path.path == "/api/benchmark/runs":
+                    payload = {"runs": run_store.list(), "persistence": "local-private-disk",
+                               "verified_trial": False}
+                elif path.path.startswith("/api/benchmark/runs/"):
+                    run_id = path.path.removeprefix("/api/benchmark/runs/")
+                    try:
+                        payload = run_store.get(run_id)
+                    except (FileNotFoundError, ValueError):
+                        self.reply(404, {"error": "benchmark run unavailable"})
+                        return
                 elif path.path == "/api/benchmarks":
                     payload = benchmark_data(records_dir)
                 else:
@@ -219,6 +231,45 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     self.reply(503, {"error": "Folder chooser unavailable or timed out; enter the absolute path instead"})
                     return
                 self.reply(200, result)
+                return
+            if self.path == "/api/benchmark/start":
+                if not enable_copilot:
+                    self.reply(405, {"error": "Benchmark requires enabled Copilot"})
+                    return
+                if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                    self.reply(415, {"error": "JSON required"})
+                    return
+                length = self.headers.get("Content-Length", "")
+                if not length.isdigit() or not 0 < int(length) <= 8192:
+                    self.reply(413, {"error": "invalid benchmark request size"})
+                    return
+                try:
+                    payload = json.loads(self.rfile.read(int(length)))
+                    expected = {"repository", "mode", "model", "agent", "approved_sha256"}
+                    if not isinstance(payload, dict) or set(payload) != expected or \
+                            not all(isinstance(payload[k], str) for k in expected):
+                        raise ValueError("invalid benchmark start selection")
+                    if payload["mode"] not in BENCHMARK_TASKS or payload["model"] == "auto":
+                        raise ValueError("explicit concrete approved model required")
+                    matches = resolve_repository(payload["repository"])
+                    if len(matches) != 1:
+                        raise ValueError("benchmark requires registered unique local project")
+                    # Mandatory source snapshot revalidation before scheduling any calls.
+                    prepared = prepare_pair(matches[0], payload["repository"],
+                                            payload["mode"], payload["model"], payload["agent"])
+                    if payload["approved_sha256"] != prepared["sha256"]:
+                        raise PermissionError("source/model/agent changed; prepare and approve again")
+                    receipt = run_store.start(prepared, payload["approved_sha256"], execute_pair)
+                except PermissionError as exc:
+                    self.reply(400, {"error": str(exc)})
+                    return
+                except RuntimeError:
+                    self.reply(409, {"error": "Another benchmark is running; no new provider calls started"})
+                    return
+                except (ValueError, TypeError, KeyError, json.JSONDecodeError, OSError) as exc:
+                    self.reply(400, {"error": "Benchmark start rejected: " + str(exc)})
+                    return
+                self.reply(202, receipt)
                 return
             if self.path in ("/api/benchmark/prepare", "/api/benchmark/execute"):
                 if not enable_copilot:
