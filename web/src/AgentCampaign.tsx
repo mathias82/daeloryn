@@ -116,6 +116,8 @@ export function AgentCampaign({projects,onSelect}:{
   const activeProject=useMemo(()=>report?.project_campaigns.find(p=>p.repository===repository),
     [report,repository]);
   const next=activeProject?.entries.find(e=>e.agent===activeProject.next_agent);
+  const nextProjectPosition=activeProject&&next?
+    activeProject.entries.filter(e=>e.applicable).findIndex(e=>e.agent===next.agent)+1:0;
   return <section className="surface agent-campaign" aria-label="22-agent evaluation campaign">
     <div className="surface-head">
       <div><h2>Project-aware sequential agent evaluation</h2>
@@ -143,7 +145,7 @@ export function AgentCampaign({projects,onSelect}:{
         </button>
       </div>
       {next?<div className="campaign-next">
-        <h3>Next: {next.order}/{activeProject?.total_agents} · {next.agent}</h3>
+        <h3>Next: {nextProjectPosition}/{activeProject?.applicable_agents} · {next.agent}</h3>
         <p>{next.domain_scenario}</p>
         <p className="muted">Scope: {next.scope} · Mode: {next.benchmark_mode} · Status: {next.state}</p>
         {next.state==='incomplete'&&<p role="status">
