@@ -955,3 +955,39 @@ test('developer replacement appears in Inspector and requires separate local app
  await expect(card).toContainText('Applied locally; tests have not run.');expect(writes).toBe(1);
  await expect(page.getByRole('region',{name:'Developer proposed source'})).toContainText('applied locally');
 });
+
+test('local benchmark metrics update independently of external evidence and filter by project',async({page})=>{
+  const row={run_id:'a'.repeat(32),repository:'demo',mode:'review',model:models[0],
+    agent:'java-reviewer',status:'completed',evaluation_status:'provisional_traceability',
+    provisional_evidence_lead:'daeloryn',baseline_score:0,daeloryn_score:36,verified_winner:null};
+  let rows=[row,{...row,run_id:'b'.repeat(32),status:'partial'},
+    {...row,run_id:'c'.repeat(32),repository:'other',agent:'java-developer'},
+    {...row,run_id:'d'.repeat(32),status:'running',baseline_score:null,daeloryn_score:null}];
+  let providerCalls=0;
+  page.on('request',request=>{if(request.method()==='POST')providerCalls++;});
+  await page.route('**/api/benchmarks',route=>route.fulfill({json:{
+    agent_count:22,expected_cells:176,observed_cells:0,verified_trial_count:0,
+    coverage_percent:0,warning:'No external trials',trials:[],paired_comparisons:rows
+  }}));
+  await page.reload();
+  await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
+  const panel=page.getByRole('region',{name:'Comparison results'});
+  const saved=panel.getByRole('article').filter({has:page.getByRole('heading',{name:'Saved local runs'})});
+  const scored=panel.getByRole('article').filter({has:page.getByRole('heading',{name:'Scored local comparisons'})});
+  const agents=panel.getByRole('article').filter({has:page.getByRole('heading',{name:'Agents with scored runs'})});
+  await expect(saved.locator('strong')).toHaveText('4');
+  await expect(scored.locator('strong')).toHaveText('3');
+  await expect(agents.locator('strong')).toHaveText('2');
+  await panel.getByLabel('Results project').selectOption('demo');
+  await expect(saved.locator('strong')).toHaveText('3');
+  await expect(scored.locator('strong')).toHaveText('2');
+  await expect(agents.locator('strong')).toHaveText('1');
+  rows=rows.map(item=>item.run_id==='d'.repeat(32)?{...item,status:'completed',baseline_score:12,daeloryn_score:40}:item);
+  await expect(scored.locator('strong')).toHaveText('3',{timeout:7000});
+  await expect(agents.locator('strong')).toHaveText('1');
+  await page.getByText('External trial evidence (separate from local A/B progress)',{exact:true}).click();
+  await expect(page.getByText('Externally reported verified trials',{exact:true})).toBeVisible();
+  await expect(page.getByText('0 / 176 cells',{exact:true})).toBeVisible();
+  await expect(panel.getByText(/Not verified · no independent defect/).first()).toBeVisible();
+  expect(providerCalls).toBe(0);
+});
