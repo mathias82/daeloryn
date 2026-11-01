@@ -283,6 +283,7 @@ class RunStore:
                         event_type = event.get("type")
                         if event_type == "arm_started":
                             row["status"] = "running"
+                            row["failure_code"] = None
                         elif event_type == "progress":
                             row["completed_batches"] = event.get("completed", row["completed_batches"])
                             row["total_batches"] = event.get("total", row["total_batches"])
@@ -292,8 +293,13 @@ class RunStore:
                                 row['batches'][str(number)]={'status':'unknown','reply':''}
                         elif event_type == 'batch_failed':
                             number=event.get('batch')
+                            code=event.get('code')
+                            if code not in ('timeout','rate_limit','context_limit','authentication',
+                                            'credits','output_limit','empty_output','cli_error','cancelled'):
+                                code='unknown'
                             if isinstance(number,int) and number>0:
-                                row['batches'][str(number)]={'status':'unknown','reply':''}
+                                row['batches'][str(number)]={'status':'unknown','reply':'','error_code':code}
+                            row['failure_code']=code
                         elif event_type == "batch_reply" and isinstance(event.get("reply"), str):
                             # Per-batch receipts are persisted before the next remote call.
                             # Bound transcript size; show truncation honestly.
@@ -350,6 +356,7 @@ class RunStore:
                                 "completed_batches": outcome.get("completed_batches", 0),
                                 "total_batches": outcome.get("total_batches", 0),
                                 "failure": outcome.get("failure"),
+                                "failure_code": outcome.get("failure_code") or record["arms"][arm].get("failure_code"),
                                 "reply": (outcome.get("review", {}).get("reply", "") or
                                           record["arms"][arm]["reply"])[:200000]
                             })
@@ -371,8 +378,12 @@ class RunStore:
                         record["error"] = ("Stopped by user. Pending batches were not invoked. "
                                            "In-flight provider outcomes may be unknown; no auto-retry.")
                     elif result["status"] != "completed":
-                        record["error"] = ("Partial benchmark: a provider batch failed, timed out "
-                                           "or reached a review budget. See per-arm failure; do not auto-retry.")
+                        problems = [record["arms"][arm].get("failure")
+                                    for arm in ("baseline","daeloryn")
+                                    if record["arms"][arm].get("failure")]
+                        record["error"] = ("Partial benchmark: " + problems[0]
+                            if problems else
+                            "Partial benchmark: time/output budget or source coverage limitation. No automatic retry.")
                     record["updated_at"] = _utc()
                     self._save(record)
             except Exception as exc:

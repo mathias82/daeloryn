@@ -86,7 +86,13 @@ export function InlineContextReview({selection,onCompleted,onCancelled,onInspect
   async function execute(){
     if(!prepared||!approved||busy)return;
     setExecuting(true);setBusy(true);setError('');setPartial('');
-    if(inspector.current)updateInspector({...inspector.current,status:'Approved · starting model review'});
+    if(inspector.current)updateInspector({...inspector.current,
+      sourceAccess:{
+        repository:prepared.repository,task:selection.task,model:prepared.model,
+        agent:prepared.agent,scope:prepared.scope,
+        approved_sha256:prepared.sha256
+      },
+      status:'Approved · starting model review'});
     setStatus('Rechecking the approved source snapshot before the first model call…');
     setElapsed(0);
     const controller=new AbortController();active.current=controller;

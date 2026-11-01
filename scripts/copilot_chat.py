@@ -13,6 +13,39 @@ from copilot_agents import resolve_agent
 MODEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}\Z")
 MAX_OUTPUT = 65536
 
+# An error code is safe to show in local receipts. Never persist raw CLI stderr:
+# it may include proprietary source, account details or provider diagnostics.
+class CopilotProviderError(RuntimeError):
+    def __init__(self, code):
+        self.code = code
+        messages = {
+            "timeout": "Copilot CLI timed out. The provider-side outcome is unknown.",
+            "rate_limit": "Copilot rejected or throttled the request (rate limit / 429).",
+            "context_limit": "Copilot rejected the request size or context window (413 / token limit).",
+            "authentication": "Copilot authentication or model access was rejected.",
+            "credits": "Copilot usage, quota or credits limit was reached.",
+            "output_limit": "Copilot CLI output exceeded the 64 KiB local response cap.",
+            "empty_output": "Copilot returned an empty response.",
+            "cli_error": "Copilot CLI exited unsuccessfully (no safe provider reason identified).",
+            "cancelled": "Copilot CLI was stopped locally; provider-side outcome is unknown.",
+        }
+        super().__init__(messages.get(code, "Copilot provider request failed."))
+
+
+def classify_cli_failure(output):
+    """Closed vocabulary only. The caller must never expose raw CLI output."""
+    data = output[-4096:].decode("utf-8", errors="replace").casefold()
+    if re.search(r"(?<!\d)429(?!\d)|too many requests|rate.limit|throttl", data):
+        return "rate_limit"
+    if re.search(r"(?<!\d)413(?!\d)|context.window|context.length|prompt.too.long|too many tokens|request too large|token limit exceeded", data):
+        return "context_limit"
+    if re.search(r"(?<!\d)401(?!\d)|(?<!\d)403(?!\d)|unauthori[sz]ed|not authenticated|login required|access denied", data):
+        return "authentication"
+    if re.search(r"insufficient.credits|quota.exceeded|usage limit|credit limit|out of credits", data):
+        return "credits"
+    return "cli_error"
+
+
 def validate(request, *, review_context=False):
     if not isinstance(request, dict) or set(request) not in ({"model", "messages"}, {"model", "messages", "agent"}):
         raise ValueError("model and messages required")
@@ -32,10 +65,13 @@ def validate(request, *, review_context=False):
         resolve_agent(request["agent"])
     return model, messages
 
-def copilot_chat(request, executable=None, timeout=90, *, expected_agent_sha256=None, review_context=False, cancel_event=None):
+def copilot_chat(request, executable=None, timeout=None, *, expected_agent_sha256=None, review_context=False, cancel_event=None):
     model, messages = validate(request, review_context=review_context)
+    # Source batches require longer reasoning than short conversational turns.
+    # Explicit timeout settings used by callers/tests still take precedence.
+    timeout = (180 if review_context else 90) if timeout is None else timeout
     if cancel_event is not None and cancel_event.is_set():
-        raise RuntimeError('Copilot request cancelled before dispatch')
+        raise CopilotProviderError('cancelled')
     profile = resolve_agent(request["agent"]) if "agent" in request else None
     if expected_agent_sha256 is not None and (profile is None or profile["sha256"] != expected_agent_sha256):
         raise PermissionError("agent profile changed; prepare and approve again")
@@ -88,7 +124,7 @@ def copilot_chat(request, executable=None, timeout=90, *, expected_agent_sha256=
                             except ProcessLookupError:
                                 pass
                             process.wait()
-                            raise RuntimeError('Copilot cancelled locally; external provider outcome unknown')
+                            raise CopilotProviderError('cancelled')
                         if time.monotonic() >= deadline:
                             raise subprocess.TimeoutExpired(args, timeout)
                         cancel_event.wait(min(0.2, max(0.001, deadline - time.monotonic())))
@@ -98,16 +134,18 @@ def copilot_chat(request, executable=None, timeout=90, *, expected_agent_sha256=
                 except ProcessLookupError:
                     pass
                 process.wait()
-                raise RuntimeError("Copilot timeout; remote outcome unknown") from exc
+                raise CopilotProviderError("timeout") from exc
             output.seek(0, 2)
             size = output.tell()
             output.seek(0)
             data = output.read(MAX_OUTPUT+1)
-    if code != 0 or size > MAX_OUTPUT:
-        raise RuntimeError("Copilot failed or output exceeded limit")
+    if size > MAX_OUTPUT:
+        raise CopilotProviderError("output_limit")
+    if code != 0:
+        raise CopilotProviderError(classify_cli_failure(data))
     answer = data.decode("utf-8", errors="replace").strip()
     if not answer:
-        raise RuntimeError("Copilot returned empty output")
+        raise CopilotProviderError("empty_output")
     return {"reply": answer, "provider": "github-copilot-cli",
             "requested_model": model, "model_identity_verified": False,
             "agent_selected": profile["name"] if profile else None,

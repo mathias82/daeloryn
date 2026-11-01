@@ -191,6 +191,19 @@ def campaign_report(runs, comparisons, *, agents=None, projects=None):
                 if applicable and next_for_project is None and updated["state"] != "assessed_provisionally":
                     next_for_project = entry["agent"]
                 scoped_entries.append(updated)
+            # Project-specific execution prioritizes React specialists before
+            # broadly applicable reliability/security roles on React-only
+            # checkouts. Retain all applicable roles and their recorded states:
+            # a project never silently skips shared/platform evaluation.
+            if "react" in technologies and not any(
+                    tag == "java" or tag.startswith("java-") for tag in technologies):
+                react_pending = next(
+                    (item["agent"] for item in scoped_entries
+                     if item["applicable"] and item["scope"] == "react"
+                     and item["state"] != "assessed_provisionally"),
+                    None)
+                if react_pending is not None:
+                    next_for_project = react_pending
             applicable_count = sum(item["applicable"] for item in scoped_entries)
             assessed = sum(item["state"] == "assessed_provisionally" for item in scoped_entries)
             project_campaigns.append({

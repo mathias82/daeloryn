@@ -13,6 +13,9 @@ from github_repository_catalog import list_github_repositories
 from project_analysis import analyze_local
 from code_review import review
 from approved_copilot_review import prepare as prepare_ai_review, execute as execute_ai_review
+from approved_source_view import read_approved_source
+from approved_line_patch import apply_line_patch
+from engineering_executor import run_tests, BRANCH, command
 from paired_review_benchmark import prepare as prepare_pair, execute as execute_pair, TASKS as BENCHMARK_TASKS
 from threading import Lock
 from benchmark_run_store import RunStore
@@ -77,9 +80,10 @@ def benchmark_data(records_dir=None):
     return {**report, "trials": trials}
 
 
-def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repository_roots=(), enable_github_repositories=False, workflow_dir=None, projects_file=None, project_picker_roots=None, benchmark_runs_dir=None):
+def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repository_roots=(), enable_github_repositories=False, workflow_dir=None, projects_file=None, project_picker_roots=None, benchmark_runs_dir=None, enable_code_writes=False):
     registry = ProjectRegistry(projects_file, project_picker_roots) if projects_file is not None else None
     benchmark_run_lock = Lock()  # Legacy streaming endpoint.
+    approved_patch_lock = Lock()  # Never apply two local patches concurrently.
     run_store = RunStore(benchmark_runs_dir)
 
     def repository_catalog():
@@ -116,7 +120,8 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
             try:
                 if path.path == "/api/health":
                     payload = {"status": "ok", "execution_enabled": False,
-                               "provider_connected": False, "local_chat_enabled": enable_chat}
+                               "provider_connected": False, "local_chat_enabled": enable_chat,
+                               "code_writes_enabled": enable_code_writes}
                 elif path.path == "/api/copilot/status":
                     payload = {"enabled": enable_copilot, "provider": "github-copilot-cli",
                                "model_discovery": "not_verified"}
@@ -443,6 +448,112 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     if acquired:
                         benchmark_run_lock.release()
                 return
+            if self.path == "/api/copilot/review/patch/apply":
+                if not enable_code_writes or not enable_copilot:
+                    self.reply(405, {"error":"Local source edits disabled. Restart with --enable-code-writes to opt in."})
+                    return
+                if self.headers.get("Content-Type","").split(";")[0].strip() != "application/json":
+                    self.reply(415,{"error":"JSON required"});return
+                length=self.headers.get("Content-Length","")
+                if not length.isdigit() or not 0<int(length)<=35000:
+                    self.reply(413,{"error":"Bounded approved patch request required"});return
+                if not approved_patch_lock.acquire(blocking=False):
+                    self.reply(409,{"error":"Another approved patch is being applied"});return
+                try:
+                    data=json.loads(self.rfile.read(int(length)))
+                    required={"repository","task","model","agent","scope","approved_sha256",
+                              "file","start","end","original","replacement","source_sha256",
+                              "branch","approved"}
+                    if not isinstance(data,dict) or set(data)!=required or data["approved"] is not True:
+                        raise PermissionError("Explicit exact-diff approval required")
+                    if not all(isinstance(data[key],str) for key in
+                               ("repository","task","model","scope","approved_sha256",
+                                "file","original","replacement","source_sha256","branch")):
+                        raise ValueError("Invalid patch selection")
+                    if data["agent"] is not None and not isinstance(data["agent"],str):
+                        raise ValueError("Invalid agent selection")
+                    if data["scope"] not in ("focused","full"):
+                        raise PermissionError("Source-code approval, not docs-only context, required")
+                    roots=resolve_repository(data["repository"])
+                    prepared=prepare_ai_review(roots[0],data["repository"],
+                        data["task"],data["model"],data["agent"],scope=data["scope"])
+                    result=apply_line_patch(roots[0],data["repository"],prepared,
+                        data["approved_sha256"],data["file"],data["start"],data["end"],
+                        data["original"],data["replacement"],data["source_sha256"],
+                        data["branch"],approved=True)
+                except (ValueError,TypeError,KeyError,PermissionError,UnicodeError,
+                        json.JSONDecodeError,OSError,RuntimeError) as exc:
+                    self.reply(409,{"error":"Patch not applied: "+str(exc)});return
+                finally:
+                    approved_patch_lock.release()
+                self.reply(200,result);return
+            if self.path == "/api/copilot/review/tests":
+                if not enable_code_writes:
+                    self.reply(405,{"error":"Host test execution disabled; restart with --enable-code-writes"})
+                    return
+                if self.headers.get("Content-Type","").split(";")[0].strip()!="application/json":
+                    self.reply(415,{"error":"JSON required"});return
+                length=self.headers.get("Content-Length","")
+                if not length.isdigit() or not 0<int(length)<=4096:
+                    self.reply(413,{"error":"Invalid test request size"});return
+                if not approved_patch_lock.acquire(blocking=False):
+                    self.reply(409,{"error":"Another local write or test is active"});return
+                try:
+                    data=json.loads(self.rfile.read(int(length)))
+                    if not isinstance(data,dict) or set(data)!={"repository","branch","suite","approved"} or data["approved"] is not True:
+                        raise PermissionError("Explicit host-test command approval required")
+                    if not all(isinstance(data[k],str) for k in ("repository","branch","suite")) or not BRANCH.fullmatch(data["branch"]):
+                        raise ValueError("Invalid test branch or suite")
+                    roots=resolve_repository(data["repository"])
+                    checkout=roots[0]/data["repository"]
+                    actual=command(["git","branch","--show-current"],checkout,timeout=10)
+                    if actual["returncode"]!=0 or actual["output"].strip()!=data["branch"]:
+                        raise PermissionError("Run tests only in the exact approved Daeloryn fix branch")
+                    result=run_tests(checkout,data["suite"],approved=True)
+                except (ValueError,TypeError,KeyError,PermissionError,OSError,RuntimeError,
+                        json.JSONDecodeError) as exc:
+                    self.reply(409,{"error":"Tests not started: "+str(exc)});return
+                finally:
+                    approved_patch_lock.release()
+                self.reply(200,result);return
+            if self.path == "/api/copilot/review/source":
+                # Local-only inspector: no model calls, no provider charge,
+                # and no generic file-reading endpoint. A full file may be
+                # opened only if it belongs to this exact approved manifest.
+                if not enable_copilot:
+                    self.reply(405, {"error": "Source review not enabled"});return
+                if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                    self.reply(415, {"error": "JSON required"});return
+                length = self.headers.get("Content-Length", "")
+                if not length.isdigit() or not 0 < int(length) <= 8192:
+                    self.reply(413, {"error": "invalid source view request"});return
+                try:
+                    payload = json.loads(self.rfile.read(int(length)))
+                    required = {"repository", "task", "model", "agent", "scope", "approved_sha256", "file"}
+                    if (not isinstance(payload, dict) or set(payload) != required or
+                            not all(isinstance(payload[k], str) for k in
+                                    ("repository", "task", "model", "scope", "approved_sha256", "file")) or
+                            (payload["agent"] is not None and not isinstance(payload["agent"], str)) or
+                            payload["scope"] not in ("focused", "full", "docs") or
+                            payload["model"] == "auto"):
+                        raise ValueError("exact approved local source selection required")
+                    roots = resolve_repository(payload["repository"])
+                    if len(roots) != 1:
+                        raise ValueError("registered project is ambiguous")
+                    prepared = prepare_ai_review(
+                        roots[0], payload["repository"], payload["task"],
+                        payload["model"], payload["agent"], scope=payload["scope"])
+                    result = read_approved_source(
+                        roots[0], payload["repository"], prepared,
+                        payload["approved_sha256"], payload["file"])
+                except PermissionError as exc:
+                    self.reply(409, {"error": str(exc)});return
+                except FileNotFoundError:
+                    self.reply(404, {"error": "source changed or unavailable"});return
+                except (ValueError, TypeError, KeyError, UnicodeError, OSError, json.JSONDecodeError) as exc:
+                    self.reply(400, {"error": "Source view unavailable: "+str(exc)});return
+                self.reply(200, result)
+                return
             if self.path in ("/api/copilot/review/prepare", "/api/copilot/review/execute"):
                 if not enable_copilot:
                     self.reply(405, {"error": "Copilot disabled"})
@@ -719,6 +830,7 @@ def main():
     p = argparse.ArgumentParser()
     p.add_argument("--port", type=int, default=8765)
     p.add_argument("--enable-copilot-chat", action="store_true", help="opt in to Copilot CLI inference")
+    p.add_argument("--enable-code-writes", action="store_true", help="explicitly opt in to reviewed local file edits and approved tests (host execution)")
     p.add_argument("--enable-local-chat", action="store_true", help="opt in to local Ollama inference")
     p.add_argument("--records-dir", type=Path)
     p.add_argument("--workflow-dir", type=Path, help="opt-in local workflow state directory for read-only inspection")
@@ -738,7 +850,8 @@ def main():
         discover(a.repository_root)
     except (OSError, ValueError) as exc:
         p.error("invalid repository roots: " + str(exc))
-    server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(a.records_dir, a.enable_local_chat, a.enable_copilot_chat, a.repository_root, a.enable_github_repositories, a.workflow_dir, a.projects_file if a.enable_project_picker else None, a.project_picker_root))
+    server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(a.records_dir, a.enable_local_chat, a.enable_copilot_chat, a.repository_root, a.enable_github_repositories, a.workflow_dir, a.projects_file if a.enable_project_picker else None, a.project_picker_root,
+                                                                            enable_code_writes=a.enable_code_writes))
     print("Daeloryn local console API listening on http://127.0.0.1:" + str(a.port), flush=True)
     try:
         server.serve_forever()

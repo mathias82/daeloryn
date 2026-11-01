@@ -855,3 +855,95 @@ test('campaign isolates React project from Java/Spring agent results',async({pag
   await campaign.getByLabel('Campaign project').selectOption('java-app');
   await expect(campaign.getByText(/1 matching agents/)).toBeVisible();
 });
+
+
+test('natural source links open full approved Java class and allow separately approved developer patch/tests',async({page})=>{
+  const file='src/main/java/gr/pwc/MailConfiguration.java';
+  const lines=Array.from({length:60},(_,i)=>(i===0?'class MailConfiguration {':
+    i===59?'}':'  String value'+i+' = "safe";'));
+  const source=lines.join('\n')+'\n';
+  const digest='a'.repeat(64);
+  const fileSha='b'.repeat(64);
+  let previewReads=0;
+  let writes=0;
+  let tests=0;
+  await page.route('**/api/copilot/review/prepare',route=>{
+    const request=route.request().postDataJSON();
+    expect(request.scope).toBe('focused');
+    return route.fulfill({json:{
+      ...request,model:models[0],scope:'focused',agent:request.agent||'java-reviewer',
+      sha256:digest,source_transmitted:false,approval_required:true,
+      prompt:JSON.stringify({file,line:1,column:1,end_line:60,source}),
+      files:[file],batch_count:1,warning:'Approved source only',
+      agent_profile:'trusted profile',agent_profile_sha256:'c'.repeat(64),
+      coverage:{scope:'focused',all_eligible_files_included:false,omitted:[],excluded:[]}
+    }});
+  });
+  await page.route('**/api/copilot/review/execute',route=>route.fulfill({
+    contentType:'application/x-ndjson',
+    body:[
+      {type:'progress',phase:'completed_batch',completed:1,total:1,batch:1},
+      {type:'batch_reply',batch:1,reply:'The strongest finding is in MailConfiguration.java, lines 14-16 and 17-18 (imports) and 51-56. Please inspect the cited source.'},
+      {type:'result',result:{status:'completed',completed_batches:1,total_batches:1,
+        review:{reply:'The strongest finding is in MailConfiguration.java, lines 14-16 and 17-18 (imports) and 51-56.'},
+        coverage:{all_eligible_files_included:false}}}
+    ].map(x=>JSON.stringify(x)).join('\n')+'\n'
+  }));
+  await page.route('**/api/copilot/review/source',route=>{
+    previewReads++;
+    const payload=route.request().postDataJSON();
+    expect(payload).toMatchObject({repository:'demo',file,approved_sha256:digest,scope:'focused'});
+    return route.fulfill({json:{repository:'demo',file,line_count:60,lines,
+      redacted_lines:[],source_sha256:fileSha,local_only:true,model_calls:0,
+      warning:'Local read-only source'}});
+  });
+  await page.route('**/api/copilot/review/patch/apply',route=>{
+    writes++;
+    const payload=route.request().postDataJSON();
+    expect(payload).toMatchObject({repository:'demo',file,approved_sha256:digest,
+      source_sha256:fileSha,branch:'daeloryn/fix-mail',approved:true});
+    expect(payload.start).toBe(51);
+    expect(payload.end).toBe(56);
+    expect(payload.replacement).toContain('fixed');
+    return route.fulfill({json:{status:'applied',branch:'daeloryn/fix-mail',
+      file,tests_executed:false,source_modified:true,provider_calls:0}});
+  });
+  await page.route('**/api/copilot/review/tests',route=>{
+    tests++;
+    expect(route.request().postDataJSON()).toEqual({
+      repository:'demo',branch:'daeloryn/fix-mail',suite:'maven',approved:true});
+    return route.fulfill({json:{suite:'maven',verified:true,returncode:0,output:'BUILD SUCCESS'}});
+  });
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await page.getByLabel(/^Local repository/).selectOption('demo');
+  await page.getByRole('textbox',{name:'Message',exact:true}).fill('Review bugs in MailConfiguration.java');
+  await page.getByRole('button',{name:/Send message/}).click();
+  await page.getByRole('checkbox',{name:/I inspected the exact source context/}).check();
+  await page.getByRole('button',{name:'Approve and analyze project'}).click();
+  const sourceLink=page.getByRole('button',{name:/Open .*MailConfiguration.java.*cited lines in Code Inspector/}).first();
+  await expect(sourceLink).toBeVisible();
+  await sourceLink.click();
+  const inspector=page.getByRole('complementary',{name:'Code Inspector'});
+  await expect(inspector.getByRole('region',{name:'Full local source file'})).toBeVisible();
+  await expect(inspector.getByText(/Full class\/file · 60 lines/)).toBeVisible();
+  expect(previewReads).toBeGreaterThan(0);
+  await page.getByRole('button',{name:/Open .*MailConfiguration.java lines 51–56 in Code Inspector/}).click();
+  await expect(inspector.locator('.inspector-code-target')).toContainText('value50');
+  await expect(inspector.locator('.inspector-code-focused')).toHaveCount(11);
+  await inspector.getByRole('button',{name:'Edit suggestion mode'}).click();
+  const draft=inspector.getByRole('region',{name:'Edit suggestion draft'});
+  await expect(draft.getByRole('region',{name:'Original source lines'})).toContainText('value50');
+  await draft.getByRole('textbox',{name:'Suggested replacement'}).fill(
+    Array.from({length:6},(_,i)=>'  String fixed'+(i+50)+' = "safe";').join('\n'));
+  await expect(draft.getByRole('region',{name:'Suggested diff preview content'})).toContainText('+  String fixed50');
+  await draft.getByLabel('New fix branch').fill('daeloryn/fix-mail');
+  await draft.getByRole('checkbox',{name:'I approve writing this exact diff to a new local Git branch'}).check();
+  await draft.getByRole('button',{name:'Apply approved fix to local branch'}).click();
+  await expect(draft.getByText(/Fix applied on daeloryn\/fix-mail/)).toBeVisible();
+  expect(writes).toBe(1);
+  expect(tests).toBe(0);
+  await draft.getByRole('checkbox',{name:'Approve executing selected tests with host permissions'}).check();
+  await draft.getByRole('button',{name:'Run approved tests'}).click();
+  await expect(draft.getByText(/Tests passed/)).toBeVisible();
+  expect(tests).toBe(1);
+});

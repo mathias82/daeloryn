@@ -10,12 +10,12 @@ from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from project_review_context import snapshot
 from focused_project_context import snapshot_focused
 from docs_project_context import snapshot_docs
-from copilot_chat import copilot_chat, validate
+from copilot_chat import copilot_chat, validate, CopilotProviderError
 from copilot_agents import resolve_agent
 
 MAX_PROMPT_CHARS = 38000
 MAX_BATCHES = 64
-MAX_SECONDS = 300
+MAX_SECONDS = 540
 MAX_REVIEW_OUTPUT = 256 * 1024
 
 
@@ -138,6 +138,7 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
             for i, reply in resume_batches.items()):
         raise ValueError('invalid confirmed resume batch receipts')
     replies, failure, attempted, newly_started = [], None, 0, 0
+    failure_code = None
     started = time.monotonic()
     if parallelism == 2:
         results, pending, attempted = {i-1: {'reply': reply} for i, reply in resume_batches.items()}, {}, 0
@@ -191,11 +192,12 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
                                       'completed':len(results),'total':len(requests),'batch':index+1})
                             if stream_replies:
                                 progress({'type':'batch_reply','batch':index+1,'reply':response['reply']})
-                    except (RuntimeError, TimeoutError, OSError, PermissionError, ValueError):
+                    except (RuntimeError, TimeoutError, OSError, PermissionError, ValueError) as exc:
+                        failure_code = exc.code if isinstance(exc, CopilotProviderError) else 'unknown'
                         if progress:
-                            progress({'type':'batch_failed','batch':index+1})
-                        failure = ('Provider call failed or stopped; external outcome may be unknown. '
-                                   'Remaining batches not invoked; no retry performed.')
+                            progress({'type':'batch_failed','batch':index+1,'code':failure_code})
+                        failure = ('Copilot batch %d failed (%s). External outcome may be unknown. '
+                                   'No automatic retry.' % (index+1, failure_code))
                 if cancel_event is not None and cancel_event.is_set():
                     failure = 'Stop requested; pending batches not invoked. Provider outcomes may be unknown.'
                 if failure is None and attempted < len(requests) and time.monotonic()-started >= MAX_SECONDS:
@@ -235,10 +237,12 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
                 if not isinstance(response, dict) or not isinstance(response.get('reply'), str):
                     raise RuntimeError('invalid provider response')
                 replies.append(response)
-            except (RuntimeError, TimeoutError, OSError, PermissionError):
+            except (RuntimeError, TimeoutError, OSError, PermissionError, ValueError) as exc:
+                failure_code = exc.code if isinstance(exc, CopilotProviderError) else 'unknown'
                 if progress:
-                    progress({'type':'batch_failed','batch':index+1})
-                failure = 'Provider call failed; external outcome may be unknown. Remaining batches not invoked; no retry performed.'
+                    progress({'type':'batch_failed','batch':index+1,'code':failure_code})
+                failure = ('Copilot batch %d failed (%s). External outcome may be unknown. '
+                           'No automatic retry.' % (index+1, failure_code))
                 break
             if progress:
                 progress({'type': 'progress', 'phase': 'completed_batch', 'completed': len(replies),
@@ -264,6 +268,7 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
                         'agent_identity_verified': False, 'reply': answer},
             'status': ('stopped' if cancel_event is not None and cancel_event.is_set() else
                        'partial' if failure else 'completed'), 'failure': failure,
+            'failure_code': failure_code,
             'source_transmitted': newly_started > 0, 'approved_sha256': digest,
             'completed_batches': complete_count, 'total_batches': len(prompts),
             'remaining_not_run': max(0, len(prompts) - len(resume_batches) - newly_started), 'coverage': prepared.get('coverage'),

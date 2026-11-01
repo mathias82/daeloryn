@@ -1,7 +1,10 @@
+import {sourceLinkSegments} from './sourceLinks.js';
 /** Only references to lines found in the approved source manifest are navigable. */
 export type SourceBlock={file:string;line:number;column:number;end_line:number;source:string};
 export type SourceReference={file:string;line:number;endLine:number;batch:number;excerpt:string;verified:boolean;kind:'bug'|'change'|'reference';suggestionText?:string};
-export type InspectorSnapshot={repository:string;sha256:string;sources:SourceBlock[];references:SourceReference[];completed:number;total:number;status:string};
+export type InspectorSourceAccess={repository:string;task:string;model:string;agent:string|null;scope:'focused'|'full'|'docs';approved_sha256:string};
+export type InspectorNavigation={file:string;line:number;endLine:number;ranges:{line:number;endLine:number}[];revision:number};
+export type InspectorSnapshot={repository:string;sha256:string;sources:SourceBlock[];references:SourceReference[];completed:number;total:number;status:string;sourceAccess?:InspectorSourceAccess;navigation?:InspectorNavigation};
 export function manifestSources(prompt:string,files:string[]):SourceBlock[]{
   const allow=new Set(files);
   const out:SourceBlock[]=[];
@@ -50,6 +53,22 @@ export function extractSourceReferences(reply:string,batch:number,sources:Source
       }
       found.push({file:path,line,endLine,batch,verified:present,kind,excerpt,suggestionText});
     }
+  }
+  // Also recognize natural-language citations such as
+  // "MailConfiguration.java, lines 14–16 and 17–18" where the approved
+  // manifest contains a checkout-relative path, not just a basename.
+  const links=sourceLinkSegments(reply,paths);
+  for(const link of links){
+    if(!link.reference||!link.range||found.length>=max)continue;
+    const {file}=link.reference,{line,endLine}=link.range;
+    if(found.some(r=>r.file===file&&r.line===line&&r.endLine===endLine))continue;
+    const at=reply.indexOf(link.text);
+    const excerpt=at>=0?reply.slice(Math.max(0,at-120),Math.min(reply.length,at+190)).replace(/\s+/g,' '):link.text;
+    const kind=/\b(?:bug|defect|vulnerab|exception|unsafe|leak|race|NPE|null dereference|error)\w*/i.test(excerpt)?'bug':
+      /\b(?:fix|change|replace|refactor|update|should)\w*/i.test(excerpt)?'change':'reference';
+    const covered=sourcePreview(sources,file,line,endLine-line+1).some(r=>r.line===line)&&
+      sources.some(b=>b.file===file&&b.line<=line&&b.end_line>=endLine);
+    found.push({file,line,endLine,batch,verified:covered,kind,excerpt});
   }
   return found.sort((a,b)=>a.batch-b.batch||a.file.localeCompare(b.file)||a.line-b.line);
 }

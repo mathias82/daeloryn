@@ -25,6 +25,8 @@ cd web && npm ci && cd ..
 ./start.sh
 ```
 
+Optional reviewed local fixes and explicitly approved tests: `./start.sh --enable-code-writes` (only for trusted local checkouts). This is disabled by default and never starts automatically.
+
 Run `./start.sh --repository-root /path/to/projects` to add a checkout root. `start.sh` enables Copilot chat and the local project picker, and opens the browser at `http://127.0.0.1:5173/`. `Ctrl+C` stops both services; startup fails safely when ports 5173/8765 are occupied or dependencies are missing. The script does not automatically install packages or kill other processes. The console binds to localhost. Agent installation and the console are independent; use only what you need. Other modules, tools, dry-run options and platform setup: [Getting started](docs/getting-started.md).
 
 ## What it does
@@ -32,7 +34,7 @@ Run `./start.sh --repository-root /path/to/projects` to add a checkout root. `st
 - **Chat + automatic specialist routing:** selects a registered Java/Spring/React/platform agent from the question; manual agent selection takes precedence and the actual choice appears in Session configuration.
 - **Smart Review:** ordinary questions remain text-only; questions about project code select bounded relevant source excerpts with **approval before Copilot receives them**. Generic bug reviews prioritize real source classes rather than only README and build manifests; full-project scans require explicit wording.
 - **Docs only / Text only:** Docs mode reads documentation, excluding source code and build files; Text only reads no project files. **A full-project scan occurs only when explicitly requested** and still requires source approval.
-- **Code Inspector:** read-only side panel with clickable file/line references, highlighted model-reported bugs and suggested changes, **full-screen mode**, an **Edit Suggestion** draft with original/replacement code and a copyable diff (no automatic writes), batch progress and clear warnings about unverified findings.
+- **Code Inspector + approved fixes:** clickable source-file and line-range links open the **entire approved local class** alongside Chat, highlighting the cited lines. A developer can suggest an exact replacement diff; after explicit approval and separate `--enable-code-writes` opt-in, the user can apply it to a clean new `daeloryn/*` branch and explicitly run selected tests (never automatically).
 - **A/B Benchmarks:** compare plain Copilot with Copilot + Daeloryn on the same approved source snapshot and model; persist partial results, resume safely, and score source citations offline. A sequential **22-agent evaluation campaign** uses role-specific prompts and offers Markdown/JSON reports with candidate rule improvements (not automatically applied). An offline evaluator displays source-citation traceability and provisional evidence leads, **not a verified correctness winner**.
 - **Workflows:** show observed execution progress rather than manually ticking completion boxes.
 
@@ -40,7 +42,7 @@ Run `./start.sh --repository-root /path/to/projects` to add a checkout root. `st
 
 Large source reviews use bounded batches (up to **38,000 characters per approved prompt**, subject to Copilot acceptance), at most two simultaneous provider requests per benchmark arm and a time/output budget. Every batch may trigger a billable provider call; **actual AI Credits are not independently available**. A failed call can have an unknown external outcome: Resume requires consent before resubmitting it. Old runs without per-batch receipts are not safely resumable.
 
-File/line links show references present in the approved snapshot; they **do not prove that reported bugs are real**. The console does not automatically apply patches, execute regression tests or publish PRs, and it cannot certify that Daeloryn outperforms Copilot.
+File/line links show references present in the approved snapshot; they **do not prove that reported bugs are real**. The console does not automatically apply patches or execute tests. Explicit local writes and host tests require separate approvals and `--enable-code-writes`, and nothing is committed or pushed automatically. It cannot certify that Daeloryn outperforms Copilot.
 
 ## Documentation
 

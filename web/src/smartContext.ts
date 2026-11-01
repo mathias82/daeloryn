@@ -14,16 +14,24 @@ const BUILD_FILE=/\b(?:pom(?:\.xml)?|build\.gradle(?:\.kts)?|gradle\.properties|
 const BUILD_ACTION=/\b(?:check|review|inspect|analy[sz]e|find|deprecated|dependencies|dependency|bugs?|versions?|plugins?|upgrade|outdated)\b/iu;
 const GENERIC_HOWTO=/^(?:how\s+(?:do|can|should)\s+(?:i|we)|how\s+to|what\s+is|explain\s+how\s+to|πώς\s+μπορώ\s+να|πώς\s+να)\b/iu;
 
+
+// Greek imperatives and natural code-review requests; words such as "βρεις"
+// must not silently fall through to text-only chat merely because they are
+// conjugated differently from "βρες".
+const GREEK_SOURCE_TASK=/(?:βρ[εέ]σ|βρ[εέ]ι|εντοπ|ψ[άα]ξ|σ[άα]ρωσ|σκ[άα]ναρ|[έε]λεγξ|εξ[έε]τασ|αναλ[υύ]σ|επιθε[ώω]ρησ|δ[εέ]ς|κ[άα]νε|θ[έε]λω|σφ[άα]λμα|προβλ[ήη]μα|bugs?|κ[ώω]δικ)/iu;
+const GREEK_SOURCE_OBJECT=/(?:κ[ώω]δικ[αο]|κλ[άα]σ[ηεις]|αρχε[ίι][οα]|σφ[άα]λμα|σφ[άα]λματα|bugs?|project|έργο|repository|πακ[έε]τ[οου]|μ[έε]θοδ[οου])/iu;
+const GREEK_EXPLICIT_ALL=/(?:[όο]λ[οαη]\s+τ[οα]\s+(?:έργο|project|repository|κ[ώω]δικα|αρχε[ίι]α)|ολ[όο]κληρ[οη]\s+τ[οα]\s+(?:έργο|project|repository|κ[ώω]δικα)|(?:σ[άα]ρωσε|scan|review)\s+.{0,30}(?:[όο]λα\s+τα\s+αρχε[ίι]α|[όο]λο\s+το\s+έργο))/iu;
+
 /** Only explicit whole-project language produces full source coverage. */
 export function routeContext(task:string,preference:ContextPreference='smart'):ContextScope{
   if(preference==='text-only')return 'none';
   const query=task.trim().slice(0,3000);
   if(!query||SMALL_TALK.test(query))return 'none';
   if(preference==='docs')return 'docs';
-  if(FULL.test(query))return 'full';
+  if(FULL.test(query)||GREEK_EXPLICIT_ALL.test(query))return 'full';
   if(BUILD_FILE.test(query)&&BUILD_ACTION.test(query))return 'focused';
   if(GENERIC_HOWTO.test(query)&&!EXPLICIT_PROJECT.test(query))return 'none';
   if(EXPLICIT_PROJECT.test(query)&&PROJECT_QUESTION.test(query))return 'focused';
-  if(CODE_INTENT.test(query))return 'focused';
+  if(CODE_INTENT.test(query)||(GREEK_SOURCE_TASK.test(query)&&GREEK_SOURCE_OBJECT.test(query)))return 'focused';
   return 'none';
 }

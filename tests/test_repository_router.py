@@ -14,7 +14,7 @@ class RepositoryRouterTests(unittest.TestCase):
    (root/"not-a-repo").mkdir()
    rows=discover([root])
    self.assertEqual(["payments"],[r["name"] for r in rows])
-   self.assertEqual(["java-maven"],rows[0]["technologies"])
+   self.assertEqual(["java", "java-maven"],rows[0]["technologies"])
  def test_reject_symlink_root(self):
   with TemporaryDirectory() as tmp:
    root=Path(tmp)

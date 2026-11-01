@@ -16,14 +16,29 @@ export function CodeInspector({snapshot,onClose}:{
   const [editMode,setEditMode]=useState(false);
   const [draft,setDraft]=useState<SuggestionDraft|null>(null);
   const [draftMessage,setDraftMessage]=useState('');
+  const [branch,setBranch]=useState(()=>('daeloryn/fix-'+Date.now().toString(36)));
+  const [applyConfirmed,setApplyConfirmed]=useState(false);
+  const [applyBusy,setApplyBusy]=useState(false);
+  const [applied,setApplied]=useState<{branch:string;file:string;tests_executed:boolean}|null>(null);
+  const [suite,setSuite]=useState('maven');
+  const [testsApproved,setTestsApproved]=useState(false);
+  const [testsBusy,setTestsBusy]=useState(false);
+  const [testOutcome,setTestOutcome]=useState<{suite:string;verified:boolean;returncode:number;output:string}|null>(null);
+  const [fullSource,setFullSource]=useState<{file:string;lines:string[];redacted_lines:number[];line_count:number;source_sha256:string}|null>(null);
+  const [sourceLoading,setSourceLoading]=useState(false);
+  const [sourceError,setSourceError]=useState('');
   const markedRef=useRef<HTMLDivElement|null>(null);
   const selected=files.includes(file)?file:files[0]||'';
   const visibleCount=expanded?180:42;
-  const preview=useMemo(()=>sourcePreview(snapshot.sources,selected,line,visibleCount),
-    [snapshot.sources,selected,line,visibleCount]);
+  const preview=useMemo(()=>fullSource?.file===selected?
+    fullSource.lines.map((text,index)=>({line:index+1,text})):
+    sourcePreview(snapshot.sources,selected,line,visibleCount),
+    [fullSource,snapshot.sources,selected,line,visibleCount]);
   const valid=snapshot.references.filter(r=>r.verified);
   const unverified=snapshot.references.filter(r=>!r.verified);
   const marks=valid.filter(r=>r.file===selected);
+  const focused=snapshot.navigation?.file===selected?snapshot.navigation:null;
+  const focusRanges=focused?.ranges||[];
   const active=marks.find(r=>line>=r.line&&line<=r.endLine);
   const patch=draft&&draft.snapshotSha256===snapshot.sha256?draftPatch(draft):null;
   const matchingSuggestion=active&&draft&&draft.file===active.file&&draft.start===active.line&&draft.end===active.endLine
@@ -32,7 +47,7 @@ export function CodeInspector({snapshot,onClose}:{
     const start=active?.line??line,end=active?.endLine??line;
     const proposal=startSuggestion(snapshot.sources,selected,start,end,snapshot.sha256);
     if(!proposal){setDraftMessage('The selected source lines were not available completely in the approved snapshot. Select another line.');return;}
-    setDraft(proposal);setEditMode(true);setDraftMessage('');
+    setDraft(proposal);setEditMode(true);setDraftMessage('');setApplyConfirmed(false);
   }
   async function copyPatch(){
     if(!patch)return;
@@ -42,8 +57,95 @@ export function CodeInspector({snapshot,onClose}:{
     }catch{setDraftMessage('Clipboard permission unavailable. Select and copy the diff manually.');}
   }
 
-  useEffect(()=>{setFile(files[0]||'');setLine(1);setLineInput('1');setDraft(null);setEditMode(false);setDraftMessage('');},
+  async function applyApprovedPatch(){
+    const access=snapshot.sourceAccess;
+    if(!access||!draft||!patch||!fullSource||draft.file!==fullSource.file||
+      !applyConfirmed||applyBusy||applied||!/^daeloryn\/[a-z0-9][a-z0-9-]{0,50}$/.test(branch))return;
+    setApplyBusy(true);setDraftMessage('');
+    try{
+      const response=await fetch('/api/copilot/review/patch/apply',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({...access,file:draft.file,start:draft.start,end:draft.end,
+          original:draft.original,replacement:draft.replacement,
+          source_sha256:fullSource.source_sha256,branch,approved:true})
+      });
+      const value=await response.json() as {status?:string;branch?:string;file?:string;tests_executed?:boolean;error?:string};
+      if(!response.ok)throw new Error(value.error||'Local write refused ('+response.status+')');
+      if(value.status!=='applied'||value.branch!==branch||value.file!==draft.file)
+        throw new Error('Invalid local patch receipt');
+      setApplied({branch,file:draft.file,tests_executed:false});
+      setApplyConfirmed(false);
+      setDraftMessage('Approved patch applied to '+branch+'. No tests, commits or PRs were made. This review snapshot is now stale.');
+    }catch(error){setDraftMessage(error instanceof Error?error.message:'Patch could not be applied');}
+    finally{setApplyBusy(false);}
+  }
+  async function runApprovedTests(){
+    if(!applied||!testsApproved||testsBusy)return;
+    setTestsBusy(true);setDraftMessage('');
+    try{
+      const response=await fetch('/api/copilot/review/tests',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({repository:snapshot.repository,branch:applied.branch,suite,approved:true})
+      });
+      const value=await response.json() as {verified?:boolean;suite?:string;returncode?:number;output?:string;error?:string};
+      if(!response.ok)throw new Error(value.error||'Test execution refused ('+response.status+')');
+      if(typeof value.verified!=='boolean'||typeof value.output!=='string'||
+        typeof value.returncode!=='number'||value.suite!==suite)
+        throw new Error('Invalid test result');
+      setTestOutcome({verified:value.verified,suite,returncode:value.returncode,output:value.output});
+      setDraftMessage(value.verified?'Approved host tests passed. Review the branch before a commit.':
+        'Approved tests failed. Inspect the output; no commit or PR was created.');
+    }catch(error){setDraftMessage(error instanceof Error?error.message:'Tests could not start');}
+    finally{setTestsBusy(false);setTestsApproved(false);}
+  }
+
+  useEffect(()=>{setFile(files[0]||'');setLine(1);setLineInput('1');setDraft(null);setEditMode(false);setDraftMessage('');setApplied(null);setApplyConfirmed(false);},
     [snapshot.sha256,files[0]]);
+  useEffect(()=>{
+    const nav=snapshot.navigation;
+    if(nav&&files.includes(nav.file)&&Number.isSafeInteger(nav.line)&&nav.line>0){
+      setFile(nav.file);setLine(nav.line);setLineInput(String(nav.line));
+    }
+  },[snapshot.navigation?.revision]);
+  useEffect(()=>{
+    const selection=snapshot.sourceAccess;
+    if(!selection||!selected){setFullSource(null);setSourceError('');return;}
+    const controller=new AbortController();
+    setFullSource(null);setSourceLoading(true);setSourceError('');
+    async function openApprovedClass(){
+      try{
+        const response=await fetch('/api/copilot/review/source',{
+          method:'POST',signal:controller.signal,
+          headers:{'Content-Type':'application/json'},
+          body:JSON.stringify({...selection,file:selected})
+        });
+        const data:unknown=await response.json();
+        if(!response.ok){
+          const detail=data&&typeof data==='object'&&'error' in data&&
+            typeof data.error==='string'?data.error:'Source view unavailable ('+response.status+')';
+          throw new Error(detail);
+        }
+        if(!data||typeof data!=='object'||!('file' in data)||data.file!==selected||
+            !('source_sha256' in data)||typeof data.source_sha256!=='string'||
+            !('lines' in data)||!Array.isArray(data.lines)||
+            !data.lines.every((line:unknown)=>typeof line==='string')||
+            !('redacted_lines' in data)||!Array.isArray(data.redacted_lines)||
+            !data.redacted_lines.every((n:unknown)=>Number.isSafeInteger(n))||
+            !('line_count' in data)||typeof data.line_count!=='number'||
+            !('local_only' in data)||data.local_only!==true||
+            !('model_calls' in data)||data.model_calls!==0)
+          throw new Error('Invalid local source preview response');
+        if(!controller.signal.aborted)
+          setFullSource(data as unknown as {file:string;lines:string[];redacted_lines:number[];line_count:number;source_sha256:string});
+      }catch(e){
+        if(!controller.signal.aborted)
+          setSourceError('Full-class preview unavailable: '+(e instanceof Error?e.message:'unknown error')+
+            '. Only approved review excerpts are shown.');
+      }finally{if(!controller.signal.aborted)setSourceLoading(false);}
+    }
+    void openApprovedClass();
+    return()=>controller.abort();
+  },[selected,snapshot.sha256,snapshot.sourceAccess?.approved_sha256]);
   useEffect(()=>{
     if(!expanded)return;
     const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape')setExpanded(false);};
@@ -51,7 +153,7 @@ export function CodeInspector({snapshot,onClose}:{
     return()=>window.removeEventListener('keydown',onKey);
   },[expanded]);
   useEffect(()=>{markedRef.current?.scrollIntoView({block:'center',behavior:'instant'});},
-    [line,selected,expanded]);
+    [line,selected,expanded,fullSource]);
   function jump(path:string,at:number){
     if(!files.includes(path)||!Number.isSafeInteger(at)||at<1)return;
     setFile(path);setLine(at);setLineInput(String(at));
@@ -104,11 +206,12 @@ export function CodeInspector({snapshot,onClose}:{
       {selected&&<>
         <div className="inspector-source-caption">
           <strong>{selected}</strong>
-          <small>{nearbyDeclaration(snapshot.sources,selected,line)||'Source excerpt · original line numbers'}</small>
+          <small>{fullSource?.file===selected?'Full class/file · '+fullSource.line_count+' lines · local only · 0 model calls':
+            nearbyDeclaration(snapshot.sources,selected,line)||'Approved source excerpt · original line numbers'}</small>
         </div>
-        {active&&<p className="inspector-target-note" role="status">
-          Highlighted: {active.kind==='bug'?'possible bug':active.kind==='change'?'suggested method/code change':'source citation'}
-          {' · '}line {active.line}{active.endLine>active.line?'–'+active.endLine:''}
+        {(active||focused)&&<p className="inspector-target-note" role="status">
+          Highlighted: {active?.kind==='bug'?'possible bug':active?.kind==='change'?'suggested method/code change':'model-cited source'}
+          {' · '}line {focused?.line??active?.line}{(focused?.endLine??active?.endLine??0)>(focused?.line??active?.line??0)?'–'+(focused?.endLine??active?.endLine):''}
           {' · '}not independently verified
         </p>}
         <div className="inspector-source-actions">
@@ -124,20 +227,25 @@ export function CodeInspector({snapshot,onClose}:{
           <button type="button" className="outline-button" onClick={()=>moveWindow(visibleCount)}
             aria-label="Next source lines">Next lines</button>
         </div>
-        <div className="inspector-code" role="region" aria-label="Read-only source excerpt">
+        {sourceLoading&&<p className="inspector-source-loading" role="status">Loading entire class locally (no provider call)…</p>}
+        {sourceError&&<p role="alert" className="inspector-source-error">{sourceError}</p>}
+        <div className="inspector-code" role="region" aria-label={fullSource?.file===selected?'Full local source file':'Read-only source excerpt'}>
           {preview.length?preview.map((row,index)=>{
             const cites=marks.filter(r=>row.line>=r.line&&row.line<=r.endLine);
+            const focusedCite=focusRanges.some(r=>row.line>=r.line&&row.line<=r.endLine);
             const isCurrent=row.line===line;
+            const isCited=cites.length>0||focusedCite;
             return <div
               className={'inspector-code-line'+(isCurrent?' inspector-code-target':'')+
                 (cites.some(r=>r.kind==='bug')?' inspector-code-bug':
                  cites.some(r=>r.kind==='change')?' inspector-code-change':
-                 cites.length?' inspector-code-citation':'')}
+                 isCited?' inspector-code-citation':'')+
+                (focusedCite?' inspector-code-focused':'')}
               key={row.line+'|'+index}
               ref={isCurrent?markedRef:undefined}
-              aria-label={cites.length?'Line '+row.line+' marked by model result':'Line '+row.line}>
+              aria-label={isCited?'Line '+row.line+' cited by model (not independently verified)':'Line '+row.line}>
               <span>{row.line}</span><code>{row.text||' '}</code>
-              {cites.length>0&&<span className="inspector-line-marker" aria-label="Model-cited line">●</span>}
+              {isCited&&<span className="inspector-line-marker" aria-label="Model-cited line">●</span>}
             </div>;
           }):<p>Source lines unavailable in this approved snapshot.</p>}
         </div>
@@ -169,11 +277,52 @@ export function CodeInspector({snapshot,onClose}:{
               <strong>Diff preview · source unchanged</strong>
               <pre role="region" aria-label="Suggested diff preview content">{patch||'No changes proposed yet. Edit the replacement code to preview a patch.'}</pre>
             </div>
+            {patch&&snapshot.sourceAccess&&!applied&&<>
+              <div className="inspector-apply-panel" role="group" aria-label="Approve developer patch">
+                <strong>Apply this patch · explicit local write approval</strong>
+                <p className="muted">The exact line replacement will be written to a newly created Git branch in your selected checkout. The tree must be clean, source unchanged and local writes explicitly enabled via <code>./start.sh --enable-code-writes</code>. No model calls, commits, pushes or tests occur automatically.</p>
+                <label>New fix branch
+                  <input aria-label="New fix branch" value={branch} maxLength={59}
+                    onChange={e=>{setBranch(e.target.value);setApplyConfirmed(false);}}/>
+                </label>
+                <label className="benchmark-approval"><input type="checkbox"
+                  aria-label="I approve writing this exact diff to a new local Git branch"
+                  checked={applyConfirmed} onChange={e=>setApplyConfirmed(e.target.checked)}/>
+                  I reviewed the exact diff and approve writing this file on a clean, new local Git branch.
+                </label>
+                <button type="button" disabled={!applyConfirmed||applyBusy||sourceLoading||
+                  !fullSource||fullSource.file!==draft.file||
+                  !/^daeloryn\/[a-z0-9][a-z0-9-]{0,50}$/.test(branch)}
+                  onClick={()=>void applyApprovedPatch()}>
+                  {applyBusy?'Applying reviewed patch…':'Apply approved fix to local branch'}
+                </button>
+              </div>
+            </>}
+            {applied&&<div className="inspector-apply-panel" role="group" aria-label="Approved developer patch applied">
+              <strong>Fix applied on {applied.branch}</strong>
+              <p>Changed: {applied.file}. The old review snapshot is stale. Run tests, inspect Git diff and review before committing.</p>
+              <label>Test suite (executes project code on this Mac)
+                <select aria-label="Approved test suite" value={suite} onChange={e=>{setSuite(e.target.value);setTestsApproved(false);}}>
+                  <option value="maven">Maven: mvn -B test</option>
+                  <option value="npm">npm: npm test -- --runInBand</option>
+                  <option value="python">Python: python3 -m unittest discover -s tests</option>
+                </select>
+              </label>
+              <label className="benchmark-approval"><input type="checkbox"
+                aria-label="Approve executing selected tests with host permissions"
+                checked={testsApproved} onChange={e=>setTestsApproved(e.target.checked)}/>
+                I approve running this selected test command with my local user privileges (not sandboxed).
+              </label>
+              <button type="button" disabled={!testsApproved||testsBusy}
+                onClick={()=>void runApprovedTests()}>{testsBusy?'Running approved tests…':'Run approved tests'}</button>
+              {testOutcome&&<details open><summary>{testOutcome.verified?'Tests passed':'Tests failed'} · {testOutcome.suite} · exit {testOutcome.returncode}</summary>
+                <pre role="region" aria-label="Local test output">{testOutcome.output}</pre></details>}
+            </div>}
           </>}
           {draftMessage&&<p role="status">{draftMessage}</p>}
         </section>}
       </>}
     </div>
-    <footer>Read-only workspace · suggestions are local drafts · Esc closes full screen · no source modification</footer>
+    <footer>Read-only review by default · code is modified only by explicit approved local patch · Esc closes full screen</footer>
   </aside>;
 }

@@ -1,7 +1,12 @@
 import {useEffect,useState} from 'react';
 import {splitReply} from './chatPresentation';
+import {sourceLinkSegments} from './sourceLinks';
+import type {SourceLink} from './sourceLinks';
 
-export function ProgressiveReply({text,animate,onProgress}:{text:string;animate:boolean;onProgress?:()=>void}){
+export function ProgressiveReply({text,animate,onProgress,approvedFiles,onSourceSelect}:{
+ text:string;animate:boolean;onProgress?:()=>void;
+ approvedFiles?:string[];onSourceSelect?:(reference:SourceLink,focus?:{line:number;endLine:number})=>void;
+}){
  const [visible,setVisible]=useState(animate?0:text.length);
  const [copied,setCopied]=useState<number|null>(null);
  useEffect(()=>{
@@ -30,7 +35,19 @@ export function ProgressiveReply({text,animate,onProgress}:{text:string;animate:
       </div>
       <pre><code>{part.text}</code></pre>
     </section>:
-    <p className="chat-prose" key={i}>{part.text}</p>)}
+    <p className="chat-prose" key={i}>
+      {approvedFiles?.length&&onSourceSelect?
+        sourceLinkSegments(part.text,approvedFiles).map((segment,k)=>segment.reference?
+          <button type="button" className="chat-source-link" key={k}
+            aria-label={'Open '+segment.reference.file+
+              (segment.range?' lines '+segment.range.line+'–'+segment.range.endLine:
+               segment.reference.ranges.length?' cited lines':' entire file')+' in Code Inspector'}
+            title={'View '+segment.reference.file+' locally in Code Inspector (no provider call)'}
+            onClick={()=>onSourceSelect(segment.reference!,segment.range)}>
+            {segment.text}</button>:
+          <span key={k}>{segment.text}</span>)
+        :part.text}
+    </p>)}
   {visible<text.length&&<div className="reply-progress"><small>Displaying completed provider response…</small><button type="button" className="text-action" onClick={()=>setVisible(text.length)}>Show full reply</button></div>}
  </div>;
 }
