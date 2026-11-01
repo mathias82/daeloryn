@@ -10,7 +10,7 @@ from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from project_review_context import snapshot
 from focused_project_context import snapshot_focused
 from docs_project_context import snapshot_docs
-from copilot_chat import copilot_chat, validate
+from copilot_chat import safe_failure, copilot_chat, validate
 from copilot_agents import resolve_agent
 
 MAX_PROMPT_CHARS = 38000
@@ -138,6 +138,7 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
             for i, reply in resume_batches.items()):
         raise ValueError('invalid confirmed resume batch receipts')
     replies, failure, attempted, newly_started = [], None, 0, 0
+    failure_details = None
     started = time.monotonic()
     if parallelism == 2:
         results, pending, attempted = {i-1: {'reply': reply} for i, reply in resume_batches.items()}, {}, 0
@@ -152,7 +153,7 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
                 kwargs['cancel_event'] = cancel_event
             response = transport(request, **kwargs)
             if not isinstance(response, dict) or not isinstance(response.get('reply'), str):
-                raise RuntimeError('invalid provider response')
+                raise ValueError('invalid provider response')
             return response
         with ThreadPoolExecutor(max_workers=2, thread_name_prefix='daeloryn-batch') as executor:
             def dispatch():
@@ -191,11 +192,14 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
                                       'completed':len(results),'total':len(requests),'batch':index+1})
                             if stream_replies:
                                 progress({'type':'batch_reply','batch':index+1,'reply':response['reply']})
-                    except (RuntimeError, TimeoutError, OSError, PermissionError, ValueError):
+                    except (RuntimeError, TimeoutError, OSError, PermissionError, ValueError) as exc:
+                        diagnostic = safe_failure(exc, index+1)
+                        if failure_details is None:
+                            failure_details = diagnostic
                         if progress:
-                            progress({'type':'batch_failed','batch':index+1})
-                        failure = ('Provider call failed or stopped; external outcome may be unknown. '
-                                   'Remaining batches not invoked; no retry performed.')
+                            progress({'type':'batch_failed','batch':index+1,'diagnostic':diagnostic})
+                        failure = ('Batch %d: %s. External outcome may be unknown. Remaining batches not invoked; no retry performed.' %
+                                   (failure_details['batch'], failure_details['message']))
                 if cancel_event is not None and cancel_event.is_set():
                     failure = 'Stop requested; pending batches not invoked. Provider outcomes may be unknown.'
                 if failure is None and attempted < len(requests) and time.monotonic()-started >= MAX_SECONDS:
@@ -225,7 +229,7 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
                 kwargs['cancel_event'] = cancel_event
             if progress:
                 progress({'type': 'progress', 'phase': 'running', 'completed': len(replies),
-                          'total': len(prompts), 'batch': attempted + 1})
+                          'total': len(prompts), 'batch': index + 1})
             attempted += 1
             newly_started += 1
             if progress:
@@ -233,12 +237,14 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
             try:
                 response = transport(request, **kwargs)
                 if not isinstance(response, dict) or not isinstance(response.get('reply'), str):
-                    raise RuntimeError('invalid provider response')
+                    raise ValueError('invalid provider response')
                 replies.append(response)
-            except (RuntimeError, TimeoutError, OSError, PermissionError):
+            except (RuntimeError, TimeoutError, OSError, PermissionError, ValueError) as exc:
+                failure_details = safe_failure(exc, index+1)
                 if progress:
-                    progress({'type':'batch_failed','batch':index+1})
-                failure = 'Provider call failed; external outcome may be unknown. Remaining batches not invoked; no retry performed.'
+                    progress({'type':'batch_failed','batch':index+1,'diagnostic':failure_details})
+                failure = ('Batch %d: %s. External outcome may be unknown. Remaining batches not invoked; no retry performed.' %
+                           (index+1, failure_details['message']))
                 break
             if progress:
                 progress({'type': 'progress', 'phase': 'completed_batch', 'completed': len(replies),
@@ -264,7 +270,7 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
                         'agent_profile_sha256': selection['agent_profile_sha256'],
                         'agent_identity_verified': False, 'reply': answer},
             'status': ('stopped' if cancel_event is not None and cancel_event.is_set() else
-                       'partial' if failure else 'completed'), 'failure': failure,
+                       'partial' if failure else 'completed'), 'failure': failure, 'failure_details': failure_details,
             'source_transmitted': newly_started > 0, 'approved_sha256': digest,
             'execution_complete': execution_complete and complete_count == len(prompts),
             'completed_batches': complete_count, 'total_batches': len(prompts),

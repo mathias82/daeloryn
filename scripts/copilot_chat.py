@@ -13,6 +13,53 @@ from copilot_agents import resolve_agent
 MODEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}\Z")
 MAX_OUTPUT = 65536
 
+FAILURE_MESSAGES = {
+    "provider_timeout": "Copilot call timed out; remote outcome unknown",
+    "provider_cancelled": "Copilot stopped locally; remote outcome unknown",
+    "cli_exit": "Copilot CLI exited unsuccessfully",
+    "output_limit": "Copilot response exceeded the local output limit",
+    "empty_output": "Copilot returned empty output",
+    "cli_unavailable": "Installed GitHub Copilot CLI required",
+    "unsupported_host": "POSIX host required for bounded Copilot sessions",
+    "permission_denied": "Provider process permission denied",
+    "process_error": "Provider process could not complete",
+    "invalid_response": "Provider response was invalid",
+    "provider_error": "Provider call failed; specific cause unavailable",
+}
+
+class CopilotFailure(RuntimeError):
+    """Allowlisted diagnostics only: never include argv, prompts or stderr."""
+    def __init__(self, code, *, exit_code=None, timeout_seconds=None):
+        if code not in FAILURE_MESSAGES:
+            raise ValueError("unknown provider failure code")
+        super().__init__(FAILURE_MESSAGES[code])
+        self.code = code
+        self.exit_code = exit_code
+        self.timeout_seconds = timeout_seconds
+
+
+def safe_failure(exc, batch):
+    if isinstance(exc, CopilotFailure):
+        code = exc.code
+    elif isinstance(exc, TimeoutError):
+        code = "provider_timeout"
+    elif isinstance(exc, PermissionError):
+        code = "permission_denied"
+    elif isinstance(exc, OSError):
+        code = "process_error"
+    elif isinstance(exc, ValueError):
+        code = "invalid_response"
+    else:
+        code = "provider_error"
+    result = {"code": code, "batch": batch, "message": FAILURE_MESSAGES[code],
+              "external_outcome": "unknown", "automatic_retry": False}
+    if isinstance(exc, CopilotFailure):
+        if isinstance(exc.exit_code, int) and not isinstance(exc.exit_code, bool):
+            result["exit_code"] = exc.exit_code
+        if isinstance(exc.timeout_seconds, (int, float)) and not isinstance(exc.timeout_seconds, bool):
+            result["timeout_seconds"] = exc.timeout_seconds
+    return result
+
 def validate(request, *, review_context=False):
     if not isinstance(request, dict) or set(request) not in ({"model", "messages"}, {"model", "messages", "agent"}):
         raise ValueError("model and messages required")
@@ -35,15 +82,15 @@ def validate(request, *, review_context=False):
 def copilot_chat(request, executable=None, timeout=90, *, expected_agent_sha256=None, review_context=False, cancel_event=None):
     model, messages = validate(request, review_context=review_context)
     if cancel_event is not None and cancel_event.is_set():
-        raise RuntimeError('Copilot request cancelled before dispatch')
+        raise CopilotFailure('provider_cancelled')
     profile = resolve_agent(request["agent"]) if "agent" in request else None
     if expected_agent_sha256 is not None and (profile is None or profile["sha256"] != expected_agent_sha256):
         raise PermissionError("agent profile changed; prepare and approve again")
     if os.name != "posix":
-        raise RuntimeError("POSIX host required for bounded Copilot sessions")
+        raise CopilotFailure("unsupported_host")
     executable = executable or shutil.which("copilot")
     if not executable or Path(executable).name != "copilot":
-        raise RuntimeError("installed GitHub Copilot CLI required")
+        raise CopilotFailure("cli_unavailable")
     prompt = ("Respond naturally in conversational paragraphs without Markdown headings, emphasis or list markers. Use fenced code only for actual code examples. " 
               "Respond to the conversation below as a text-only assistant. "
               "Do not request tools, inspect files, or modify anything. "
@@ -88,7 +135,7 @@ def copilot_chat(request, executable=None, timeout=90, *, expected_agent_sha256=
                             except ProcessLookupError:
                                 pass
                             process.wait()
-                            raise RuntimeError('Copilot cancelled locally; external provider outcome unknown')
+                            raise CopilotFailure('provider_cancelled')
                         if time.monotonic() >= deadline:
                             raise subprocess.TimeoutExpired(args, timeout)
                         cancel_event.wait(min(0.2, max(0.001, deadline - time.monotonic())))
@@ -98,16 +145,18 @@ def copilot_chat(request, executable=None, timeout=90, *, expected_agent_sha256=
                 except ProcessLookupError:
                     pass
                 process.wait()
-                raise RuntimeError("Copilot timeout; remote outcome unknown") from exc
+                raise CopilotFailure("provider_timeout", timeout_seconds=timeout) from exc
             output.seek(0, 2)
             size = output.tell()
             output.seek(0)
             data = output.read(MAX_OUTPUT+1)
-    if code != 0 or size > MAX_OUTPUT:
-        raise RuntimeError("Copilot failed or output exceeded limit")
+    if code != 0:
+        raise CopilotFailure("cli_exit", exit_code=code)
+    if size > MAX_OUTPUT:
+        raise CopilotFailure("output_limit")
     answer = data.decode("utf-8", errors="replace").strip()
     if not answer:
-        raise RuntimeError("Copilot returned empty output")
+        raise CopilotFailure("empty_output")
     return {"reply": answer, "provider": "github-copilot-cli",
             "requested_model": model, "model_identity_verified": False,
             "agent_selected": profile["name"] if profile else None,

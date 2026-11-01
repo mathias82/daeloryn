@@ -2,6 +2,17 @@
 
 Responsive React + TypeScript + Vite frontend with a chat-first workspace.
 
+
+Failed source-review batches now retain an allowlisted diagnostic code and actual
+batch number. Saved benchmark arms show the CLI exit code or timeout duration
+when known. Codes distinguish timeouts, cancelled calls, CLI failure, oversized
+output, empty output, invalid response and local process errors. Raw CLI output,
+exception strings, prompts and credentials are never added to diagnostics.
+Older saved runs retain their original generic failure: their cause cannot be
+reconstructed retroactively. Completed batch receipts are reused on explicit
+resume; unknown calls still require confirmation and are never retried
+automatically. Source coverage omissions are separate from provider failures.
+
 ## Screens
 
 - **Overview**: status summary, workflow diagram and task shortcuts.
