@@ -279,7 +279,7 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
         {(['baseline','daeloryn'] as const).map(arm=><article className="benchmark-arm" key={arm}>
           <h3>{arm==='baseline'?'Plain Copilot':'Copilot + Daeloryn'}</h3>
           <p>{runReceipt?.arms[arm]?runReceipt.arms[arm].status+' · '+runReceipt.arms[arm].completed_batches+'/'+runReceipt.arms[arm].total_batches+' batches':'Pending / in progress'}</p>
-          {runReceipt?.arms[arm]?.failure&&<p role="alert">Failure: {runReceipt.arms[arm].failure}</p>
+          {runReceipt?.arms[arm]?.failure&&<p role="alert">Failure: {runReceipt.arms[arm].failure}</p>}
           <pre>{runReceipt?.arms[arm]?.reply||result?.arms[arm]?.review?.reply||partial[arm]||'No model response yet'}</pre>
         </article>)}
       </div>
