@@ -90,7 +90,13 @@ and send a message. The model ID is requested, **not independently verified**.
 The server launches each request from a fresh temporary working directory with
 `--deny-tool=shell,write,read,url,memory`, disables built-in MCP servers,
 custom instructions and automatic updates, and does not grant all-tools access.
-The web UI agent selector is **not yet connected to the Copilot agent system**.
+An optional `agent` field activates a validated Daeloryn catalog profile.
+The launcher stages only that profile in a temporary `.github/agents` directory,
+restricts its tools to `[]`, and passes a unique CLI agent ID with `--agent`.
+This avoids collisions with same-named user profiles without changing their files.
+It does not load target-repository instructions or reuse existing IDE sessions.
+The response reports `agent_selected`, `agent_profile_sha256`, and
+`agent_identity_verified: false`; selection is not proof of provider compliance.
 
 **Important security boundary:** Copilot CLI may load user-installed extensions,
 other configured MCP integrations or user-level settings. CLI deny rules and a
@@ -120,8 +126,9 @@ than silently using a different model. The response reports the **requested**
 model and routing reason, not a verified provider identity. Each auto request
 performs live discovery; this may add latency. No automatic retry is performed.
 
-The Daeloryn agent selector is still **preview-only**. Model routing does not
-activate agent profiles or grant workspace access. CLI and SDK installation,
+Explicit agent selections survive model routing. Automatic agent recommendations
+remain advisory and do not select a specialist. Neither mode grants target
+workspace access. CLI and SDK installation,
 authentication, model entitlements and real model inference must be validated
 on the operator's machine.
 
@@ -197,3 +204,28 @@ The results show the number of scanned files, line-level pattern matches,
 and suggested fixes. GitHub cloud repositories are not supported by this
 operation; no source is sent to Copilot, no files are modified and no tests
 or agents are executed. The chat provider and model selector remain separate.
+
+
+## Copilot model + agent source review
+
+`POST /api/copilot/chat` accepts `{model, messages, agent?}`. Unknown profile
+names, paths and extra properties fail before inference. Generic chat without
+`agent` remains supported. Profiles come from the installed Daeloryn catalog.
+
+`POST /api/copilot/review/prepare` now requires `{repository, task, model, agent?}`;
+`model` must be concrete, not `auto`. The response includes the exact prompt,
+profile and SHA-256 approval digest. `POST /api/copilot/review/execute` accepts
+the same fields plus `approved_sha256`. The API re-prepares from current source
+and profile; changed source, repository, model or profile invalidates approval.
+The launcher also checks the expected profile hash immediately before staging.
+Approval is per exact content/selection, not a persistent authorization token
+or single-use execution claim. No automatic retries are made on provider error.
+
+The frontend no longer silently substitutes the first discovered model for
+source review. Choose the desired Sonnet ID explicitly. Review remains bounded
+to four excerpts/1700 source characters and requires manual inspection; it is
+not a complete repository review or a secret-scanning guarantee. Authentication,
+entitlements and live inference must be checked on the operator's machine.
+
+References: [GitHub custom-agent invocation](https://docs.github.com/en/copilot/how-tos/copilot-cli/use-copilot-cli/invoke-custom-agents)
+and [CLI reference](https://docs.github.com/en/copilot/reference/copilot-cli-reference/cli-command-reference).

@@ -3,3 +3,8 @@
 __pycache__/
 *.py[cod]
 .pytest_cache/
+
+web/.test-build/
+web/node_modules/
+web/dist/
+web/*.tsbuildinfo
