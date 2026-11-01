@@ -105,3 +105,14 @@
 .workflow-tools .workflow-stage{padding:11px;min-height:0}
 @media(max-width:1100px){.workflow-timeline{grid-template-columns:1fr}.workflow-tools{grid-template-columns:1fr}}
 @media(max-width:650px){.workflow-surface{padding:15px}.workflow-step{flex-wrap:wrap;gap:8px}.workflow-step-copy{flex-basis:calc(100% - 45px)}.workflow-status{margin-left:41px}.workflow-run-bar>.outline-button{width:100%}}
+
+
+/* Saved benchmark run lifecycle actions */
+.benchmark-run-actions{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.benchmark-run-actions button{min-height:36px}
+.benchmark-run-actions .benchmark-delete{color:#f2b5be;border-color:#825466}
+.benchmark-run-actions .benchmark-delete:hover{background:#452b36}
+.benchmark-delete-confirm{flex:1 1 100%;display:flex;gap:9px;align-items:center;flex-wrap:wrap;border:1px solid #89566a;background:#2c202e;border-radius:10px;padding:12px}
+.benchmark-delete-confirm p{flex:1 1 100%;margin:0;color:#f1cad2;font-size:12px}
+.benchmark-delete-confirm>button:first-of-type{color:#fff;background:#8b3550;border:1px solid #a84c68;border-radius:8px;padding:8px 12px}
+@media(max-width:700px){.benchmark-delete-confirm>button{flex:1}}
