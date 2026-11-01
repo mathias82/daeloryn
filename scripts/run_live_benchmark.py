@@ -30,13 +30,15 @@ def validate(plan, trial):
     trial = Path(trial).resolve(strict=True)
     for arm in ("baseline", "daeloryn"):
         config = arms[arm]
-        if not isinstance(config, dict) or not isinstance(config.get("model"), str):
+        if not isinstance(config, dict) or (not isinstance(config.get("model"), str) or not config["model"].strip()):
             raise ValueError("explicit model required")
         if not isinstance(config.get("argv"), list):
             raise ValueError("explicit argv required")
         path = trial / arm
         if path.is_symlink() or not path.is_dir() or path.resolve() != path:
             raise ValueError("real prepared arm required")
+    if arms["baseline"]["model"] != arms["daeloryn"]["model"]:
+        raise ValueError("paired benchmark requires the same requested model in both arms")
     return provider
 
 
