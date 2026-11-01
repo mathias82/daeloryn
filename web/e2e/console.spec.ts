@@ -253,6 +253,7 @@ test('Changing the model invalidates pending in-chat source approval',async({pag
   await page.getByRole('textbox',{name:'Message',exact:true}).fill('Analyze my project');
   await page.getByRole('button',{name:/Send message/}).click();
   await expect(page.getByRole('checkbox',{name:/I inspected the exact source context/})).toBeVisible();
+  await page.getByRole('button',{name:'Toggle session details'}).click();
   await page.getByLabel(/^Copilot model/).selectOption(models[1]);
   await expect(page.getByRole('region',{name:'Chat project context approval'})).toHaveCount(0);
   expect(executed).toBe(0);
