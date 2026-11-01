@@ -268,6 +268,7 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
                         'agent_identity_verified': False, 'reply': answer},
             'status': ('stopped' if cancel_event is not None and cancel_event.is_set() else
                        'partial' if failure else 'completed'), 'failure': failure,
+            'failure_code': failure_code,
             'source_transmitted': newly_started > 0, 'approved_sha256': digest,
             'completed_batches': complete_count, 'total_batches': len(prompts),
             'remaining_not_run': max(0, len(prompts) - len(resume_batches) - newly_started), 'coverage': prepared.get('coverage'),
