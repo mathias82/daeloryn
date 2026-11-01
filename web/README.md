@@ -13,6 +13,14 @@ reconstructed retroactively. Completed batch receipts are reused on explicit
 resume; unknown calls still require confirmation and are never retried
 automatically. Source coverage omissions are separate from provider failures.
 
+
+Developer handoff reads only the selected checkout-relative source file, without
+rescanning the whole repository or consuming its full-review source budget.
+Errors distinguish a missing file, source over 12000 bytes, non-UTF-8/binary input,
+excluded paths and lines requiring redaction. Redaction errors show line numbers
+only; no sensitive source is sent. Complete-file source and exact diff approval
+remain mandatory. A file exactly at the byte limit can be prepared.
+
 ## Screens
 
 - **Overview**: status summary, workflow diagram and task shortcuts.
