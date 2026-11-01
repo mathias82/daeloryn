@@ -1,10 +1,12 @@
 import {useEffect,useRef,useState} from 'react';
 import {reviewRequest} from './copilotRequests';
 import type {ReviewSelection} from './copilotRequests';
+import {manifestSources,extractSourceReferences} from './sourceInspector';
+import type {InspectorSnapshot} from './sourceInspector';
 
 type Manifest = {
   repository:string; model:string; agent:string|null; prompt:string; sha256:string;
-  scope:'focused'|'full';estimated_provider_calls?:number;verified_usage_credits?:number|null;
+  scope:'focused'|'full'|'docs';estimated_provider_calls?:number;verified_usage_credits?:number|null;
   files:string[]; batch_count:number; warning:string; approval_required:boolean;
   agent_profile:string|null; agent_profile_sha256:string|null;
   coverage?:{all_eligible_files_included:boolean;scope:string;
@@ -13,8 +15,9 @@ type Manifest = {
 type ReviewResult = {review?:{reply?:string};status?:string;completed_batches?:number;
   total_batches?:number;failure?:string;coverage?:{all_eligible_files_included:boolean}};
 
-export function InlineContextReview({selection,onCompleted,onCancelled}:{
+export function InlineContextReview({selection,onCompleted,onCancelled,onInspector}:{
   selection:ReviewSelection;onCompleted:(answer:string)=>void;onCancelled:(unknownOutcome:boolean)=>void;
+  onInspector?:(snapshot:InspectorSnapshot)=>void;
 }) {
   const [prepared,setPrepared]=useState<Manifest|null>(null);
   const [approved,setApproved]=useState(false);
@@ -25,6 +28,13 @@ export function InlineContextReview({selection,onCompleted,onCancelled}:{
   const [error,setError]=useState('');
   const [elapsed,setElapsed]=useState(0);
   const active=useRef<AbortController|null>(null);
+  const inspector=useRef<InspectorSnapshot|null>(null);
+  const notify=useRef(onInspector);
+  notify.current=onInspector;
+  function updateInspector(snapshot:InspectorSnapshot){
+    inspector.current=snapshot;
+    notify.current?.(snapshot);
+  }
   useEffect(()=>{
     const controller=new AbortController();
     active.current=controller;
@@ -48,7 +58,15 @@ export function InlineContextReview({selection,onCompleted,onCancelled}:{
           !('warning' in data)||typeof data.warning!=='string'||
           !('approval_required' in data)||data.approval_required!==true)
           throw new Error('Invalid approved source manifest');
-        if(!controller.signal.aborted)setPrepared(data as Manifest);
+        if(!controller.signal.aborted){
+          setPrepared(data as Manifest);
+          const item=data as Manifest;
+          updateInspector({
+            repository:item.repository,sha256:item.sha256,
+            sources:manifestSources(item.prompt,item.files),references:[],
+            completed:0,total:item.batch_count,status:'Prepared · awaiting source approval'
+          });
+        }
       }catch(e){
         if(!controller.signal.aborted)setError(e instanceof Error?e.message:'Project context unavailable');
       }finally{if(!controller.signal.aborted)setBusy(false);}
@@ -68,6 +86,7 @@ export function InlineContextReview({selection,onCompleted,onCancelled}:{
   async function execute(){
     if(!prepared||!approved||busy)return;
     setExecuting(true);setBusy(true);setError('');setPartial('');
+    if(inspector.current)updateInspector({...inspector.current,status:'Approved · starting model review'});
     setStatus('Rechecking the approved source snapshot before the first model call…');
     setElapsed(0);
     const controller=new AbortController();active.current=controller;
@@ -92,9 +111,17 @@ export function InlineContextReview({selection,onCompleted,onCancelled}:{
             const completed=typeof event.completed==='number'?event.completed:0;
             const total=typeof event.total==='number'?event.total:prepared!.batch_count;
             setStatus(String(completed)+'/'+String(total)+' batches completed · '+(event.phase==='running'?'Processing batch '+String(event.batch):'Batch '+String(event.batch)+' received'));
+            if(inspector.current)updateInspector({...inspector.current,completed,total,
+              status:event.phase==='running'?'Running · batch '+String(event.batch):'Processing completed responses'});
           }else if(event.type==='batch_reply'&&typeof event.reply==='string'&&typeof event.batch==='number'){
             const heading=prepared!.batch_count>1?'Batch '+String(event.batch)+':\n':'';
             setPartial(previous=>previous+(previous?'\n\n':'')+heading+event.reply);
+            if(inspector.current){
+              const previous=inspector.current;
+              const references=extractSourceReferences(event.reply,event.batch,previous.sources);
+              updateInspector({...previous,references:[...previous.references,...references].slice(0,200),
+                status:'Batch '+String(event.batch)+' result received'});
+            }
           }else if(event.type==='result')data=event.result;
           else if(event.type==='error')throw new Error(typeof event.error==='string'?event.error:'Review stream interrupted');
         }
@@ -111,24 +138,35 @@ export function InlineContextReview({selection,onCompleted,onCancelled}:{
         !data.review||typeof data.review!=='object'||!('reply' in data.review)||
         typeof data.review.reply!=='string')throw new Error('Invalid final review receipt');
       const receipt=data as ReviewResult;
-      const summary=(prepared.scope==='focused'?'Focused source answer: ':'Full source review: ')+(receipt.status||'unknown')+' · '+String(receipt.completed_batches??0)+'/'+String(receipt.total_batches??prepared.batch_count)+
+      if(inspector.current){
+        const current=inspector.current;
+        // Non-NDJSON endpoint also receives a finished reply, but navigation
+        // still requires exact path+line membership in the snapshot.
+        const references=current.references.length?current.references:
+          extractSourceReferences(receipt.review?.reply||'',1,current.sources);
+        updateInspector({...current,references,completed:receipt.completed_batches??current.completed,
+          total:receipt.total_batches??current.total,status:'Review '+(receipt.status||'completed')});
+      }
+      const summary=(prepared.scope==='docs'?'Documentation answer: ':prepared.scope==='focused'?'Focused source answer: ':'Full source review: ')+(receipt.status||'unknown')+' · '+String(receipt.completed_batches??0)+'/'+String(receipt.total_batches??prepared.batch_count)+
         ' batches. Eligible source coverage: '+(receipt.coverage?.all_eligible_files_included===true?'all included':'partial or see exclusions')+
         (receipt.failure?'\n'+receipt.failure:'')+'\n\n'+(receipt.review?.reply||'(No reply received)');
       onCompleted(summary);
     }catch(e){
+      if(inspector.current)updateInspector({...inspector.current,status:'Review interrupted · remote outcome unknown'});
       setApproved(false);setPrepared(null);
       setError('Review interrupted: '+(e instanceof Error?e.message:'network failure')+'. External outcome may be unknown; do not automatically retry.');
     }finally{window.clearTimeout(timer);setBusy(false);setExecuting(false);}
   }
   return <section className="surface inline-context-review" aria-label="Chat project context approval">
-    <h3>{selection.scope==='focused'?'Focused project context':'Full project review'} · {selection.repository}</h3>
-    <p className="muted">{selection.scope==='focused'?'Only relevant filename-matched excerpts and top-level build documentation are prepared. This is not full-project coverage.':'All eligible project sources are prepared within explicit safety limits.'} You approve source transmission before any model calls. No edits, commands or tests.</p>
+    <h3>{selection.scope==='docs'?'Docs-only project context':selection.scope==='focused'?'Focused project context':'Full project review'} · {selection.repository}</h3>
+    <p className="muted">Agent: <strong>{selection.agent||'No specialist selected'}</strong> · matched source references will appear live in Code Inspector. Agent selection is included in the approval digest.</p>
+    <p className="muted">{selection.scope==='docs'?'Only documentation files are prepared; Java, TypeScript, build manifests, and source code are excluded.':selection.scope==='focused'?'Only relevant filename-matched excerpts and top-level build documentation are prepared. This is not full-project coverage.':'All eligible project sources are prepared within explicit safety limits.'} You approve source transmission before any model calls. No edits, commands or tests.</p>
     {busy&&<p role="status">{status} · {elapsed}s elapsed</p>}
     {prepared&&!executing&&<div>
       <p><strong>{prepared.files.length} source files · {prepared.batch_count} potentially billable model calls</strong> · {prepared.model}</p>
       <p className="muted">Estimated AI Credit charge: unavailable (model-dependent). Actual verified credits: {typeof prepared.verified_usage_credits==='number'?String(prepared.verified_usage_credits):'not supplied by Copilot CLI'}. The batch count is exact; no currency estimate is fabricated.</p>
       <p className="muted">{prepared.warning}</p>
-      {prepared.coverage?.all_eligible_files_included===false&&<p role="status">{selection.scope==='focused'?'Focused selection only. Other files were not inspected.':'Partial coverage: some eligible files were omitted.'}</p>}
+      {prepared.coverage?.all_eligible_files_included===false&&<p role="status">{selection.scope==='docs'?'Documentation-only selection. No source code inspected.':selection.scope==='focused'?'Focused selection only. Other files were not inspected.':'Partial coverage: some eligible files were omitted.'}</p>}
       <details><summary>Inspect exact source, approval SHA-256 and exclusions</summary>
         <p>SHA-256: <code>{prepared.sha256}</code></p>
         <p>{prepared.coverage?.scope||'Selected local project'}</p>

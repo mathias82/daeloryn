@@ -86,7 +86,7 @@ def prepare(root, repository, mode, model, agent):
     return result
 
 
-def execute(prepared, approved_sha256, *, transport=copilot_chat, progress=None, cancel_event=None, parallelism=2):
+def execute(prepared, approved_sha256, *, transport=copilot_chat, progress=None, cancel_event=None, parallelism=2, resume_completed=None):
     if not isinstance(prepared, dict) or not isinstance(approved_sha256, str) or \
             len(approved_sha256) != 64 or prepared.get("sha256") != approved_sha256:
         raise PermissionError("exact paired benchmark approval required")
@@ -97,6 +97,10 @@ def execute(prepared, approved_sha256, *, transport=copilot_chat, progress=None,
             prepared["daeloryn"]["agent"] != prepared["agent"] or \
             prepared["baseline"]["agent"] is not None:
         raise PermissionError("baseline or challenger model/agent changed")
+    resume_completed=resume_completed or {}
+    if not isinstance(resume_completed, dict) or any(
+            key not in ('baseline','daeloryn') for key in resume_completed):
+        raise ValueError('invalid paired resume receipts')
     completed = {}
     for arm in ("baseline", "daeloryn"):
         if cancel_event is not None and cancel_event.is_set():
@@ -110,7 +114,8 @@ def execute(prepared, approved_sha256, *, transport=copilot_chat, progress=None,
                 progress({**event, "arm": arm})
         outcome = execute_review(source, prepared["model"], source["sha256"],
                                  transport=transport, progress=emit, stream_replies=True,
-                                 cancel_event=cancel_event, parallelism=parallelism)
+                                 cancel_event=cancel_event, parallelism=parallelism,
+                                 resume_batches=resume_completed.get(arm, {}))
         completed[arm] = outcome
         if progress:
             progress({"type": "arm_finished", "arm": arm, "status": outcome["status"]})

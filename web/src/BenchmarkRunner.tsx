@@ -14,8 +14,8 @@ type PreparedPair={
   baseline:PreparedArm;daeloryn:PreparedArm;total_model_calls:number;warning:string;
 };
 type ArmReceipt={status:string;completed_batches:number;total_batches:number;failure?:string|null;review?:{reply:string}};
-type SavedArm={status:string;completed_batches:number;total_batches:number;reply:string;failure?:string|null};
-type SavedRun={run_id:string;status:string;repository:string;mode:Mode;model:string;agent:string;created_at:string;updated_at:string;error?:string|null;arms:Record<Arm,SavedArm>;result?:PairResult|null};
+type SavedArm={status:string;completed_batches:number;total_batches:number;reply:string;failure?:string|null;batches?:Record<string,{status:string;reply:string}>};
+type SavedRun={run_id:string;status:string;repository:string;mode:Mode;model:string;agent:string;created_at:string;updated_at:string;error?:string|null;approved_sha256:string;source_sha256:string;resume_attempts?:number;arms:Record<Arm,SavedArm>;result?:PairResult|null};
 type RunSummary=Pick<SavedRun,'run_id'|'status'|'repository'|'mode'|'model'|'agent'|'created_at'|'updated_at'>;
 type PairResult={kind:string;status:string;model:string;agent:string;source_sha256:string;
   winner:string;arms:Partial<Record<Arm,ArmReceipt>>;warning:string;
@@ -53,6 +53,8 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
   const [runReceipt,setRunReceipt]=useState<SavedRun|null>(null);
   const [historyError,setHistoryError]=useState('');
   const [confirmDelete,setConfirmDelete]=useState(false);
+  const [confirmResume,setConfirmResume]=useState(false);
+  const [ackUnknown,setAckUnknown]=useState(false);
   const [runActionBusy,setRunActionBusy]=useState(false);
   const [progress,setProgress]=useState('');
   const [partial,setPartial]=useState<Record<Arm,string>>({baseline:'',daeloryn:''});
@@ -120,7 +122,7 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
   const selectedAgent=agents.some(a=>a.name===agent)?agent:agents.some(a=>a.name===defaults[mode])?defaults[mode]:agents[0]?.name||'';
   function clear(){
     setManifest(null);setApproved(false);setResult(null);setError('');
-    setSelectedRunId('');setRunReceipt(null);
+    setSelectedRunId('');setRunReceipt(null);setConfirmResume(false);setAckUnknown(false);
     setPartial({baseline:'',daeloryn:''});setProgress('');
     setAssessments(emptyAssessment());setHumanChecked(false);
   }
@@ -183,6 +185,31 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
         '. If the network failed, inspect saved runs before attempting another call.');
       setManifest(null);setApproved(false);
     }finally{inFlight.current=false;setBusy(false);}
+  }
+  async function resumeRun(){
+    if(!runReceipt||!confirmResume||runActionBusy||busy||inFlight.current||
+      !['partial','stopped','failed','interrupted'].includes(runReceipt.status)||
+      savedRuns.some(r=>r.status==='running'||r.status==='stopping'))return;
+    const id=runReceipt.run_id;
+    const all=[runReceipt.arms.baseline,runReceipt.arms.daeloryn];
+    if(!all.every(arm=>arm&&arm.batches))return;
+    const unknown=all.some(arm=>Object.values(arm.batches||{}).some(item=>item.status!=='completed'));
+    if(unknown&&!ackUnknown)return;
+    setRunActionBusy(true);setError('');
+    try{
+      const response=await fetch('/api/benchmark/runs/'+encodeURIComponent(id)+'/resume',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({approved_sha256:runReceipt.approved_sha256,acknowledge_unknown:ackUnknown})
+      });
+      const data:unknown=await response.json();
+      if(!response.ok)throw new Error(safeError(data,response.status));
+      if(!data||typeof data!=='object'||!('run_id' in data)||data.run_id!==id)
+        throw new Error('Invalid continuation receipt');
+      setConfirmResume(false);setAckUnknown(false);setRunning(true);
+      setRunReceipt(previous=>previous?.run_id===id?{...previous,status:'running'}:previous);
+      setProgress('Resuming '+id.slice(0,8)+' from remaining batches. Completed calls are skipped.');
+    }catch(e){setError('Resume rejected: '+(e instanceof Error?e.message:'request failed'));}
+    finally{setRunActionBusy(false);}
   }
   async function actOnRun(action:'stop'|'delete'){
     if(!runReceipt||runReceipt.run_id!==selectedRunId||runActionBusy)return;
@@ -249,6 +276,21 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
       {runReceipt&&runReceipt.run_id===selectedRunId&&<div className="benchmark-run-actions">
         {runReceipt.status==='running'&&<button type="button" disabled={runActionBusy} className="outline-button" onClick={()=>void actOnRun('stop')}>Stop run</button>}
         {runReceipt.status==='stopping'&&<p role="status">Stopping: in-flight provider calls may have unknown external outcomes.</p>}
+        {['partial','failed','stopped','interrupted'].includes(runReceipt.status)&&
+          <button type="button" className="outline-button"
+            disabled={runActionBusy||!runReceipt.arms.baseline?.batches||!runReceipt.arms.daeloryn?.batches}
+            onClick={()=>{setConfirmResume(true);setAckUnknown(false);setConfirmDelete(false);}}>Resume remaining batches</button>}
+        {confirmResume&&['partial','failed','stopped','interrupted'].includes(runReceipt.status)&&
+          <div role="group" aria-label="Confirm resume benchmark run" className="benchmark-delete-confirm">
+            <p><strong>Resume run {runReceipt.run_id.slice(0,8)}</strong> on the SAME source snapshot, model and agent. Completed batch responses are reused. Backend revalidates source before provider calls.</p>
+            <p>Confirmed completed batches: {(['baseline','daeloryn'] as const).map(a=>a+': '+Object.values(runReceipt.arms[a]?.batches||{}).filter(v=>v.status==='completed').length+'/'+runReceipt.arms[a]?.total_batches).join(' · ')}</p>
+            {(['baseline','daeloryn'] as const).some(a=>Object.values(runReceipt.arms[a]?.batches||{}).some(v=>v.status!=='completed'))&&
+              <label><input type="checkbox" checked={ackUnknown} onChange={e=>setAckUnknown(e.target.checked)}/>
+                I approve re-sending UNKNOWN attempts. Copilot may charge again.</label>}
+            <button type="button" disabled={runActionBusy||(['baseline','daeloryn'] as const).some(a=>Object.values(runReceipt.arms[a]?.batches||{}).some(v=>v.status!=='completed'))&&!ackUnknown}
+              onClick={()=>void resumeRun()}>Approve & resume saved run</button>
+            <button type="button" className="outline-button" onClick={()=>{setConfirmResume(false);setAckUnknown(false);}}>Cancel</button>
+          </div>}
         {runReceipt.status!=='running'&&runReceipt.status!=='stopping'&&
           <button type="button" className="outline-button benchmark-delete" disabled={runActionBusy}
             onClick={()=>setConfirmDelete(true)}>Delete run</button>}

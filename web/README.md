@@ -253,6 +253,28 @@ Show full reply control. This is explicitly **buffered display after provider
 completion**, not live token streaming. Reduced-motion users and restored messages
 show the full text immediately. Complete text is saved before animation finishes.
 
+### Copilot follow-ups after full-project source reviews
+
+The plain `/api/copilot/chat` endpoint has a 24,576-byte HTTP body cap
+and individual messages cannot exceed 3,000 characters. A previously
+completed full-project review can produce a much larger assistant reply.
+Previously, the next ordinary chat message replayed that reply as history
+and received **HTTP 413** before Copilot was invoked.
+
+Plain Copilot chat now builds the JSON request *before transmission*, keeps
+at most the ten most recent eligible previous messages, and limits the whole
+UTF-8 request to 20,000 bytes. Oversized previous messages are omitted
+entirely rather than silently truncated or replayed as source. The user sees
+the number of omitted previous messages; **saved browser history remains
+unchanged**. The newest user message is never silently truncated (a message
+over 3,000 characters is rejected locally with an explanation).
+
+Questions explicitly targeting `pom`, `pom.xml`, or Gradle build files are
+routed to **focused approved source review** in Smart Context rather than
+text-only chat, when a local checkout is selected. Source transmission
+still requires inspecting and approving the exact manifest. No automatic
+retry of an unknown provider result is attempted.
+
 ### Smart Context and readable chat history
 
 Chat defaults to **Smart (recommended)** when a registered local checkout is selected:

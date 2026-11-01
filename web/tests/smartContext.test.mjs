@@ -25,5 +25,25 @@ test('explicitly complete scans require full context approval',()=>{
 test('manual overrides are explicit',()=>{
   assert.equal(routeContext('Hello','text-only'), 'none');
   assert.equal(routeContext('What observability does my project have?','text-only'), 'none');
-  assert.equal(routeContext('Hello','full'), 'full');
+  assert.equal(routeContext('Hello','docs'), 'none');
+  assert.equal(routeContext('Explain project structure','docs'), 'docs');
+  assert.equal(routeContext('Review the entire project','docs'), 'docs');
+});
+
+
+test('build-file follow-ups use focused approved project context',()=>{
+  for(const task of ['check pom does it has bugs or deprecated libraries?',
+    'Review pom.xml dependencies and versions', 'Inspect build.gradle.kts plugins']) {
+      assert.equal(routeContext(task),'focused',task);
+  }
+  assert.equal(routeContext('Explain Maven generally'),'none');
+});
+
+test('code reviews are focused unless whole-project wording is explicit',()=>{
+ for(const task of ['Can you analyze for bugs?', 'Review my Java project for bugs',
+   'check pom does it has bugs or deprecated libraries?', 'Inspect a Spring service']) {
+   assert.equal(routeContext(task),'focused',task);
+ }
+ assert.equal(routeContext('Perform a full scan of the entire project'),'full');
+ assert.equal(routeContext('What is Java?'),'none');
 });

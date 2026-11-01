@@ -15,7 +15,7 @@ import uuid
 
 RUN_ID = re.compile(r"[0-9a-f]{32}\Z")
 MAX_RECORDS = 30
-MAX_SAVED_BYTES = 1024 * 1024
+MAX_SAVED_BYTES = 4 * 1024 * 1024
 
 
 def _utc():
@@ -137,16 +137,63 @@ class RunStore:
             target.unlink()
             return {'run_id':run_id,'deleted':True}
 
-    def start(self, prepared, approved_digest, runner):
+    def resume(self, run_id, prepared, approved_digest, runner, acknowledge_unknown=False):
+        """Explicitly approved continuation of the SAME run, never new baseline calls."""
+        with self.guard:
+            record=self._read(run_id)
+            if self.active is not None:
+                raise RuntimeError('another benchmark is still running')
+            if record.get('status') not in ('partial','failed','stopped','interrupted'):
+                raise ValueError('only incomplete terminal runs can be resumed')
+            if record.get('approved_sha256') != approved_digest or prepared.get('sha256') != approved_digest:
+                raise PermissionError('project, source, model, agent or approval changed')
+            if (record.get('source_sha256') != prepared.get('source_sha256') or
+                any(record.get(k) != prepared.get(k) for k in ('repository','mode','model','agent'))):
+                raise PermissionError('benchmark identity changed')
+            if not all(isinstance(record.get('arms',{}).get(arm,{}).get('batches'),dict)
+                       for arm in ('baseline','daeloryn')):
+                raise ValueError('This legacy run has no per-batch receipts; safe resume is unavailable')
+            completed={}
+            unknown=[]
+            for arm in ('baseline','daeloryn'):
+                entries=record['arms'][arm]['batches']
+                total=prepared[arm]['batch_count']
+                confirmed={}
+                for index, row in entries.items():
+                    if not index.isdigit() or not 1 <= int(index) <= total or not isinstance(row,dict):
+                        raise ValueError('invalid persisted batch receipts')
+                    if row.get('status')=='completed' and isinstance(row.get('reply'),str) and row['reply']:
+                        confirmed[int(index)]=row['reply']
+                    else:
+                        unknown.append('%s:%s'%(arm,index))
+                completed[arm]=confirmed
+            if not unknown and all(len(completed[arm])==prepared[arm]['batch_count']
+                                   for arm in ('baseline','daeloryn')):
+                raise ValueError('all batches are already complete')
+            if unknown and acknowledge_unknown is not True:
+                raise PermissionError('Unknown in-flight batches '+', '.join(unknown[:12])+
+                    '; acknowledge possible duplicate provider usage before retry')
+            if record.get('resume_attempts',0)>=5:
+                raise ValueError('maximum five manually approved continuation attempts')
+            record['resume_attempts']=record.get('resume_attempts',0)+1
+            record['status']='running'
+            record['error']=None
+            record['result']=None
+            record['updated_at']=_utc()
+            # start() writes the journal under the same lock and creates the
+            # worker. Do not start it if any prior run is still active.
+            return self.start(prepared,approved_digest,runner,_resume=(record,completed))
+
+    def start(self, prepared, approved_digest, runner, *, _resume=None):
         if prepared.get("sha256") != approved_digest:
             raise PermissionError("benchmark approval changed; prepare again")
         with self.guard:
             if self.active is not None:
                 raise RuntimeError("a benchmark is already running")
             self._ensure_dir()
-            if len(list(self.directory.glob("*.json"))) >= MAX_RECORDS:
+            if _resume is None and len(list(self.directory.glob("*.json"))) >= MAX_RECORDS:
                 raise ValueError("benchmark history is full (30 runs); archive old local receipts first")
-            run_id = uuid.uuid4().hex
+            run_id = uuid.uuid4().hex if _resume is None else _resume[0]['run_id']
             record = {
                 "run_id": run_id, "status": "running", "created_at": _utc(),
                 "updated_at": _utc(), "repository": prepared["repository"],
@@ -156,11 +203,11 @@ class RunStore:
                 "total_model_calls": prepared["total_model_calls"],
                 "arms": {arm: {"status": "pending", "completed_batches": 0,
                                "total_batches": prepared[arm]["batch_count"],
-                               "reply": "", "failure": None}
+                               "reply": "", "failure": None, "batches": {}}
                          for arm in ("baseline", "daeloryn")},
                 "result": None, "error": None,
                 "verified_trial": False
-            }
+            } if _resume is None else _resume[0]
             self._save(record)
             self.active = run_id
             self.active_record = record
@@ -181,8 +228,24 @@ class RunStore:
                         elif event_type == "progress":
                             row["completed_batches"] = event.get("completed", row["completed_batches"])
                             row["total_batches"] = event.get("total", row["total_batches"])
+                        elif event_type == 'batch_started':
+                            number=event.get('batch')
+                            if isinstance(number,int) and number>0:
+                                row['batches'][str(number)]={'status':'unknown','reply':''}
+                        elif event_type == 'batch_failed':
+                            number=event.get('batch')
+                            if isinstance(number,int) and number>0:
+                                row['batches'][str(number)]={'status':'unknown','reply':''}
                         elif event_type == "batch_reply" and isinstance(event.get("reply"), str):
-                            # Preserve completed batches independently of final provider result.
+                            # Per-batch receipts are persisted before the next remote call.
+                            # Bound transcript size; show truncation honestly.
+                            number=event.get('batch')
+                            if isinstance(number,int) and number>0:
+                                full=event['reply']
+                                # A resumed batch must reuse the exact response, not a
+                                # truncated paraphrase. The Copilot CLI already caps a
+                                # response to 64KiB; persist its complete text.
+                                row['batches'][str(number)]={'status':'completed','reply':full}
                             piece = event["reply"][:65536]
                             next_reply = row["reply"] + ("\n\n" if row["reply"] else "") + \
                                 ("Batch %s:\n" % event.get("batch", "?")) + piece
@@ -193,12 +256,14 @@ class RunStore:
                         # Writing+fsync for every dispatched batch is expensive.
                         # Persist material progress on completed replies/arm state;
                         # keep transient in-flight counts in memory.
-                        if event_type in ('arm_started', 'arm_finished', 'batch_reply'):
+                        if event_type in ('arm_started', 'arm_finished', 'batch_started', 'batch_failed', 'batch_reply'):
                             record["updated_at"] = _utc()
                             self._save(record)
 
-                result = runner(prepared, approved_digest, progress=progress,
-                                cancel_event=cancel_event, parallelism=2)
+                run_kwargs={'progress':progress,'cancel_event':cancel_event,'parallelism':2}
+                if _resume is not None:
+                    run_kwargs['resume_completed']=_resume[1]
+                result = runner(prepared, approved_digest, **run_kwargs)
                 with self.guard:
                     # Avoid duplicating large model transcripts in the receipt.
                     record["result"] = {

@@ -84,13 +84,15 @@ class ApprovedReviewApiTests(unittest.TestCase):
    response=conn.getresponse()
    self.assertEqual(200,response.status)
    event=json.loads(response.readline())
-   self.assertEqual("running",event["phase"])
+   self.assertEqual("batch_started",event["type"])
    self.assertTrue(entered.wait(1))
    release.set()
    events=[json.loads(line) for line in response.read().splitlines()]
-   self.assertEqual("completed_batch",events[0]["phase"])
-   self.assertEqual("batch_reply",events[1]["type"])
-   self.assertEqual("Fixture review",events[1]["reply"])
+   completed=[event for event in events if event.get("phase")=="completed_batch"]
+   replies=[event for event in events if event.get("type")=="batch_reply"]
+   self.assertEqual(1,len(completed))
+   self.assertEqual(1,len(replies))
+   self.assertEqual("Fixture review",replies[0]["reply"])
    self.assertEqual("completed",events[-1]["result"]["status"])
    self.assertIn("Fixture review",events[-1]["result"]["review"]["reply"])
 if __name__=="__main__":unittest.main()

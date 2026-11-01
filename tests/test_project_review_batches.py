@@ -87,7 +87,7 @@ class ProjectReviewBatchTests(unittest.TestCase):
             execute(second, 'sonnet', second['sha256'], transport=lambda _: self.fail('provider called'))
 
     def test_failure_preserves_completed_work_and_never_retries_unknown_outcome(self):
-        (self.project / 'App.java').write_text('\n'.join('int v%d;' % i for i in range(2000)))
+        (self.project / 'App.java').write_text('\n'.join('int v%d;' % i for i in range(5200)))
         prepared = prepare(self.root, 'demo', 'Review', 'sonnet')
         calls = []
         def transport(request, **kwargs):
@@ -154,10 +154,10 @@ class ProjectReviewBatchTests(unittest.TestCase):
         prepared = prepare(self.root, 'demo', 'Review', 'sonnet')
         events = []
         def transport(request, **kwargs):
-            self.assertEqual('running', events[-1]['phase'])
+            self.assertEqual('batch_started', events[-1]['type'])
             return {'reply': 'Completed finding'}
         result = execute(prepared, 'sonnet', prepared['sha256'], transport=transport, progress=events.append)
-        self.assertEqual(prepared['batch_count'] * 2, len(events))
+        self.assertEqual(prepared['batch_count'] * 3, len(events))
         self.assertEqual(result['completed_batches'], events[-1]['completed'])
         calls = []
         def disconnected(event):
