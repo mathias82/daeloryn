@@ -478,5 +478,5 @@ test('Workflow shows real recorded batches and never checks off unsupported patc
       overflowing:element.scrollWidth>element.clientWidth+1};
   });
   expect(layout.overflowing).toBe(false);
-  expect(layout.columns.trim().split(/\\s+/).length).toBe(1);
+  expect(layout.columns.trim().split(/\s+/).length).toBe(1);
 });
