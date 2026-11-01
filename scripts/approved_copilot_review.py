@@ -178,9 +178,9 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
                                    'Remaining batches not invoked; no retry performed.')
                 if cancel_event is not None and cancel_event.is_set():
                     failure = 'Stop requested; pending batches not invoked. Provider outcomes may be unknown.'
-                if failure is None and time.monotonic()-started >= MAX_SECONDS:
+                if failure is None and attempted < len(requests) and time.monotonic()-started >= MAX_SECONDS:
                     failure = 'Local time budget reached; remaining batches not invoked.'
-                if failure is None and total_output >= MAX_REVIEW_OUTPUT:
+                if failure is None and attempted < len(requests) and total_output >= MAX_REVIEW_OUTPUT:
                     failure = 'Output budget reached; remaining batches not invoked.'
                 dispatch()
         replies = [results[i] for i in sorted(results)]
