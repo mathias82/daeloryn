@@ -310,6 +310,16 @@ test('Benchmarks runs approved paired read-only Copilot A/B and never invents a 
   await expect(runner.getByText('Daeloryn found A and B')).toBeVisible();
   await expect(runner.getByText('Baseline found A')).toBeVisible();
   expect(calls).toEqual(['prepare','execute']);
+  await expect(runner.getByText('No reviewed result yet')).toBeVisible();
+  await runner.getByLabel('baseline confirmed defects').fill('1');
+  await runner.getByLabel('baseline false positives').fill('2');
+  await runner.getByLabel('baseline evidence references').fill('App.java:1 baseline reviewed');
+  await runner.getByLabel('daeloryn confirmed defects').fill('2');
+  await runner.getByLabel('daeloryn false positives').fill('1');
+  await runner.getByLabel('daeloryn evidence references').fill('App.java:1 specialist reviewed');
+  await runner.getByRole('checkbox',{name:/I manually checked source evidence/}).check();
+  await expect(runner.getByText(/Human-assessed pilot advantage: Daeloryn/)).toBeVisible();
+  await expect(runner.getByText('Winner: Not determined')).toBeVisible();
 });
 
 test('Benchmarks cannot call Copilot before explicit approval',async({page})=>{
