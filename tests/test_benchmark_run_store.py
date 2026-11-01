@@ -22,10 +22,19 @@ class BenchmarkRunStoreTests(unittest.TestCase):
         self.addCleanup(self.tmp.cleanup)
         self.directory=Path(self.tmp.name)/"private"/"runs"
         self.store=RunStore(self.directory)
+        # Worker completion must precede TemporaryDirectory cleanup. Under
+        # Python 3.12/macOS, async atomic replaces may otherwise race rmtree.
+        self.addCleanup(self.await_worker_completion)
         self.prepared={
             "repository":"demo","mode":"review","model":"test","agent":"java-reviewer",
             "source_sha256":"a"*64,"sha256":"b"*64,"total_model_calls":2,
             "baseline":{"batch_count":1},"daeloryn":{"batch_count":1}}
+    def await_worker_completion(self):
+        deadline=time.monotonic()+5
+        while self.store.active is not None and time.monotonic()<deadline:
+            time.sleep(0.02)
+        self.assertIsNone(self.store.active, "benchmark worker must stop before fixture teardown")
+
     def test_persists_across_new_instances_and_preserves_partial_results(self):
         released=threading.Event()
         started=threading.Event()
