@@ -88,6 +88,46 @@ class CampaignTests(unittest.TestCase):
             self.assertIn(java['task'],java['baseline']['prompt'])
             self.assertIn(java['task'],java['daeloryn']['prompt'])
             self.assertTrue(java['approval_required'])
+    def test_project_scoped_java_spring_react_and_mixed_agent_queues(self):
+        java = {"name":"java-app","technologies":["java","java-maven"]}
+        spring = {"name":"spring-service","technologies":["java","java-maven","spring"]}
+        react = {"name":"react-ui","technologies":["node","react","typescript"]}
+        mixed = {"name":"fullstack","technologies":["java","spring","node","react","docker"]}
+        runs = [{"run_id":"a"*32,"repository":"java-app","agent":"java-architect",
+                 "status":"completed"}]
+        comparisons = [{"run_id":"a"*32,"repository":"java-app","agent":"java-architect",
+                        "status":"completed","evaluation_status":"provisional_traceability",
+                        "baseline_score":20,"daeloryn_score":32,
+                        "provisional_evidence_lead":"daeloryn"}]
+        report = campaign_report(runs, comparisons, agents=self.agents,
+                                 projects=[java,spring,react,mixed])
+        entries = {row["repository"]:row for row in report["project_campaigns"]}
+        self.assertEqual(4,len(entries))
+        self.assertEqual("java-developer",entries["java-app"]["next_agent"])
+        self.assertEqual(1,entries["java-app"]["provisionally_assessed"])
+        self.assertEqual(0,entries["spring-service"]["provisionally_assessed"])
+        self.assertEqual("java-architect",entries["spring-service"]["next_agent"])
+        self.assertEqual("react-architect",entries["react-ui"]["next_agent"])
+        self.assertEqual("java-architect",entries["fullstack"]["next_agent"])
+        java_names = {x["agent"] for x in entries["java-app"]["entries"] if x["applicable"]}
+        spring_names = {x["agent"] for x in entries["spring-service"]["entries"] if x["applicable"]}
+        react_names = {x["agent"] for x in entries["react-ui"]["entries"] if x["applicable"]}
+        mixed_names = {x["agent"] for x in entries["fullstack"]["entries"] if x["applicable"]}
+        self.assertIn("java-reviewer",java_names)
+        self.assertNotIn("spring-boot-engineer",java_names)
+        self.assertNotIn("react-reviewer",java_names)
+        self.assertIn("spring-boot-engineer",spring_names)
+        self.assertIn("react-testing",react_names)
+        self.assertNotIn("java-reviewer",react_names)
+        self.assertNotIn("spring-framework-expert",react_names)
+        self.assertIn("java-reviewer",mixed_names)
+        self.assertIn("spring-framework-expert",mixed_names)
+        self.assertIn("react-reviewer",mixed_names)
+        self.assertIn("docker-engineer",mixed_names)
+        skipped = [row for row in entries["react-ui"]["entries"] if row["agent"]=="java-reviewer"][0]
+        self.assertEqual("not_applicable",skipped["state"])
+        self.assertIsNone(skipped["traceability_scores"])
+
     def test_http_campaign_endpoint_is_read_only_and_has_all_roles(self):
         with tempfile.TemporaryDirectory() as directory:
             httpd=ThreadingHTTPServer(('127.0.0.1',0),
