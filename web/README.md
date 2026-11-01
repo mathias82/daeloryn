@@ -117,6 +117,42 @@ development workstation without external isolation and authorization. For a
 real **Bug Fix + Regression Tests** contest, use the separately documented
 frozen-test/isolated evaluator protocol until the secure runner is integrated.
 
+## Persistent A/B benchmarks and live workflow progress
+
+- **Overview → Discovered models** counts the provider-advertised Copilot and
+  Ollama catalog entries separately. These are *not* verified sessions or proof
+  of availability for inference.
+- **Benchmarks → Prepare → Approve & run A/B** now starts a durable loopback
+  background worker, not an HTTP response-owned run. Each approved attempt gets
+  a new ID. **Saved A/B runs** lists up to 30 runs; selecting one restores
+  transcripts, batch counts, status and per-arm failure details across page
+  navigation and refresh.
+- Private run receipts are stored under
+  `~/.daeloryn/benchmark-runs/*.json` with restricted file permissions.
+  Model responses may contain confidential content. The source snapshot and
+  exact user approval prompts are **not** written to run receipts. Back up or
+  protect the directory accordingly. The UI provides no deletion of benchmark
+  receipts yet; chat deletion does not delete them.
+- If the server crashes/restarts mid-run, the saved status is marked
+  **interrupted**, not successful. A partially completed baseline or specialist
+  is preserved without automatic retry. Source approval, model and batch limits
+  are still validated before the run starts. History storage is bounded to 30
+  runs (new attempts are rejected when full rather than silently deleting data).
+- **Workflows** is now an evidence-based view of these recorded A/B runs:
+  source approval, baseline and specialist progress and failure receipts. Steps
+  requiring independent defect review, patch writes, tests and GitHub publication
+  remain explicitly pending/not available; no boxes can manufacture completed
+  stages. The review pipeline remains **read-only**.
+- **Chat → Recent chats** supports deleting one selected conversation with
+  confirmation. The remaining conversations persist in browser localStorage;
+  when deleting the last one, an empty replacement chat is created. Pending
+  source approval or model calls block deletion to avoid orphaned outcomes.
+
+Previous in-memory benchmark results that disappeared before this feature
+cannot be recovered. A brand-new approved run is required to populate the
+new durable history; do not repeat an uncertain prior run without reconciling
+its external provider usage.
+
 ## Production integration requirements
 
 Before enabling any remote functionality: authenticate users, enforce backend authorization per workspace and agent, use CSRF protections as appropriate, enforce server-side request limits, never accept arbitrary shell commands, use isolated workers and ephemeral scoped credentials, require explicit approval for write actions, and expose independently validated execution events. The frontend must distinguish requested model from verified model identity. Do not claim live execution from a CLI invocation alone.
