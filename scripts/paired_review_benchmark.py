@@ -86,7 +86,7 @@ def prepare(root, repository, mode, model, agent):
     return result
 
 
-def execute(prepared, approved_sha256, *, transport=copilot_chat, progress=None):
+def execute(prepared, approved_sha256, *, transport=copilot_chat, progress=None, cancel_event=None, parallelism=2):
     if not isinstance(prepared, dict) or not isinstance(approved_sha256, str) or \
             len(approved_sha256) != 64 or prepared.get("sha256") != approved_sha256:
         raise PermissionError("exact paired benchmark approval required")
@@ -99,6 +99,8 @@ def execute(prepared, approved_sha256, *, transport=copilot_chat, progress=None)
         raise PermissionError("baseline or challenger model/agent changed")
     completed = {}
     for arm in ("baseline", "daeloryn"):
+        if cancel_event is not None and cancel_event.is_set():
+            break
         source = prepared[arm]
         if progress:
             progress({"type": "arm_started", "arm": arm,
@@ -107,7 +109,8 @@ def execute(prepared, approved_sha256, *, transport=copilot_chat, progress=None)
             if progress:
                 progress({**event, "arm": arm})
         outcome = execute_review(source, prepared["model"], source["sha256"],
-                                 transport=transport, progress=emit, stream_replies=True)
+                                 transport=transport, progress=emit, stream_replies=True,
+                                 cancel_event=cancel_event, parallelism=parallelism)
         completed[arm] = outcome
         if progress:
             progress({"type": "arm_finished", "arm": arm, "status": outcome["status"]})
@@ -120,8 +123,10 @@ def execute(prepared, approved_sha256, *, transport=copilot_chat, progress=None)
         "run_id": uuid.uuid4().hex, "repository": prepared["repository"],
         "source_sha256": prepared["source_sha256"], "approved_sha256": approved_sha256,
         "mode": prepared["mode"], "model": prepared["model"], "agent": prepared["agent"],
-        "status": "completed" if success else "partial",
+        "status": ("stopped" if cancel_event is not None and cancel_event.is_set() else
+                   "completed" if success else "partial"),
         "arms": completed, "total_model_calls": prepared["total_model_calls"],
+        "batch_parallelism": parallelism, "cancel_requested": bool(cancel_event and cancel_event.is_set()),
         "independent_checks_executed": False,
         "model_identity_verified": False, "agent_selection_verified": False,
         "comparable_source_and_task": True,
