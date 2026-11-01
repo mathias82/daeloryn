@@ -24,7 +24,7 @@ def preview(root, repository, path, replacement):
         raise ValueError("unsafe file")
     if file.stat().st_size>MAX_SOURCE_BYTES:
         raise ValueError("source file too large")
-    original=file.read_text(encoding="utf-8")
+    original=file.read_bytes().decode("utf-8")
     return proposal(path,original,replacement)
 
 def verify_preview(root, repository, path, replacement, digest):

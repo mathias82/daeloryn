@@ -30,6 +30,25 @@ class DeveloperTests(unittest.TestCase):
   def transport(*args,**kwargs):
    self.file.write_text('class Concurrent {}\n');return {'reply':'class Proposed {}\n'}
   with self.assertRaises(PermissionError):execute(p,p['sha256'],self.root,transport=transport)
+ def test_crlf_handoff_hash_preview_and_apply_preserve_exact_bytes(self):
+  from unittest.mock import patch
+  from approved_patch_apply import apply
+  original = b'class App { int x = 0; }\r\n'
+  replacement = 'class App { int x = 1; }\r\n'
+  self.file.write_bytes(original)
+  prepared = prepare(self.root,'demo','App.java','Review','sonnet')
+  self.assertEqual(original.decode(),prepared['source'])
+  result = execute(prepared,prepared['sha256'],self.root,transport=lambda *a,**kw:{'reply':replacement})
+  self.assertEqual(original,self.file.read_bytes())
+  with patch('engineering_executor.command',return_value={'returncode':0,'output':''}):
+   applied = apply(self.root,'demo','App.java',replacement,result['patch']['sha256'],'daeloryn/crlf-fix')
+  self.assertTrue(applied['applied'])
+  self.assertEqual(replacement.encode(),self.file.read_bytes())
+  # Even a newline-only modification must invalidate the exact source approval.
+  self.file.write_bytes(original.replace(b'\r\n',b'\n'))
+  changed = prepare(self.root,'demo','App.java','Review','sonnet')
+  with self.assertRaises(PermissionError):
+   execute(changed,prepared['sha256'],self.root,transport=lambda *a,**kw:self.fail('provider invoked'))
  def test_paths_redaction_and_auto_rejected(self):
   for path in ['../App.java','/etc/passwd','missing.java']:
    with self.assertRaises(ValueError):prepare(self.root,'demo',path,'Review','sonnet')
