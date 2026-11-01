@@ -1,5 +1,5 @@
 import {useEffect,useState} from 'react';
-export function ProgressiveReply({text,animate}:{text:string;animate:boolean}){
+export function ProgressiveReply({text,animate,onProgress}:{text:string;animate:boolean;onProgress?:()=>void}){
  const [visible,setVisible]=useState(animate?0:text.length);
  useEffect(()=>{
   if(!animate||window.matchMedia('(prefers-reduced-motion: reduce)').matches){setVisible(text.length);return;}
@@ -13,5 +13,6 @@ export function ProgressiveReply({text,animate}:{text:string;animate:boolean}){
   }),30);
   return()=>window.clearInterval(timer);
  },[text,animate]);
+ useEffect(()=>{if(animate)onProgress?.();},[visible,animate,onProgress]);
  return <><p>{text.slice(0,visible)}</p>{visible<text.length&&<div className="reply-progress"><small>Displaying completed provider response…</small><button type="button" className="text-action" onClick={()=>setVisible(text.length)}>Show full reply</button></div>}</>;
 }
