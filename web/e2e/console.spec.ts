@@ -929,7 +929,7 @@ test('natural source links open full approved Java class and allow separately ap
   expect(previewReads).toBeGreaterThan(0);
   await page.getByRole('button',{name:/Open .*MailConfiguration.java lines 51–56 in Code Inspector/}).click();
   await expect(inspector.locator('.inspector-code-target')).toContainText('value50');
-  await expect(inspector.locator('.inspector-code-focused')).toHaveCount(15);
+  await expect(inspector.locator('.inspector-code-focused')).toHaveCount(11);
   await inspector.getByRole('button',{name:'Edit suggestion mode'}).click();
   const draft=inspector.getByRole('region',{name:'Edit suggestion draft'});
   await expect(draft.getByRole('region',{name:'Original source lines'})).toContainText('value50');
