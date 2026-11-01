@@ -53,3 +53,9 @@ test('Greek requests to inspect code or identify classes prepare project context
  assert.equal(routeContext('διάβασε τον κώδικα','text-only'),'none');
  assert.equal(routeContext('χρησιμοποίησε εργαλεία να δεις τον κώδικα','docs'),'docs');
 });
+
+
+test('read and list project classes never fall through to plain chat',()=>{
+ for(const task of ['read the project class and send me the classes','list the project classes','read my code','list classes in the project','list classes','show methods'])assert.equal(routeContext(task),'focused');
+ assert.equal(routeContext('read the project class and send me the classes','text-only'),'none');
+});

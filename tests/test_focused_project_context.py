@@ -20,6 +20,8 @@ class FocusedContextTests(unittest.TestCase):
         (self.project / 'Unmatched.java').write_text('class Unmatched {}', encoding='utf-8')
         context = snapshot_focused(self.parent, 'demo', 'χρησιμοποιησε εργαλεια να δεις τον κωδικα και πες μου ποιες ειναι')
         self.assertTrue(any(item['path'].endswith('.java') for item in context['files']))
+        english = snapshot_focused(self.parent, 'demo', 'read the project class and send me the classes')
+        self.assertTrue(any(item['path'].endswith('.java') for item in english['files']))
 
     def setUp(self):
         self.temp = TemporaryDirectory()

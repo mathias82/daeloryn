@@ -919,3 +919,16 @@ test('Greek use-tools request prepares source instead of calling text-only chat'
  await expect(page.getByRole('checkbox',{name:/I inspected the exact source/})).toBeVisible();
  expect(chatCalls).toBe(0);
 });
+
+test('English read classes request prepares source instead of calling text-only chat',async({page})=>{
+ let chatCalls=0;
+ page.on('request',r=>{if(r.url().endsWith('/api/copilot/chat')&&r.method()==='POST')chatCalls++;});
+ await page.route('**/api/copilot/review/prepare',async route=>{const body=route.request().postDataJSON();expect(body.scope).toBe('focused');await route.fulfill({json:{...body,prompt:'class Fixture {}',sha256:'a'.repeat(64),files:['Fixture.java'],warning:'Fixture',agent_profile:null,agent_profile_sha256:null,batch_count:1,approval_required:true}});});
+ await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+ await page.getByLabel(/^Copilot model/).selectOption(models[0]);
+ await page.getByLabel(/^Local repository/).selectOption('demo');
+ await page.getByRole('textbox',{name:'Message',exact:true}).fill('read the project class and send me the classes');
+ await page.getByRole('textbox',{name:'Message',exact:true}).press('Enter');
+ await expect(page.getByRole('checkbox',{name:/I inspected the exact source/})).toBeVisible();
+ expect(chatCalls).toBe(0);
+});
