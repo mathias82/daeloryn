@@ -13,7 +13,7 @@ from docs_project_context import snapshot_docs
 from copilot_chat import copilot_chat, validate
 from copilot_agents import resolve_agent
 
-MAX_PROMPT_CHARS = 23500
+MAX_PROMPT_CHARS = 38000
 MAX_BATCHES = 64
 MAX_SECONDS = 300
 MAX_REVIEW_OUTPUT = 256 * 1024
@@ -97,7 +97,7 @@ def prepare(root, repository, task, model, agent=None, *, _context=None, scope='
             'coverage': {key: value for key, value in context.items() if key != 'files'},
             'source_transmitted': False, 'approval_required': True,
             'estimated_provider_calls': len(prompts), 'verified_usage_credits': None,
-            'warning': 'Inspect all source before approval. Heuristic redaction is not a secret scanner. Each batch is a separate potentially billable model call. Review stops after 5 minutes or output budget; partial outcomes are reported. Cross-batch reasoning is not guaranteed.'}
+            'warning': 'Inspect all source before approval. Heuristic redaction is not a secret scanner. Batches use up to 38k characters, within the local Copilot CLI request cap (provider acceptance unverified). Each batch is a separate potentially billable model call. Review stops after 5 minutes or output budget; partial outcomes can be resumed only from verified receipts. Cross-batch reasoning is not guaranteed.'}
 
 
 def execute(prepared, model, approved_digest, *, transport=copilot_chat, progress=None, stream_replies=False, cancel_event=None, parallelism=1, resume_batches=None):
