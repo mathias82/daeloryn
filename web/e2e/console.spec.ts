@@ -506,7 +506,7 @@ test('Stop benchmark requests backend cancellation without deleting the run',asy
   await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
   const runner=page.getByRole('region',{name:'Paired benchmark runner'});
   await expect(runner.getByRole('button',{name:'Stop run'})).toBeVisible();
-  await expect(runner.getByText('1/52 batches',{exact:false})).toBeVisible();
+  await expect(runner.getByText('running · 1/52 batches',{exact:true})).toBeVisible();
   await runner.getByRole('button',{name:'Stop run'}).click();
   await expect(runner.getByText(/Stopping: in-flight provider calls/)).toBeVisible();
   expect(calls).toEqual(['stop']);
