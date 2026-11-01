@@ -27,14 +27,14 @@ class LocalProjectsTests(unittest.TestCase):
 
     def test_nested_preview_does_not_persist_and_skips_dependencies(self):
         (self.base / 'node_modules' / 'hidden' / '.git').mkdir(parents=True)
-        rows = candidates(str(self.base), True)
+        rows = candidates(str(self.base), True, [self.base])
         self.assertEqual({'one', 'two'}, {row['name'] for row in rows})
         self.assertFalse(self.file.exists())
 
     def test_exact_registration_persists_without_authorizing_sibling(self):
-        store = ProjectRegistry(self.file)
+        store = ProjectRegistry(self.file, [self.base])
         store.add([str(self.one)], [])
-        self.assertEqual([str(self.one)], [row['path'] for row in ProjectRegistry(self.file).list()])
+        self.assertEqual([str(self.one)], [row['path'] for row in ProjectRegistry(self.file, [self.base]).list()])
         self.assertEqual([str(self.one)], json.loads(self.file.read_text()))
         if os.name != 'nt':
             self.assertEqual(0o600, self.file.stat().st_mode & 0o777)
@@ -43,33 +43,33 @@ class LocalProjectsTests(unittest.TestCase):
     def test_reject_non_git_relative_symlinks_and_worktrees(self):
         for value in ['relative/path', str(self.base), str(self.base / '..')]:
             with self.assertRaises(ValueError):
-                candidates(value)
+                candidates(value, allowed_roots=[self.base])
         alias = self.base / 'alias'
         try:
             alias.symlink_to(self.one, target_is_directory=True)
         except OSError:
             return
         with self.assertRaises(ValueError):
-            candidates(str(alias))
+            candidates(str(alias), allowed_roots=[self.base])
         worktree = self.base / 'worktree'
         worktree.mkdir()
         (worktree / '.git').write_text('gitdir: elsewhere')
         with self.assertRaises(ValueError):
-            candidates(str(worktree))
+            candidates(str(worktree), allowed_roots=[self.base])
 
     def test_collision_rejected_after_restart_and_duplicate_add_is_idempotent(self):
-        store = ProjectRegistry(self.file)
+        store = ProjectRegistry(self.file, [self.base])
         store.add([str(self.one)], [])
         store.add([str(self.one)], store.list())
         self.assertEqual(1, len(store.list()))
         duplicate = self.base / 'other' / 'one'
         (duplicate / '.git').mkdir(parents=True)
         with self.assertRaises(ValueError):
-            ProjectRegistry(self.file).add([str(duplicate)], [])
+            ProjectRegistry(self.file, [self.base]).add([str(duplicate)], [])
         self.assertEqual([str(self.one)], json.loads(self.file.read_text()))
 
     def test_catalog_limit_and_registry_symlink_rejected_without_write(self):
-        store = ProjectRegistry(self.file)
+        store = ProjectRegistry(self.file, [self.base])
         existing = [{'name': 'other', 'path': str(self.two)}]
         with patch('local_projects.MAX_PROJECTS', 1):
             with self.assertRaises(ValueError):
@@ -87,7 +87,7 @@ class LocalProjectsTests(unittest.TestCase):
         self.assertEqual('[]', target.read_text())
 
     def test_stale_path_and_oversized_registry(self):
-        store = ProjectRegistry(self.file)
+        store = ProjectRegistry(self.file, [self.base])
         store.add([str(self.one)], [])
         self.one.rename(self.one.with_name('moved'))
         self.assertEqual([], store.list())
@@ -95,13 +95,20 @@ class LocalProjectsTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             store.list()
 
+    def test_picker_confines_paths_before_inspection(self):
+        for value in ['/etc', str(self.base) + '-private/project', str(self.base / '..' / 'elsewhere')]:
+            with patch('local_projects.Path.is_symlink') as inspect:
+                with self.assertRaises(ValueError):
+                    candidates(value, allowed_roots=[self.base])
+                inspect.assert_not_called()
+
     def test_bounded_search(self):
         with patch('local_projects.MAX_ENTRIES', 1):
             with self.assertRaises(ValueError):
-                candidates(str(self.base), True)
+                candidates(str(self.base), True, [self.base])
 
     def start_api(self, enabled=True):
-        server = ThreadingHTTPServer(('127.0.0.1', 0), make_handler(projects_file=self.file if enabled else None))
+        server = ThreadingHTTPServer(('127.0.0.1', 0), make_handler(projects_file=self.file if enabled else None, project_picker_roots=[self.base]))
         thread = Thread(target=server.serve_forever, daemon=True)
         thread.start()
         self.addCleanup(server.server_close)

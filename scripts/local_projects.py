@@ -15,19 +15,27 @@ MAX_DEPTH = 8
 EXCLUDED = {'.git', 'node_modules', '.venv', 'venv', 'target', 'build', 'dist', 'vendor'}
 
 
-def real_directory(value):
+def real_directory(value, allowed_roots=None):
     if not isinstance(value, str) or not value.strip() or len(value) > 4096 or any(ord(c) < 32 for c in value):
         raise ValueError('Enter an absolute local directory path')
-    path = Path(value).expanduser()
-    if not path.is_absolute() or any(part == '..' for part in path.parts):
+    if not os.path.isabs(os.path.expanduser(value)) or '..' in Path(value).parts:
         raise ValueError('Use an absolute path without parent traversal')
-    if any(p.is_symlink() for p in (path, *path.parents)) or not path.is_dir():
-        raise ValueError('Directory must exist and must not use symbolic links')
-    return path.resolve(strict=True)
+    normalized = os.path.abspath(os.path.expanduser(value))
+    roots = allowed_roots if allowed_roots is not None else [Path.home() / 'IdeaProjects']
+    # Authorize a normalized path before any filesystem inspection. The separator
+    # prevents prefix lookalikes such as IdeaProjects-private from matching.
+    for root in roots:
+        trusted = os.path.abspath(os.fspath(root))
+        if normalized == trusted or normalized.startswith(trusted.rstrip(os.sep) + os.sep):
+            path = Path(normalized)
+            if any(p.is_symlink() for p in (path, *path.parents)) or not path.is_dir():
+                raise ValueError('Directory must exist and must not use symbolic links')
+            return path.resolve(strict=True)
+    raise ValueError('Folder is outside configured project-picker roots; start the API with --project-picker-root /trusted/parent')
 
 
-def project(value):
-    path = real_directory(value)
+def project(value, allowed_roots=None):
+    path = real_directory(value, allowed_roots)
     if not NAME.fullmatch(path.name):
         raise ValueError('Unsupported project name (use letters, digits, dots, underscores or hyphens)')
     git = path / '.git'
@@ -41,10 +49,10 @@ def project(value):
     return {'name': path.name, 'path': str(path), 'technologies': technologies}
 
 
-def candidates(value, recursive=False):
-    base = real_directory(value)
+def candidates(value, recursive=False, allowed_roots=None):
+    base = real_directory(value, allowed_roots)
     if not recursive:
-        return [project(str(base))]
+        return [project(str(base), allowed_roots)]
     result, visited = [], 0
     stack = [(base, 0)]
     while stack:
@@ -52,7 +60,7 @@ def candidates(value, recursive=False):
         if depth > MAX_DEPTH:
             raise ValueError('Folder search exceeds depth 8; choose a narrower folder')
         if (directory / '.git').is_dir() and not (directory / '.git').is_symlink():
-            result.append(project(str(directory)))
+            result.append(project(str(directory), allowed_roots))
             if len(result) > MAX_PROJECTS:
                 raise ValueError('More than 100 projects; choose a narrower folder')
         with os.scandir(directory) as entries:
@@ -78,7 +86,8 @@ def choose_directory():
 
 
 class ProjectRegistry:
-    def __init__(self, file):
+    def __init__(self, file, allowed_roots=None):
+        self.allowed_roots = list(allowed_roots) if allowed_roots is not None else [Path.home() / "IdeaProjects"]
         self.file = Path(file).expanduser()
         self.lock = Lock()
         self.picker_lock = Lock()
@@ -103,7 +112,7 @@ class ProjectRegistry:
             rows = []
             for path in self._read():
                 try:
-                    rows.append(project(path))
+                    rows.append(project(path, self.allowed_roots))
                 except (OSError, ValueError):
                     continue  # Deleted/moved projects are never re-authorized by name alone.
             return rows
@@ -111,7 +120,7 @@ class ProjectRegistry:
     def add(self, paths, existing):
         if not isinstance(paths, list) or not paths or len(paths) > MAX_PROJECTS:
             raise ValueError('Select between 1 and 100 projects')
-        selected = [project(path) for path in paths]
+        selected = [project(path, self.allowed_roots) for path in paths]
         with self.lock:
             saved = self._read()
             combined = list(dict.fromkeys(saved + [row['path'] for row in selected]))
@@ -121,7 +130,7 @@ class ProjectRegistry:
             saved_rows = []
             for path in saved:
                 try:
-                    saved_rows.append(project(path))
+                    saved_rows.append(project(path, self.allowed_roots))
                 except (ValueError, OSError):
                     continue
             if len({row['path'] for row in existing + saved_rows + selected}) > MAX_PROJECTS:

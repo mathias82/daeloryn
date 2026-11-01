@@ -87,6 +87,7 @@ def main(argv=None):
     parser.add_argument('--enable-project-picker', action='store_true')
     parser.add_argument('--enable-github-repositories', action='store_true')
     parser.add_argument('--repository-root', action='append', default=[])
+    parser.add_argument('--project-picker-root', action='append', default=[])
     parser.add_argument('--projects-file')
     parser.add_argument('--records-dir')
     parser.add_argument('--workflow-dir')
@@ -105,6 +106,8 @@ def main(argv=None):
                 api.append('--' + flag.replace('_', '-'))
         for root in args.repository_root:
             api.extend(['--repository-root', root])
+        for root in args.project_picker_root:
+            api.extend(['--project-picker-root', root])
         for flag in ('projects_file', 'records_dir', 'workflow_dir'):
             if getattr(args, flag):
                 api.extend(['--' + flag.replace('_', '-'), getattr(args, flag)])

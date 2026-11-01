@@ -73,8 +73,8 @@ def benchmark_data(records_dir=None):
     return {**report, "trials": trials}
 
 
-def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repository_roots=(), enable_github_repositories=False, workflow_dir=None, projects_file=None):
-    registry = ProjectRegistry(projects_file) if projects_file is not None else None
+def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repository_roots=(), enable_github_repositories=False, workflow_dir=None, projects_file=None, project_picker_roots=None):
+    registry = ProjectRegistry(projects_file, project_picker_roots) if projects_file is not None else None
 
     def repository_catalog():
         rows = discover(repository_roots)
@@ -203,7 +203,7 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                         finally:
                             registry.picker_lock.release()
                     elif action == "preview" and set(payload) == {"action", "path", "recursive"} and isinstance(payload["recursive"], bool):
-                        result = {"candidates": candidates(payload["path"], payload["recursive"])}
+                        result = {"candidates": candidates(payload["path"], payload["recursive"], registry.allowed_roots)}
                     elif action == "add" and set(payload) == {"action", "paths", "approved"} and payload["approved"] is True:
                         registry.add(payload["paths"], repository_catalog())
                         result = {"repositories": repository_catalog()}
@@ -456,6 +456,7 @@ def main():
     p.add_argument("--repository-root", type=Path, action="append", default=[], help="trusted parent directory of local git checkouts (repeatable)")
     p.add_argument("--enable-project-picker", action="store_true", help="allow explicit local project registration and native macOS folder chooser")
     p.add_argument("--projects-file", type=Path, default=Path.home() / ".config" / "daeloryn" / "projects.json", help="local project registry (used only with --enable-project-picker)")
+    p.add_argument("--project-picker-root", type=Path, action="append", help="trusted folder boundary for popup selections (repeatable; default ~/IdeaProjects)")
     a = p.parse_args()
     if not 1024 <= a.port <= 65535:
         p.error("port must be 1024..65535")
@@ -467,7 +468,7 @@ def main():
         discover(a.repository_root)
     except (OSError, ValueError) as exc:
         p.error("invalid repository roots: " + str(exc))
-    server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(a.records_dir, a.enable_local_chat, a.enable_copilot_chat, a.repository_root, a.enable_github_repositories, a.workflow_dir, a.projects_file if a.enable_project_picker else None))
+    server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(a.records_dir, a.enable_local_chat, a.enable_copilot_chat, a.repository_root, a.enable_github_repositories, a.workflow_dir, a.projects_file if a.enable_project_picker else None, a.project_picker_root))
     print("Daeloryn local console API listening on http://127.0.0.1:" + str(a.port), flush=True)
     try:
         server.serve_forever()

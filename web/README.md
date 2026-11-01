@@ -129,3 +129,11 @@ shell, and atomically writes a private registry file. It is a local single-user
 feature, not production authentication or a sandbox. Native dialog timeout and
 cancellation do not authorize a project. Native macOS interaction must be manually
 verified on a Mac; automated tests use a chooser fake.
+
+Project picker access is confined to `~/IdeaProjects` by default. To allow another
+trusted parent, explicitly start with `--project-picker-root /absolute/parent`
+(repeatable; explicit values replace the default). Both preview and registration
+validate normalized path boundaries before filesystem inspection. Prefix lookalike
+folders, parent traversal and symlink escapes are rejected. Saved projects outside
+the current allowed roots are not exposed. This does not change the separately
+configured `--repository-root` catalog.
