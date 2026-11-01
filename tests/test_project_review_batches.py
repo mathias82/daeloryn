@@ -26,7 +26,10 @@ class ProjectReviewBatchTests(unittest.TestCase):
         (self.project / 'pom.xml').write_text('<project/>')
         prepared = prepare(self.root, 'demo', 'Review', 'sonnet')
         self.assertEqual(10, len(prepared['files']))
-        self.assertGreater(prepared['batch_count'], 1)
+        self.assertGreaterEqual(prepared['batch_count'], 1)
+        with patch('approved_copilot_review.MAX_PROMPT_CHARS', 16000):
+            smaller = prepare(self.root, 'demo', 'Review', 'sonnet')
+        self.assertGreater(smaller['batch_count'], prepared['batch_count'])
         self.assertIn('value1499', prepared['prompt'])
         self.assertIn('"end_line": 1500', prepared['prompt'])
         self.assertTrue(prepared['coverage']['all_eligible_files_included'])
