@@ -181,3 +181,10 @@ require human verification. No edits, builds or tests are performed.
 The plain chat request limits remain unchanged. Only server-prepared, digest-approved
 review batches use an internal 24,000-character message allowance; clients cannot
 enable that allowance through arbitrary JSON fields.
+
+Review batching groups contiguous source into compact blocks carrying the file,
+original starting line/column and ending line. File paths are not repeated for
+every individual line. This preserves every character of included source and
+original evidence coordinates while reducing unnecessary context expansion. The
+64-call approval limit and source/request budgets remain unchanged. If genuinely
+over budget, preparation reports the required call count before any provider call.

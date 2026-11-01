@@ -20,6 +20,26 @@ def display_prompts(prompts):
     return prompts[0] if len(prompts) == 1 else '\n\n'.join('=== Batch %d ===\n%s' % (i + 1, prompt) for i, prompt in enumerate(prompts))
 
 
+def source_blocks(item):
+    """Losslessly group adjacent characters with original source coordinates."""
+    parts, size, first_line, first_column, last_line = [], 0, 1, 1, 1
+    for number, line in enumerate(item['source'].splitlines(keepends=True) or [''], 1):
+        for offset in range(0, max(1, len(line)), 3000):
+            segment = line[offset:offset + 3000]
+            if parts and size + len(segment) > 3000:
+                yield {'file': item['path'], 'line': first_line, 'column': first_column,
+                       'end_line': last_line, 'source': ''.join(parts)}
+                parts, size = [], 0
+            if not parts:
+                first_line, first_column = number, offset + 1
+            parts.append(segment)
+            size += len(segment)
+            last_line = number
+    if parts:
+        yield {'file': item['path'], 'line': first_line, 'column': first_column,
+               'end_line': last_line, 'source': ''.join(parts)}
+
+
 def prepare(root, repository, task, model, agent=None):
     if not isinstance(task, str) or not task.strip() or len(task) > 3000:
         raise ValueError('invalid review task (maximum 3000 characters)')
@@ -40,23 +60,23 @@ def prepare(root, repository, task, model, agent=None):
               'Distinguish hypotheses. Each batch is independent: do not claim analysis of cross-batch relationships.\n'
               'Selection: ' + json.dumps(selection, sort_keys=True) + '\nTask: ' + task + '\n')
     prompts, current = [], prefix
-    # Split long files on line boundaries; line numbers refer to the original file.
+    # Group contiguous source into blocks rather than repeating a long file path
+    # and JSON fields for every line. Keep original line/column ranges for evidence.
     for item in context['files']:
-        for number, line in enumerate(item['source'].splitlines(keepends=True) or [''], 1):
-            # Extremely long lines are split without dropping characters; all pieces
-            # retain their original line number in the review input.
-            for offset in range(0, max(1, len(line)), 512):
-                segment = line[offset:offset + 512]
-                piece = json.dumps({'file': item['path'], 'line': number, 'column': offset + 1, 'source': segment}, ensure_ascii=False) + '\n'
-                encoded_size = len(json.dumps([{'role': 'user', 'content': current + piece}]).encode('utf-8'))
-                if len(current) + len(piece) > MAX_PROMPT_CHARS or encoded_size > 96000:
+        for block in source_blocks(item):
+            piece = json.dumps(block, ensure_ascii=False) + '\n'
+            encoded_size = len(json.dumps([{'role': 'user', 'content': current + piece}]).encode('utf-8'))
+            if len(current) + len(piece) > MAX_PROMPT_CHARS or encoded_size > 96000:
+                if current != prefix:
                     prompts.append(current)
-                    current = prefix
-                current += piece
+                current = prefix
+            if len(current) + len(piece) > MAX_PROMPT_CHARS:
+                raise ValueError('Source block metadata exceeds context limit; use a shorter checkout-relative path')
+            current += piece
     if current != prefix:
         prompts.append(current)
     if len(prompts) > MAX_BATCHES:
-        raise ValueError('Review exceeds 64 model calls; select a smaller project')
+        raise ValueError('Review requires %d model calls (maximum 64); select a smaller checkout' % len(prompts))
     for batch in prompts:
         validate({'model': model, 'messages': [{'role': 'user', 'content': batch}], **({'agent': agent} if agent else {})}, review_context=True)
     prompt = display_prompts(prompts)
