@@ -130,11 +130,13 @@ export function CodeInspector({snapshot,onClose}:{
             !('lines' in data)||!Array.isArray(data.lines)||
             !data.lines.every((line:unknown)=>typeof line==='string')||
             !('redacted_lines' in data)||!Array.isArray(data.redacted_lines)||
+            !data.redacted_lines.every((n:unknown)=>Number.isSafeInteger(n))||
+            !('line_count' in data)||typeof data.line_count!=='number'||
             !('local_only' in data)||data.local_only!==true||
             !('model_calls' in data)||data.model_calls!==0)
           throw new Error('Invalid local source preview response');
         if(!controller.signal.aborted)
-          setFullSource(data as {file:string;lines:string[];redacted_lines:number[];line_count:number;source_sha256:string});
+          setFullSource(data as unknown as {file:string;lines:string[];redacted_lines:number[];line_count:number;source_sha256:string});
       }catch(e){
         if(!controller.signal.aborted)
           setSourceError('Full-class preview unavailable: '+(e instanceof Error?e.message:'unknown error')+
