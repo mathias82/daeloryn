@@ -90,6 +90,11 @@ class WorkflowStore:
   state["stage"]=next_stage
   state["version"]+=1
   if event=="start_tests":state["attempts"]+=1
+  if event=="tests_passed":
+   # Persist the complete locally verified binding, not only a boolean event.
+   state["test_evidence"]=json.loads(json.dumps(evidence,allow_nan=False))
+  if event=="approve_publication" and evidence is not None:
+   state["publication_evidence"]=json.loads(json.dumps(evidence,allow_nan=False))
   state["events"].append({"event":event,"stage":next_stage,"time":datetime.now(timezone.utc).isoformat()})
   self._save(identifier,state)
   return state
