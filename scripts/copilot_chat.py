@@ -24,7 +24,7 @@ def validate(request, *, review_context=False):
     for item in messages:
         if not isinstance(item, dict) or set(item) != {"role", "content"}:
             raise ValueError("invalid message")
-        if item["role"] not in ("user", "assistant") or not isinstance(item["content"], str) or not 1 <= len(item["content"]) <= (24000 if review_context else 3000):
+        if item["role"] not in ("user", "assistant") or not isinstance(item["content"], str) or not 1 <= len(item["content"]) <= (40000 if review_context else 3000):
             raise ValueError("invalid role or message size")
     if messages[-1]["role"] != "user" or len(json.dumps(messages).encode()) > (100000 if review_context else 24000):
         raise ValueError("invalid conversation")
