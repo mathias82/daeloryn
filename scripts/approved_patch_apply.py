@@ -7,6 +7,6 @@ def apply(root, repository, path, replacement, approved_sha256, branch):
     checked=verify_preview(root,repository,path,replacement,approved_sha256)
     checkout=Path(root).resolve(strict=True)/repository
     file=checkout/path
-    original=file.read_text(encoding="utf-8")
+    original=file.read_bytes().decode("utf-8")
     # apply_approved independently validates digest, source and clean git state.
     return apply_approved(checkout,path,original,replacement,checked["sha256"],branch)

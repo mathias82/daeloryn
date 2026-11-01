@@ -3,6 +3,7 @@
 
 Optionally accepts bounded chat prompts; never arbitrary commands or credentials.
 """
+from review_developer import prepare as prepare_developer, execute as execute_developer
 import argparse
 from copilot_chat import copilot_chat
 from copilot_auto import available_models, route_chat
@@ -442,6 +443,36 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                 finally:
                     if acquired:
                         benchmark_run_lock.release()
+                return
+            if self.path in ("/api/copilot/developer/prepare", "/api/copilot/developer/execute"):
+                if not enable_copilot:
+                    self.reply(405, {"error": "Copilot disabled"})
+                    return
+                length = self.headers.get("Content-Length", "")
+                if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                    self.reply(415, {"error": "JSON required"})
+                    return
+                if not length.isdigit() or not 0 < int(length) <= 40000:
+                    self.reply(413, {"error": "invalid request size"})
+                    return
+                try:
+                    payload = json.loads(self.rfile.read(int(length)))
+                    execution = self.path.endswith("/execute")
+                    expected = {"repository", "path", "findings", "model"} | ({"approved_sha256"} if execution else set())
+                    if not isinstance(payload, dict) or set(payload) != expected:
+                        raise ValueError("invalid developer request")
+                    roots = resolve_repository(payload["repository"])
+                    if len(roots) != 1:
+                        raise ValueError("repository must resolve uniquely")
+                    prepared = prepare_developer(roots[0], payload["repository"], payload["path"], payload["findings"], payload["model"])
+                    result = execute_developer(prepared, payload["approved_sha256"], roots[0]) if execution else prepared
+                    if not execution:
+                        result = {k: v for k, v in result.items() if k != "source"}
+                    self.reply(200, result)
+                except (ValueError, TypeError, KeyError, PermissionError, OSError) as exc:
+                    self.reply(400, {"error": str(exc)})
+                except (RuntimeError, TimeoutError):
+                    self.reply(503, {"error": "Developer call interrupted; outcome may be unknown. No automatic retry."})
                 return
             if self.path in ("/api/copilot/review/prepare", "/api/copilot/review/execute"):
                 if not enable_copilot:

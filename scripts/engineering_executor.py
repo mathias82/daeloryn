@@ -35,16 +35,16 @@ def apply_approved(checkout, path, before, after, approved_digest, branch):
     if approved_digest != preview["sha256"] or not BRANCH.fullmatch(branch):
         raise PermissionError("exact patch approval and safe branch name required")
     root,target=_safe_file(checkout,path)
-    if len(target.read_bytes())>12000 or target.read_text(encoding="utf-8")!=before:
+    if len(target.read_bytes())>12000 or target.read_bytes().decode("utf-8")!=before:
         raise ValueError("file changed since preview")
     if command(["git","status","--porcelain"],root)["output"].strip():
         raise ValueError("checkout must be clean")
     if command(["git","switch","-c",branch],root)["returncode"]!=0:
         raise RuntimeError("could not create isolated branch")
     # Exclusive creation is not needed: verified existing file, re-check immediately before write.
-    if target.read_text(encoding="utf-8")!=before:
+    if target.read_bytes().decode("utf-8")!=before:
         raise ValueError("source changed during branch creation")
-    target.write_text(after,encoding="utf-8")
+    target.write_bytes(after.encode("utf-8"))
     return {"branch":branch,"path":path,"sha256":approved_digest,
             "applied":True,"tests_executed":False,"pr_created":False}
 

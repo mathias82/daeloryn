@@ -855,3 +855,31 @@ test('campaign isolates React project from Java/Spring agent results',async({pag
   await campaign.getByLabel('Campaign project').selectOption('java-app');
   await expect(campaign.getByText(/1 matching agents/)).toBeVisible();
 });
+
+test('review hands findings to developer with separate approval and proposed diff',async({page})=>{
+ await page.route('**/api/copilot/review/prepare',async route=>{const body=route.request().postDataJSON();await route.fulfill({json:{...body,prompt:'Fixture excerpts',sha256:'a'.repeat(64),files:['App.java'],warning:'Fixture',agent_profile:null,agent_profile_sha256:null,batch_count:1,scope:'focused',approval_required:true}});});
+ await page.route('**/api/copilot/review/execute',route=>route.fulfill({json:{status:'completed',completed_batches:1,total_batches:1,review:{reply:'App.java:1 incorrect initialization'}}}));
+ let calls=0;
+ await page.route('**/api/copilot/developer/**',async route=>{
+  const body=route.request().postDataJSON();
+  expect(body.repository).toBe('demo');expect(body.findings).toContain('App.java:1');
+  if(route.request().url().endsWith('/execute')){calls++;expect(body.approved_sha256).toBe('c'.repeat(64));await route.fulfill({json:{status:'proposed',patch:{diff:'-int x=0;\n+int x=1;'},patch_applied:false}});}
+  else await route.fulfill({json:{sha256:'c'.repeat(64),prompt:'Exact fixture source and findings',agent:'java-developer',agent_profile:'Fixture developer'}});
+ });
+ await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+ await page.getByLabel(/^Agent/).selectOption('java-reviewer');
+ await page.getByLabel(/^Copilot model/).selectOption(models[0]);
+ await page.getByLabel(/^Local repository/).selectOption('demo');
+ await page.getByRole('textbox',{name:'Message',exact:true}).fill('Review bugs in App.java');
+ await page.getByRole('textbox',{name:'Message',exact:true}).press('Enter');
+ await page.getByRole('checkbox',{name:/I inspected the exact source/}).check();
+ await page.getByRole('button',{name:'Approve and analyze project',exact:true}).click();
+ const card=page.getByRole('region',{name:'Reviewer to developer proposal'});
+ await card.getByLabel('Reviewed file path').fill('App.java');
+ await card.getByRole('button',{name:'Prepare developer handoff'}).click();
+ await expect(card.getByRole('button',{name:'Generate proposed patch'})).toBeDisabled();
+ expect(calls).toBe(0);
+ await card.getByRole('checkbox').check();
+ await card.getByRole('button',{name:'Generate proposed patch'}).click();
+ await expect(card).toContainText('+int x=1;');expect(calls).toBe(1);
+});

@@ -191,6 +191,10 @@ def campaign_report(runs, comparisons, *, agents=None, projects=None):
                 if applicable and next_for_project is None and updated["state"] != "assessed_provisionally":
                     next_for_project = entry["agent"]
                 scoped_entries.append(updated)
+            # Start with a stack specialist before cross-cutting platform roles.
+            pending = [item for item in scoped_entries if item["applicable"] and item["state"] != "assessed_provisionally"]
+            pending.sort(key=lambda item: item["scope"] not in ("java", "spring", "react"))
+            next_for_project = pending[0]["agent"] if pending else None
             applicable_count = sum(item["applicable"] for item in scoped_entries)
             assessed = sum(item["state"] == "assessed_provisionally" for item in scoped_entries)
             project_campaigns.append({
