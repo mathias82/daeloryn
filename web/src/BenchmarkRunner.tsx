@@ -52,6 +52,8 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
   const [selectedRunId,setSelectedRunId]=useState('');
   const [runReceipt,setRunReceipt]=useState<SavedRun|null>(null);
   const [historyError,setHistoryError]=useState('');
+  const [confirmDelete,setConfirmDelete]=useState(false);
+  const [runActionBusy,setRunActionBusy]=useState(false);
   const [progress,setProgress]=useState('');
   const [partial,setPartial]=useState<Record<Arm,string>>({baseline:'',daeloryn:''});
   const [result,setResult]=useState<PairResult|null>(null);
@@ -97,7 +99,7 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
           throw new Error('Invalid persisted benchmark receipt');
         if(mounted){
           setRunReceipt(value);
-          setRunning(value.status==='running');
+          setRunning(value.status==='running'||value.status==='stopping');
           setResult(value.result||null);
           setPartial({baseline:value.arms.baseline?.reply||'',daeloryn:value.arms.daeloryn?.reply||''});
           const current=value.arms.daeloryn?.status==='running'?'daeloryn':'baseline';
@@ -125,7 +127,7 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
   function chooseMode(next:Mode){setMode(next);setAgent(defaults[next]);clear();}
   const selection={repository,mode,model:chosenModel,agent:selectedAgent};
   const canPrepare=Boolean(enabled&&repository&&projects.some(p=>p.name===repository)&&
-    chosenModel&&selectedAgent&&!busy&&!inFlight.current&&!savedRuns.some(r=>r.status==='running'));
+    chosenModel&&selectedAgent&&!busy&&!inFlight.current&&!savedRuns.some(r=>r.status==='running'||r.status==='stopping'));
 
   async function prepare(){
     if(!canPrepare)return;
@@ -157,7 +159,7 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
     }finally{setBusy(false);}
   }
   async function execute(){
-    if(!manifest||!approved||busy||inFlight.current||savedRuns.some(r=>r.status==='running'))return;
+    if(!manifest||!approved||busy||inFlight.current||savedRuns.some(r=>r.status==='running'||r.status==='stopping'))return;
     inFlight.current=true;setBusy(true);setError('');
     setResult(null);setPartial({baseline:'',daeloryn:''});
     setAssessments(emptyAssessment());setHumanChecked(false);
@@ -181,6 +183,32 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
         '. If the network failed, inspect saved runs before attempting another call.');
       setManifest(null);setApproved(false);
     }finally{inFlight.current=false;setBusy(false);}
+  }
+  async function actOnRun(action:'stop'|'delete'){
+    if(!runReceipt||runReceipt.run_id!==selectedRunId||runActionBusy)return;
+    const runId=selectedRunId;
+    if(action==='stop'&&runReceipt.status!=='running')return;
+    if(action==='delete'&&(runReceipt.status==='running'||runReceipt.status==='stopping'||!confirmDelete))return;
+    setRunActionBusy(true);setError('');
+    try{
+      const response=await fetch('/api/benchmark/runs/'+encodeURIComponent(runId)+'/'+action,{
+        method:'POST',headers:{'Content-Type':'application/json'},body:'{}'
+      });
+      const data:unknown=await response.json();
+      if(!response.ok)throw new Error(safeError(data,response.status));
+      if(action==='stop'){
+        setRunReceipt(previous=>previous?.run_id===runId?{...previous,status:'stopping'}:previous);
+        setProgress('Stop requested. Waiting for local provider processes to terminate.');
+      }else{
+        const remaining=savedRuns.filter(r=>r.run_id!==runId);
+        setSavedRuns(remaining);setSelectedRunId(remaining[0]?.run_id||'');
+        setRunReceipt(null);setResult(null);setPartial({baseline:'',daeloryn:''});
+        setAssessments(emptyAssessment());setHumanChecked(false);
+        setConfirmDelete(false);
+      }
+    }catch(e){
+      setError((action==='stop'?'Stop':'Delete')+' failed: '+(e instanceof Error?e.message:'request failed'));
+    }finally{setRunActionBusy(false);}
   }
   function assessmentResult():string{
     if(!humanChecked||result?.status!=='completed')return 'No reviewed result yet';
@@ -210,7 +238,7 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
       {historyError&&<p role="alert">{historyError}</p>}
       {savedRuns.length>0?<label>Open saved run
         <select aria-label="Saved benchmark run" value={selectedRunId} onChange={e=>{
-          setSelectedRunId(e.target.value);setResult(null);setPartial({baseline:'',daeloryn:''});
+          setSelectedRunId(e.target.value);setResult(null);setPartial({baseline:'',daeloryn:''});setConfirmDelete(false);setError('');
           setManifest(null);setApproved(false);setAssessments(emptyAssessment());setHumanChecked(false);
         }}>
           <option value="">Select a saved run</option>
@@ -218,6 +246,19 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
         </select>
       </label>:<p>No saved runs yet. Results lost before this feature was installed cannot be reconstructed from discarded browser state.</p>}
       {runReceipt&&<p role="status"><strong>Run {runReceipt.run_id.slice(0,8)} · {runReceipt.status}</strong> · Created {new Date(runReceipt.created_at).toLocaleString()} · Updated {new Date(runReceipt.updated_at).toLocaleString()}</p>}
+      {runReceipt&&runReceipt.run_id===selectedRunId&&<div className="benchmark-run-actions">
+        {runReceipt.status==='running'&&<button type="button" disabled={runActionBusy} className="outline-button" onClick={()=>void actOnRun('stop')}>Stop run</button>}
+        {runReceipt.status==='stopping'&&<p role="status">Stopping: in-flight provider calls may have unknown external outcomes.</p>}
+        {runReceipt.status!=='running'&&runReceipt.status!=='stopping'&&
+          <button type="button" className="outline-button benchmark-delete" disabled={runActionBusy}
+            onClick={()=>setConfirmDelete(true)}>Delete run</button>}
+        {confirmDelete&&runReceipt.status!=='running'&&runReceipt.status!=='stopping'&&
+          <div role="group" aria-label="Confirm delete benchmark run" className="benchmark-delete-confirm">
+            <p>Delete run {runReceipt.run_id.slice(0,8)} and its saved model replies permanently from this computer? Other runs are unaffected.</p>
+            <button type="button" disabled={runActionBusy} onClick={()=>void actOnRun('delete')}>Confirm delete run</button>
+            <button type="button" className="outline-button" disabled={runActionBusy} onClick={()=>setConfirmDelete(false)}>Cancel</button>
+          </div>}
+      </div>}
     </section>
     <div className="benchmark-form">
       <label>Local project
@@ -250,6 +291,7 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
     {!manifest&&!running&&<button type="button" disabled={!canPrepare} onClick={()=>void prepare()}>{busy?'Preparing…':'Prepare A/B benchmark'}</button>}
     {manifest&&!running&&<div className="benchmark-manifest">
       <p><strong>{manifest.baseline.files.length} eligible files · {manifest.total_model_calls} potentially billable model calls</strong></p>
+      <p className="muted">Faster benchmark runner: up to 2 batches at the same time per arm. Total potential calls are unchanged. Stops prevent pending calls; in-flight calls may still have an unknown charge.</p>
       <p>Requested model: {manifest.model} · Agent: {manifest.agent}</p>
       <p>Source SHA-256: <code>{manifest.source_sha256}</code></p>
       <p className="muted">{manifest.warning}</p>
@@ -313,6 +355,6 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
         <p role="status"><strong>{assessmentResult()}</strong></p>
       </section>}
     </div>}
-    {running&&<p className="muted">Running on the local API. Navigation does not interrupt provider calls. Interrupted or partial outcomes are never automatically retried.</p>}
+    {running&&<p className="muted">Running on the local API. You can navigate away; Stop cancels local pending/in-flight work but cannot guarantee remote provider billing stops. No automatic retries.</p>}
   </section>;
 }
