@@ -30,3 +30,13 @@ test('trusted specialists reflect task intent without invented agent names',()=>
  assert.equal(recommendSpecialist('Review OAuth security',['java'],names).agent,'security-reviewer');
  assert.equal(recommendSpecialist('Fix Java bugs',['java'],[]),null);
 });
+
+test('explicit implementations select trusted developer while bug analysis stays reviewer',()=>{
+ const trusted=['java-reviewer','java-developer','spring-boot-engineer','react-reviewer','react-developer'];
+ assert.equal(recommendSpecialist('Find Java bugs',['java'],trusted).agent,'java-reviewer');
+ assert.equal(recommendSpecialist('Implement the Java fix',['java'],trusted).agent,'java-developer');
+ assert.equal(recommendSpecialist('Υλοποίησε τη διόρθωση στον κώδικα',['java'],trusted).agent,'java-developer');
+ assert.equal(recommendSpecialist('Apply the patch',['react','typescript'],trusted).agent,'react-developer');
+ assert.equal(recommendSpecialist('Implement Spring configuration fix',['java','spring'],trusted).agent,'spring-boot-engineer');
+ assert.equal(recommendSpecialist('Implement Java fix',['java'],['java-reviewer']),null);
+});
