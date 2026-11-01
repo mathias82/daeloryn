@@ -360,3 +360,18 @@ file. Additional line ranges in that same unambiguous paragraph are supported;
 context is never inherited across paragraphs. Ambiguous or unavailable lines
 remain non-navigable. The developer handoff includes the bounded finding paragraph
 so the suggested fix is retained alongside the selected file and lines.
+
+
+### Local benchmark progress and external evidence
+
+The Comparison results panel polls saved local runs every 2.5 seconds. Filter by
+project to see saved runs, comparisons with scores for both arms, and distinct
+agents with scored runs. A repeated run does not increase the distinct-agent
+count. Scores can exist for partial source coverage and are not proof of correct
+findings or an independently verified winner.
+
+The expandable External trial evidence section uses a different data source:
+`--records-dir /path/to/trial-records` at console startup. Its coverage denominator
+is the agent catalog × four providers × two arms, not local campaign completion.
+With no external JSON trial records it stays at zero. Local runs never fabricate
+independent model identity, agent identity, test execution, or comparability flags.
