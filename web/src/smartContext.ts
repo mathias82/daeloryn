@@ -12,6 +12,9 @@ const PROJECT=/(?:\b(?:project|repository|repo|codebase|source\s+code|source\s+f
 
 const CURIOSITY=/(?:\b(?:what|how\s+(?:does|is)|where\s+(?:is|are)|explain|find|show|inspect|review|check|analy[sz]e|what\s+does)\b|π[ώω]ς|πο[ύυ]|εξ[ήη]γησ[\p{L}]*|δείξε|δες|[έε]λεγξ[\p{L}]*|αν[άα]λυσ[\p{L}]*|τι\s+κ[άα]νει)/iu;
 
+// Merely mentioning a technology ("Explain Kafka") must not cause file reads.
+const REPOSITORY_ANCHOR=/(?:\b(?:project|repository|repo|codebase|service|controller|endpoint|source\s+files?|my\s+code|our\s+code|pom\.xml|build\.gradle|application\.ya?ml|class|module|package)\b|κ[ώω]δικ[\p{L}]*|έργ[\p{L}]*|εφαρμογ[\p{L}]*|κλ[άα]σ[\p{L}]*|αρχε[ίι][\p{L}]*)/iu;
+
 const SMALL_TALK=/^(?:hi|hello|hey|good\s+(?:morning|evening)|thanks?|thank\s+you|ok(?:ay)?|yes|no|γει[άα](?:\s+σου)?|καλημ[έε]ρα|καλησπ[έε]ρα|ευχαριστ[ώω]|ναι|[όο]χι|[έε]γινε|τι\s+κ[άα]νεις)[!?.\s]*$/iu;
 
 /**
@@ -24,6 +27,6 @@ export function routeContext(task:string, preference:ContextPreference='smart'):
   const query=task.trim().slice(0,3000);
   if(!query||SMALL_TALK.test(query))return 'none';
   if(WHOLE.test(query)&&PROJECT.test(query))return 'full';
-  if(PROJECT.test(query)&&CURIOSITY.test(query))return 'focused';
+  if(PROJECT.test(query)&&CURIOSITY.test(query)&&REPOSITORY_ANCHOR.test(query))return 'focused';
   return 'none';
 }
