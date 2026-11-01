@@ -118,6 +118,10 @@ class CampaignTests(unittest.TestCase):
         self.assertNotIn("react-reviewer",java_names)
         self.assertIn("spring-boot-engineer",spring_names)
         self.assertIn("react-testing",react_names)
+        self.assertIn("reliability-engineer",react_names)
+        # Specialized React reviewers are scheduled first, even when
+        # shared/platform reliability work is also applicable.
+        self.assertEqual("react-architect",entries["react-ui"]["next_agent"])
         self.assertNotIn("java-reviewer",react_names)
         self.assertNotIn("spring-framework-expert",react_names)
         self.assertIn("java-reviewer",mixed_names)
