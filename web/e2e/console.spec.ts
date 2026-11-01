@@ -464,4 +464,19 @@ test('Workflow shows real recorded batches and never checks off unsupported patc
   await expect(guide.getByText('Not available in read-only pilot')).toBeVisible();
   await expect(guide.getByText('Not executed by this workflow')).toBeVisible();
   await expect(guide.getByRole('checkbox')).toHaveCount(0);
+  await expect(guide.getByRole('list',{name:'Workflow execution stages'}).getByRole('listitem')).toHaveCount(6);
+  await expect(guide.getByRole('progressbar',{name:'Verified source review stages'})).toHaveAttribute('aria-valuenow','2');
+  // New layout is a compact timeline, rather than six tall 3-column boxes.
+  const desktopRows=await guide.locator('.workflow-step').first().boundingBox();
+  expect(desktopRows).not.toBeNull();
+  expect(desktopRows!.height).toBeLessThan(110);
+  await page.setViewportSize({width:760,height:900});
+  await expect(guide.getByRole('list',{name:'Workflow execution stages'}).getByRole('listitem')).toHaveCount(6);
+  const layout=await guide.locator('.workflow-timeline').evaluate(element=>{
+    const style=getComputedStyle(element);
+    return {columns:style.gridTemplateColumns,
+      overflowing:element.scrollWidth>element.clientWidth+1};
+  });
+  expect(layout.overflowing).toBe(false);
+  expect(layout.columns.trim().split(/\\s+/).length).toBe(1);
 });
