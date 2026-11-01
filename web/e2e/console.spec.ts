@@ -803,3 +803,55 @@ test('agent campaign chooses next role-specific benchmark without launching a mo
   const download=await downloadPromise;
   expect(download.suggestedFilename()).toBe('daeloryn-agent-evaluation-report.md');
 });
+
+test('campaign isolates React project from Java/Spring agent results',async({page})=>{
+  const agents=[
+    {name:'java-reviewer',scope:'java',description:'Java defects'},
+    {name:'spring-boot-engineer',scope:'spring',description:'Spring Boot'},
+    {name:'react-reviewer',scope:'react',description:'React hooks'}];
+  const projects=[
+    {name:'java-app',path:'/fixture/java-app',technologies:['java','java-maven']},
+    {name:'spring-app',path:'/fixture/spring-app',technologies:['java','spring','java-maven']},
+    {name:'react-ui',path:'/fixture/react-ui',technologies:['node','react','typescript']}];
+  const entries=agents.map((agent,index)=>({
+    order:index+1,agent:agent.name,scope:agent.scope,benchmark_mode:'review',
+    domain_scenario:'Inspect '+agent.scope+' defects',state:'not_started',
+    latest_run_id:null,latest_run_status:null,traceability_scores:null,
+    provisional_evidence_lead:'not_determined',verified_winner:null,
+    candidate_rule_improvements:[]}));
+  const scoped=projects.map(project=>{
+    const applicable=entries.map(agent=>{
+      const allowed=project.technologies.includes(agent.scope);
+      return {...agent,applicable:allowed,state:allowed?'not_started':'not_applicable'};
+    });
+    return {repository:project.name,technologies:project.technologies,total_agents:3,
+      applicable_agents:applicable.filter(x=>x.applicable).length,provisionally_assessed:0,
+      next_agent:applicable.find(x=>x.applicable)?.agent||null,entries:applicable};
+  });
+  await page.route('**/api/repositories',route=>route.fulfill({json:{repositories:projects}}));
+  await page.route('**/api/agents',route=>route.fulfill({json:{agents}}));
+  await page.route('**/api/benchmark/campaign',route=>route.fulfill({json:{
+    kind:'daeloryn-sequential-agent-campaign',schema_version:1,generated_at:'2026-11-01T20:00:00Z',
+    total_agents:3,provisionally_assessed:0,next_agent:'java-reviewer',
+    weaker_traceability_agents:0,entries,
+    warning:'Source citation comparison only',provider_calls_started:false,
+    rules_modified:false,independently_verified_winners:0,
+    project_campaigns:scoped
+  }}));
+  await page.reload();
+  await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
+  const campaign=page.getByRole('region',{name:'22-agent evaluation campaign'});
+  await expect(campaign.getByText(/Next: 1\/3 · java-reviewer/)).toBeVisible();
+  await campaign.getByLabel('Campaign project').selectOption('react-ui');
+  await expect(campaign.getByText(/Next: 3\/3 · react-reviewer/)).toBeVisible();
+  await expect(campaign.getByText(/1 matching agents/)).toBeVisible();
+  await campaign.getByRole('button',{name:/Set up next A\/B benchmark/}).click();
+  const runner=page.getByRole('region',{name:'Paired benchmark runner'});
+  await expect(runner.getByLabel('Benchmark project')).toHaveValue('react-ui');
+  await expect(runner.getByLabel('Benchmark agent')).toHaveValue('react-reviewer');
+  await campaign.getByLabel('Campaign project').selectOption('spring-app');
+  await expect(campaign.getByText(/Next: 1\/3 · java-reviewer/)).toBeVisible();
+  await expect(campaign.getByText(/2 matching agents/)).toBeVisible();
+  await campaign.getByLabel('Campaign project').selectOption('java-app');
+  await expect(campaign.getByText(/1 matching agents/)).toBeVisible();
+});
