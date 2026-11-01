@@ -308,9 +308,16 @@ class RunStore:
                 if _resume is not None:
                     run_kwargs['resume_completed']=_resume[1]
                 result = runner(prepared, approved_digest, **run_kwargs)
-                # Reuse exactly the already-approved in-memory source snapshot;
-                # do not rescan files or make another potentially billable call.
-                source = source_from_prepared(prepared)
+                # Reuse only the in-memory approved source snapshot (no
+                # provider call or filesystem rescan). Older/fixture runners
+                # may not carry per-batch source prompts. Evidence evaluation
+                # must never turn a valid partial or completed provider receipt
+                # into "failed": preserve model output and disclose the missing
+                # evaluation separately.
+                try:
+                    source = source_from_prepared(prepared)
+                except (KeyError, TypeError, ValueError):
+                    source = {}
                 with self.guard:
                     # Avoid duplicating large model transcripts in the receipt.
                     record["result"] = {
@@ -332,7 +339,20 @@ class RunStore:
                                 "reply": (outcome.get("review", {}).get("reply", "") or
                                           record["arms"][arm]["reply"])[:200000]
                             })
-                    record["comparison"] = evaluate_evidence(record, source)
+                    if source:
+                        try:
+                            record["comparison"] = evaluate_evidence(record, source)
+                            record.pop("comparison_error", None)
+                        except (KeyError, TypeError, ValueError):
+                            record.pop("comparison", None)
+                            record["comparison_error"] = (
+                                "Offline evidence evaluation was unavailable; original "
+                                "model results are preserved. No winner was verified.")
+                    else:
+                        record.pop("comparison", None)
+                        record["comparison_error"] = (
+                            "Approved source-line manifest unavailable for offline "
+                            "evaluation. The saved run and model replies are preserved.")
                     if cancel_event.is_set():
                         record["error"] = ("Stopped by user. Pending batches were not invoked. "
                                            "In-flight provider outcomes may be unknown; no auto-retry.")
