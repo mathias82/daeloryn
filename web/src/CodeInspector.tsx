@@ -1,5 +1,7 @@
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {nearbyDeclaration,sourcePreview} from './sourceInspector';
+import {draftPatch,startSuggestion} from './suggestionDraft';
+import type {SuggestionDraft} from './suggestionDraft';
 import type {InspectorSnapshot} from './sourceInspector';
 
 /** Read-only navigation over the exact, approved code snapshot. */
@@ -11,6 +13,9 @@ export function CodeInspector({snapshot,onClose}:{
   const [line,setLine]=useState(1);
   const [expanded,setExpanded]=useState(false);
   const [lineInput,setLineInput]=useState('1');
+  const [editMode,setEditMode]=useState(false);
+  const [draft,setDraft]=useState<SuggestionDraft|null>(null);
+  const [draftMessage,setDraftMessage]=useState('');
   const markedRef=useRef<HTMLDivElement|null>(null);
   const selected=files.includes(file)?file:files[0]||'';
   const visibleCount=expanded?180:42;
@@ -20,8 +25,24 @@ export function CodeInspector({snapshot,onClose}:{
   const unverified=snapshot.references.filter(r=>!r.verified);
   const marks=valid.filter(r=>r.file===selected);
   const active=marks.find(r=>line>=r.line&&line<=r.endLine);
+  const patch=draft&&draft.snapshotSha256===snapshot.sha256?draftPatch(draft):null;
+  const matchingSuggestion=active&&draft&&draft.file===active.file&&draft.start===active.line&&draft.end===active.endLine
+    ? active.suggestionText : undefined;
+  function beginSuggestion(){
+    const start=active?.line??line,end=active?.endLine??line;
+    const proposal=startSuggestion(snapshot.sources,selected,start,end,snapshot.sha256);
+    if(!proposal){setDraftMessage('The selected source lines were not available completely in the approved snapshot. Select another line.');return;}
+    setDraft(proposal);setEditMode(true);setDraftMessage('');
+  }
+  async function copyPatch(){
+    if(!patch)return;
+    try{
+      await navigator.clipboard.writeText(patch);
+      setDraftMessage('Patch copied. No files were modified. Review and apply it manually after checking tests.');
+    }catch{setDraftMessage('Clipboard permission unavailable. Select and copy the diff manually.');}
+  }
 
-  useEffect(()=>{setFile(files[0]||'');setLine(1);setLineInput('1');},
+  useEffect(()=>{setFile(files[0]||'');setLine(1);setLineInput('1');setDraft(null);setEditMode(false);setDraftMessage('');},
     [snapshot.sha256,files[0]]);
   useEffect(()=>{
     if(!expanded)return;
@@ -45,6 +66,10 @@ export function CodeInspector({snapshot,onClose}:{
     <header className="inspector-header">
       <div><strong>Code Inspector</strong><small>{snapshot.repository} · approved read-only source</small></div>
       <div className="inspector-header-actions">
+        <button type="button" className="outline-button" aria-label={editMode?'Inspect mode':'Edit suggestion mode'}
+          aria-pressed={editMode} onClick={()=>{if(editMode){setEditMode(false);}else{beginSuggestion();}}}>
+          {editMode?'Inspect mode':'Edit suggestion'}
+        </button>
         <button type="button" className="outline-button" aria-label={expanded?'Exit full screen Code Inspector':'Full screen Code Inspector'}
           onClick={()=>setExpanded(v=>!v)}>{expanded?'Exit full screen':'Full screen'}</button>
         <button type="button" className="outline-button" aria-label="Close Code Inspector" onClick={onClose}>×</button>
@@ -116,8 +141,39 @@ export function CodeInspector({snapshot,onClose}:{
             </div>;
           }):<p>Source lines unavailable in this approved snapshot.</p>}
         </div>
+        {editMode&&<section className="inspector-suggestion-panel" aria-label="Edit suggestion draft">
+          <div className="inspector-suggestion-heading">
+            <strong>Edit suggestion · local draft</strong>
+            <button className="outline-button" type="button" onClick={beginSuggestion}>Use selected line / finding</button>
+          </div>
+          <p className="muted">This is a proposed replacement for {draft?.file||selected}:{draft?.start??line}{draft&&draft.end>draft.start?'-'+draft.end:''}. It is NOT applied to the checkout. Inspect the scope and test it before using.</p>
+          {draft&&draft.snapshotSha256===snapshot.sha256&&<>
+            <div className="inspector-suggestion-grid">
+              <label>Original source (read-only)
+                <pre aria-label="Original source lines">{draft.original}</pre>
+              </label>
+              <label>Suggested replacement (editable)
+                <textarea aria-label="Suggested replacement" value={draft.replacement} rows={6}
+                  maxLength={12000} onChange={e=>{setDraft({...draft,replacement:e.target.value,origin:'manual'});setDraftMessage('');}}/>
+              </label>
+            </div>
+            {matchingSuggestion&&<button type="button" className="outline-button"
+              onClick={()=>{setDraft({...draft,replacement:matchingSuggestion,origin:'model-excerpt'});setDraftMessage('Model snippet loaded as an unverified editable proposal. No project files changed.');}}>
+              Use model-proposed code snippet
+            </button>}
+            <div className="inspector-suggestion-actions">
+              <button type="button" className="outline-button" onClick={()=>{setDraft({...draft,replacement:draft.original,origin:'manual'});setDraftMessage('');}}>Reset draft</button>
+              <button type="button" disabled={!patch} onClick={()=>void copyPatch()}>Copy proposed patch</button>
+            </div>
+            <div className="inspector-diff" aria-label="Suggested diff preview">
+              <strong>Diff preview · source unchanged</strong>
+              <pre>{patch||'No changes proposed yet. Edit the replacement code to preview a patch.'}</pre>
+            </div>
+          </>}
+          {draftMessage&&<p role="status">{draftMessage}</p>}
+        </section>}
       </>}
     </div>
-    <footer>Read-only · Esc closes full screen · no source modification · unverified model claims</footer>
+    <footer>Read-only workspace · suggestions are local drafts · Esc closes full screen · no source modification</footer>
   </aside>;
 }
