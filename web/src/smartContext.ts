@@ -15,6 +15,11 @@ const CURIOSITY=/(?:\b(?:what|how\s+(?:does|is)|where\s+(?:is|are)|explain|find|
 // Merely mentioning a technology ("Explain Kafka") must not cause file reads.
 const REPOSITORY_ANCHOR=/(?:\b(?:project|repository|repo|codebase|service|controller|endpoint|source\s+files?|my\s+code|our\s+code|pom\.xml|build\.gradle|application\.ya?ml|class|module|package)\b|κ[ώω]δικ[\p{L}]*|έργ[\p{L}]*|εφαρμογ[\p{L}]*|κλ[άα]σ[\p{L}]*|αρχε[ίι][\p{L}]*)/iu;
 
+// Explicit build-file questions are project-specific even when the user says
+// "check pom" instead of "check the project's pom.xml".
+const BUILD_FILE=/\b(?:pom(?:\.xml)?|build\.gradle(?:\.kts)?|gradle\.properties|settings\.gradle(?:\.kts)?)\b/iu;
+const BUILD_ACTION=/\b(?:check|review|inspect|analy[sz]e|find|deprecated|dependencies|dependency|bugs?|versions?|plugins?|upgrade|outdated)\b/iu;
+
 const SMALL_TALK=/^(?:hi|hello|hey|good\s+(?:morning|evening)|thanks?|thank\s+you|ok(?:ay)?|yes|no|γει[άα](?:\s+σου)?|καλημ[έε]ρα|καλησπ[έε]ρα|ευχαριστ[ώω]|ναι|[όο]χι|[έε]γινε|τι\s+κ[άα]νεις)[!?.\s]*$/iu;
 
 /**
@@ -27,6 +32,7 @@ export function routeContext(task:string, preference:ContextPreference='smart'):
   const query=task.trim().slice(0,3000);
   if(!query||SMALL_TALK.test(query))return 'none';
   if(WHOLE.test(query)&&PROJECT.test(query))return 'full';
+  if(BUILD_FILE.test(query)&&BUILD_ACTION.test(query))return 'focused';
   if(PROJECT.test(query)&&CURIOSITY.test(query)&&REPOSITORY_ANCHOR.test(query))return 'focused';
   return 'none';
 }
