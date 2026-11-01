@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import threading
 import uuid
+from paired_evidence_evaluator import evaluate as evaluate_evidence, source_from_prepared, source_from_context, context_digest
 
 RUN_ID = re.compile(r"[0-9a-f]{32}\Z")
 MAX_RECORDS = 30
@@ -101,6 +102,48 @@ class RunStore:
                              "created_at", "updated_at", "error")})
             return rows
 
+    def comparison_summaries(self):
+        """Sanitized local A/B observations for the Benchmarks comparison table."""
+        with self.guard:
+            results = []
+            for row in self.list():
+                detail = self._read(row["run_id"])
+                comparison = detail.get("comparison")
+                if not isinstance(comparison, dict):
+                    continue
+                scores = comparison.get("arms", {})
+                results.append({
+                    "run_id": row["run_id"],
+                    "repository": row["repository"],
+                    "mode": row["mode"],
+                    "model": row["model"],
+                    "agent": row["agent"],
+                    "status": row["status"],
+                    "evaluation_status": comparison["status"],
+                    "provisional_evidence_lead": comparison["provisional_evidence_lead"],
+                    "baseline_score": scores["baseline"]["evidence_traceability_score"],
+                    "daeloryn_score": scores["daeloryn"]["evidence_traceability_score"],
+                    "verified_winner": None,
+                })
+            return results
+
+    def evaluate_saved(self, run_id, context):
+        """Post-hoc offline evaluation of legacy run; fail closed on source drift."""
+        with self.guard:
+            record = self._read(run_id)
+            if record["status"] in ("running", "stopping") or run_id == self.active:
+                raise RuntimeError("wait for both model arms to finish")
+            if context_digest(context) != record.get("source_sha256"):
+                raise PermissionError("approved source snapshot changed; cannot evaluate old replies against different code")
+            source = source_from_context(context)
+            if not source:
+                raise ValueError("no eligible original source for comparison")
+            comparison = evaluate_evidence(record, source)
+            record["comparison"] = comparison
+            record["updated_at"] = _utc()
+            self._save(record)
+            return {"run_id": run_id, "comparison": comparison}
+
     def stop(self, run_id):
         with self.guard:
             record = self._read(run_id)
@@ -178,6 +221,7 @@ class RunStore:
             record['resume_attempts']=record.get('resume_attempts',0)+1
             record['status']='running'
             record['error']=None
+            record.pop('comparison', None)
             record['result']=None
             record['updated_at']=_utc()
             # start() writes the journal under the same lock and creates the
@@ -264,6 +308,9 @@ class RunStore:
                 if _resume is not None:
                     run_kwargs['resume_completed']=_resume[1]
                 result = runner(prepared, approved_digest, **run_kwargs)
+                # Reuse exactly the already-approved in-memory source snapshot;
+                # do not rescan files or make another potentially billable call.
+                source = source_from_prepared(prepared)
                 with self.guard:
                     # Avoid duplicating large model transcripts in the receipt.
                     record["result"] = {
@@ -285,6 +332,7 @@ class RunStore:
                                 "reply": (outcome.get("review", {}).get("reply", "") or
                                           record["arms"][arm]["reply"])[:200000]
                             })
+                    record["comparison"] = evaluate_evidence(record, source)
                     if cancel_event.is_set():
                         record["error"] = ("Stopped by user. Pending batches were not invoked. "
                                            "In-flight provider outcomes may be unknown; no auto-retry.")
