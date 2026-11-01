@@ -18,9 +18,13 @@ def append_receipt(path,*,subject,repository,action,digest,outcome):
  record={"timestamp":time.time(),"subject":subject,"repository":repository,
          "action":action,"digest":digest,"outcome":outcome}
  # Local append with restrictive creation mode; use an operator-controlled directory.
- fd=os.open(str(target),os.O_WRONLY|os.O_APPEND|os.O_CREAT|getattr(os,"O_NOFOLLOW",0),0o600)
+ if os.name=="nt":
+  from windows_private_file import open_private_append
+  fd=open_private_append(target)
+ else:
+  fd=os.open(str(target),os.O_WRONLY|os.O_APPEND|os.O_CREAT|getattr(os,"O_NOFOLLOW",0),0o600)
  try:
-  if os.fstat(fd).st_mode & 0o077:
+  if os.name!="nt" and os.fstat(fd).st_mode & 0o077:
    raise PermissionError("receipt file must not be group/world accessible")
   with os.fdopen(fd,"a",encoding="utf-8") as f:
    fd=-1

@@ -40,12 +40,12 @@ class ExecutionHttpTests(unittest.TestCase):
     # Send raw duplicate Authorization headers; do not allow first/last wins.
     sock=__import__("socket").create_connection(("127.0.0.1",port),timeout=3)
     try:
-     raw=("POST /api/execution/tests HTTP/1.1\\r\\n"
-          "Host: 127.0.0.1:"+str(port)+"\\r\\n"
-          "Content-Type: application/json\\r\\n"
-          "Content-Length: "+str(len(body.encode()))+"\\r\\n"
-          "Authorization: Bearer "+"s"*48+"\\r\\n"
-          "Authorization: Bearer "+"x"*48+"\\r\\n\\r\\n"+body).encode()
+     raw=("POST /api/execution/tests HTTP/1.1\r\n"
+          "Host: 127.0.0.1:"+str(port)+"\r\n"
+          "Content-Type: application/json\r\n"
+          "Content-Length: "+str(len(body.encode()))+"\r\n"
+          "Authorization: Bearer "+"s"*48+"\r\n"
+          "Authorization: Bearer "+"x"*48+"\r\n\r\n"+body).encode()
      sock.sendall(raw)
      self.assertIn(b" 403 ",sock.recv(4096))
     finally:

@@ -24,7 +24,7 @@ class RegisteredTests(unittest.TestCase):
     return {"verified":True,"containerized":True}
    result=run_registered_tests("Bearer "+"s"*48,auth,"org/repo",registry,"python","a"*64,token,gate,test_runner=runner)
    self.assertTrue(result["verified"])
-   self.assertEqual([(root,"python",True)],calls)
+   self.assertEqual([(root.resolve(),"python",True)],calls)
  def test_unregistered_repository_never_consumes_approval(self):
   with TemporaryDirectory() as d:
    root=Path(d)/"repo"

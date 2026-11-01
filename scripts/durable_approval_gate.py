@@ -3,6 +3,7 @@
 This module does not authenticate users or expose an execution API.
 """
 import hashlib
+from contextlib import closing
 import hmac
 import re
 import secrets
@@ -21,7 +22,7 @@ class DurableApprovalGate:
    raise ValueError("invalid TTL")
   self.ttl=ttl_seconds
   self.clock=clock
-  with self._connect() as db:
+  with closing(self._connect()) as db:
    db.execute("CREATE TABLE IF NOT EXISTS approvals (token_hash TEXT PRIMARY KEY, action TEXT NOT NULL, repository TEXT NOT NULL, digest TEXT NOT NULL, expires REAL NOT NULL)")
  def _connect(self):
   if self.path.is_symlink():raise ValueError("symlink approval database")
@@ -36,7 +37,7 @@ class DurableApprovalGate:
   self._subject(action,repository,digest)
   token=secrets.token_urlsafe(32)
   key=hashlib.sha256(token.encode()).hexdigest()
-  with self._connect() as db:
+  with closing(self._connect()) as db:
    db.execute("BEGIN IMMEDIATE")
    db.execute("DELETE FROM approvals WHERE expires < ?",(self.clock(),))
    db.execute("INSERT INTO approvals VALUES (?,?,?,?,?)",(key,action,repository,digest,self.clock()+self.ttl))
@@ -47,7 +48,7 @@ class DurableApprovalGate:
   if not isinstance(token,str) or not 1<=len(token)<=256:
    raise PermissionError("invalid token")
   key=hashlib.sha256(token.encode()).hexdigest()
-  with self._connect() as db:
+  with closing(self._connect()) as db:
    db.execute("BEGIN IMMEDIATE")
    record=db.execute("SELECT action,repository,digest,expires FROM approvals WHERE token_hash=?",(key,)).fetchone()
    db.execute("DELETE FROM approvals WHERE token_hash=?",(key,))

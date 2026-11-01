@@ -4,9 +4,9 @@ No command execution, AI calls, or implicit approvals.
 """
 import json
 import contextlib
-import fcntl
 import os
 import re
+import sqlite3
 import tempfile
 from datetime import datetime, timezone
 from pathlib import Path
@@ -31,13 +31,16 @@ class WorkflowStore:
  def _lock(self,identifier):
   path=self._path(identifier).with_suffix(".lock")
   if path.is_symlink():raise ValueError("symlink lock file")
-  fd=os.open(path,os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
+  # SQLite's exclusive writer reservation serializes threads and processes on
+  # Windows as well as POSIX. A timeout fails closed before state is read.
+  fd=os.open(path,os.O_CREAT|os.O_RDWR|getattr(os,"O_NOFOLLOW",0),0o600)
+  os.close(fd)
+  db=sqlite3.connect(path,timeout=30,isolation_level=None)
   try:
-   fcntl.flock(fd,fcntl.LOCK_EX)
+   db.execute("BEGIN IMMEDIATE")
    yield
   finally:
-   fcntl.flock(fd,fcntl.LOCK_UN)
-   os.close(fd)
+   db.close()
  def _path(self,identifier):
   if not isinstance(identifier,str) or not IDENTIFIER.fullmatch(identifier):
    raise ValueError("invalid workflow identifier")
