@@ -63,6 +63,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_registered_container_tests.py' -v
           python3 -m unittest discover -s tests -p 'test_execution_request.py' -v
           python3 -m unittest discover -s tests -p 'test_workflow_test_step.py' -v
+          python3 -m unittest discover -s tests -p 'test_workflow_draft_publication.py' -v
           python3 -m unittest discover -s tests -p 'test_loopback_execution_api.py' -v
           python3 -m unittest discover -s tests -p 'test_approved_execution_dispatch.py' -v
           python3 -m unittest discover -s tests -p 'test_execution_receipts.py' -v
