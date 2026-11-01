@@ -204,31 +204,95 @@ function RepairDiagnostics() {
  </section>;
 }
 
-function EngineeringWorkflowGuide({repository,confirmed,onOpenChat}:{repository:string;confirmed:boolean;onOpenChat:()=>void}) {
- const [reviewed,setReviewed]=useState(false);
- const [tested,setTested]=useState(false);
- const [published,setPublished]=useState(false);
- const [notes,setNotes]=useState('');
- const reset=()=>{setReviewed(false);setTested(false);setPublished(false);setNotes('');};
- return <section className="surface" aria-label="Engineering workflow guide">
-  <div className="surface-head"><h2>Engineering workflow</h2><span className="subtle-tag">MANUAL APPROVALS</span></div>
-  <p className="muted">Repository: {confirmed?repository:'Not confirmed'}. This guide tracks acknowledgements in the current tab only. It does not execute commands, verify test results or publish code.</p>
-  <div className="workflow-grid">
-   <div className="workflow-stage"><span>01</span><strong>AI source review</strong><small>{confirmed?'Available in Chat':'Confirm a local repository in Chat'}</small></div>
-   <div className="workflow-stage"><span>02</span><strong>Patch diff preview</strong><small>Inspect exact SHA-256 in Chat</small></div>
-   <div className="workflow-stage"><span>03</span><strong>Approve branch change</strong><small>Python library only; no UI write endpoint</small></div>
-   <div className="workflow-stage"><span>04</span><strong>Container tests</strong><small>Explicit opt-in; Docker required</small></div>
-   <div className="workflow-stage"><span>05</span><strong>Commit and publish</strong><small>Commit-bound approval; Python library only</small></div>
-   <div className="workflow-stage"><span>06</span><strong>Draft GitHub PR</strong><small>Manual review required</small></div>
-  </div>
-  <button type="button" className="outline-button" onClick={onOpenChat}>Open repository review and patch preview</button>
-  <p className="muted">Optional personal checklist (not verified evidence):</p>
-  <label><input type="checkbox" checked={reviewed} onChange={e=>{setReviewed(e.target.checked);setTested(false);setPublished(false);}}/> I reviewed the exact patch diff</label>
-  <label><input type="checkbox" checked={tested} disabled={!reviewed} onChange={e=>{setTested(e.target.checked);setPublished(false);}}/> I independently checked the test results</label>
-  <label><input type="checkbox" checked={published} disabled={!tested} onChange={e=>setPublished(e.target.checked)}/> I verified the draft PR on GitHub</label>
-  <textarea aria-label="Workflow notes" rows={3} placeholder="Optional local notes (not persisted)" value={notes} onChange={e=>setNotes(e.target.value)}/>
-  <p className="muted">Checklist: {published?'Acknowledged complete (unverified)':tested?'Tests acknowledged (unverified)':reviewed?'Patch reviewed (unverified)':'Not started'}</p>
-  <button type="button" className="outline-button" onClick={reset}>Reset checklist</button>
+type WorkflowRun={run_id:string;status:string;repository:string;mode:string;model:string;agent:string;
+ created_at:string;updated_at:string;error?:string|null};
+type WorkflowArm={status:string;completed_batches:number;total_batches:number;failure?:string|null;reply:string};
+type WorkflowReceipt=WorkflowRun&{approved_sha256:string;source_sha256:string;arms:{baseline:WorkflowArm;daeloryn:WorkflowArm};
+ result?:{status:string;independent_checks_executed:boolean}|null};
+
+function EngineeringWorkflowGuide({repository,confirmed,onOpenChat,onOpenBenchmarks}:{
+ repository:string;confirmed:boolean;onOpenChat:()=>void;onOpenBenchmarks:()=>void;
+}) {
+ const [runs,setRuns]=useState<WorkflowRun[]>([]);
+ const [selectedId,setSelectedId]=useState('');
+ const [receipt,setReceipt]=useState<WorkflowReceipt|null>(null);
+ const [error,setError]=useState('');
+ useEffect(()=>{
+   let mounted=true;
+   const refresh=async()=>{
+     try{
+       const response=await fetch('/api/benchmark/runs',{cache:'no-store'});
+       if(!response.ok)throw new Error('Local benchmark workflow history unavailable');
+       const json:unknown=await response.json();
+       if(!json||typeof json!=='object'||!('runs' in json)||!Array.isArray(json.runs))
+         throw new Error('Invalid workflow run history');
+       if(!mounted)return;
+       const rows=(json.runs as WorkflowRun[]).filter(r=>r&&typeof r.run_id==='string');
+       setRuns(rows);
+       setSelectedId(prev=>prev||rows.find(r=>!confirmed||r.repository===repository)?.run_id||'');
+       setError('');
+     }catch(e){if(mounted)setError(e instanceof Error?e.message:'Workflow status unavailable');}
+   };
+   void refresh();
+   const timer=window.setInterval(()=>void refresh(),2000);
+   return()=>{mounted=false;window.clearInterval(timer);};
+ },[repository,confirmed]);
+ useEffect(()=>{
+   if(!selectedId){setReceipt(null);return;}
+   let mounted=true;
+   const refresh=async()=>{
+     try{
+       const response=await fetch('/api/benchmark/runs/'+encodeURIComponent(selectedId),{cache:'no-store'});
+       if(!response.ok)throw new Error('Workflow receipt unavailable');
+       const value=await response.json() as WorkflowReceipt;
+       if(!value||value.run_id!==selectedId||!value.arms)throw new Error('Invalid workflow receipt');
+       if(mounted){setReceipt(value);setError('');}
+     }catch(e){if(mounted)setError(e instanceof Error?e.message:'Workflow status unavailable');}
+   };
+   void refresh();
+   const timer=window.setInterval(()=>void refresh(),1200);
+   return()=>{mounted=false;window.clearInterval(timer);};
+ },[selectedId]);
+ const baseline=receipt?.arms.baseline,challenger=receipt?.arms.daeloryn;
+ const armStatus=(arm?:WorkflowArm):string=>{
+   if(!arm)return 'Not started';
+   if(arm.status==='completed')return 'Completed '+arm.completed_batches+'/'+arm.total_batches+' batches';
+   if(arm.status==='running')return 'Running '+arm.completed_batches+'/'+arm.total_batches+' batches';
+   if(arm.status==='partial'||arm.status==='failed')return 'Partial / failed '+arm.completed_batches+'/'+arm.total_batches+' batches';
+   return 'Pending · '+arm.completed_batches+'/'+arm.total_batches+' batches';
+ };
+ const stages=[
+   {name:'Source snapshot & consent',state:receipt?.approved_sha256?'Approved source digest recorded':'Not started',done:Boolean(receipt?.approved_sha256)},
+   {name:'Plain Copilot baseline',state:armStatus(baseline),done:baseline?.status==='completed'},
+   {name:'Daeloryn specialist',state:armStatus(challenger),done:challenger?.status==='completed'},
+   {name:'Independent defect adjudication',state:'Pending human evidence review',done:false},
+   {name:'Apply fix & run regression tests',state:'Not available in read-only pilot',done:false},
+   {name:'Publish draft PR',state:'Not executed by this workflow',done:false}
+ ];
+ return <section className="surface" aria-label="Engineering workflow">
+   <div className="surface-head"><h2>Engineering workflow</h2><span className="subtle-tag">LIVE RECEIPTS · READ-ONLY</span></div>
+   <p className="muted">This view follows actual approved local A/B benchmark receipts. No checkboxes or simulated completions. Source review does not automatically apply patches, execute tests or publish PRs.</p>
+   {error&&<p role="alert">{error}</p>}
+   {runs.length>0?<label className="workflow-selector">Select recorded execution
+      <select aria-label="Workflow run" value={selectedId} onChange={e=>{setSelectedId(e.target.value);setReceipt(null);}}>
+       <option value="">Select a run</option>{runs.map(r=><option key={r.run_id} value={r.run_id}>{r.repository} · {r.status} · {r.run_id.slice(0,8)} · {new Date(r.created_at).toLocaleString()}</option>)}
+      </select>
+    </label>:<p>No approved benchmark execution has been recorded yet. Start a run in Benchmarks; it will appear here automatically.</p>}
+   {receipt&&<p className="muted">Run {receipt.run_id} · {receipt.repository} · {receipt.model} · {receipt.status} · last update {new Date(receipt.updated_at).toLocaleString()}</p>}
+   <div className="workflow-grid">
+    {stages.map((stage,i)=><div className="workflow-stage" key={stage.name}>
+     <span>{String(i+1).padStart(2,'0')} {stage.done?'✓':'○'}</span>
+     <strong>{stage.name}</strong><small>{stage.state}</small>
+    </div>)}
+   </div>
+   {receipt?.error&&<p role="alert">{receipt.error}</p>}
+   {baseline?.failure&&<p role="alert">Plain Copilot: {baseline.failure}</p>}
+   {challenger?.failure&&<p role="alert">Daeloryn: {challenger.failure}</p>}
+   <div className="benchmark-actions">
+    <button type="button" className="outline-button" onClick={onOpenBenchmarks}>Open A/B results and manual evidence review</button>
+    <button type="button" className="outline-button" onClick={onOpenChat}>Open Chat for read-only source and patch preview</button>
+   </div>
+   <p className="muted">For a fully automated fix → tests → PR pipeline, a separate isolated execution worker and explicit approval gates are required. These later stages intentionally stay unavailable rather than claiming completion.</p>
  </section>;
 }
 
@@ -562,7 +626,7 @@ function App() {
         </section>{showDetails&&<aside className="details-panel"><h3>Session configuration</h3><p className="muted">Select a Daeloryn agent and local project. Source review is initiated from the chat and requires explicit approval.</p>{agentRecommendation && <p className="muted">Suggested specialist: {agentRecommendation}</p>}<ProjectPicker onAdded={rows=>{setPendingReview(null);setRepositoryCatalog(rows);setRepositoryConfirmed(false);setRepositoryRecommendation('');}}/><label>Local repository (read-only suggestion)<select value={repositoryConfirmed?repositoryRecommendation:''} onChange={e=>{setPendingReview(null);setRepositoryRecommendation(e.target.value);setRepositoryConfirmed(Boolean(e.target.value));}}><option value="">Not confirmed</option>{githubCatalog.map(r=><option key={'github:'+r.name} value={r.name}>{r.name} (GitHub{r.private?', private':''}{r.language?', '+r.language:''})</option>)}{repositoryCatalog.map(r=><option key={r.path} value={r.name}>{r.name}</option>)}</select></label>{repositoryRecommendation && <p className="muted">Selected repository: {repositoryRecommendation}. Only locally confirmed projects can supply chat source context.</p>}<label><input type="checkbox" checked={projectContextEnabled} onChange={e=>{setPendingReview(null);setProjectContextEnabled(e.target.checked);}}/> Use selected local project for chat (source approval required)</label><label>Context behavior<select aria-label="Context behavior" value={contextPreference} onChange={e=>{setPendingReview(null);setContextPreference(e.target.value as ContextPreference);}}><option value="smart">Smart (recommended)</option><option value="text-only">Text only (never read project)</option><option value="full">Full project for every message (requires approval)</option></select></label><p className="muted">Smart mode reads no project files for greetings/general questions. Focused mode searches filenames and reads up to eight relevant files; only explicit whole-project requests read all eligible sources. Full-project override may use many model calls.</p><details><summary>Advanced: manual source review</summary><ApprovedCopilotReview key={reviewSelectionKey({repository:repositoryRecommendation,task:draft,model:copilotModel,agent:selectedAgent(agent)})+'|'+repositoryConfirmed+'|'+provider} repository={repositoryRecommendation} task={draft} enabled={provider==='copilot'&&copilotEnabled&&repositoryConfirmed&&repositoryCatalog.some(r=>r.name===repositoryRecommendation)} model={copilotModel} agent={selectedAgent(agent)} onResult={text=>{const id=Date.now();setRevealingId(id);setSessions(previous=>previous.map(s=>s.id===sessionId?{...s,name:!s.renamed&&s.name==='New conversation'?'Review '+repositoryRecommendation:s.name,messages:[...s.messages,{id,role:'assistant',text,createdAt:new Date().toISOString()}]}:s));}}/></details><PatchPreview key={repositoryRecommendation+'|'+repositoryConfirmed} repository={repositoryRecommendation} enabled={repositoryConfirmed&&repositoryCatalog.some(r=>r.name===repositoryRecommendation)}/><div className="review-controls"><button type="button" className="outline-button" disabled={reviewBusy} onClick={()=>void runLocalReview()}>{reviewBusy?'Inspecting…':'Run local code review (read-only)'}</button><p className="muted">Only local checkouts. Findings are heuristic, not confirmed defects. No AI upload, edits or test execution.</p>{reviewError&&<p role="alert">{reviewError}</p>}{reviewResult&&<section aria-label="Code review results"><h3>{reviewResult.repository}: {reviewResult.findings.length} review leads</h3>{reviewResult.workflow&&<div className="surface"><h3>Engineering workflow</h3><p>Current stage: {reviewResult.workflow.stage}</p><p className="muted">Approval gates: context → proposal → patch → verified tests → PR readiness.</p><p className="muted">{reviewResult.workflow.limitations}</p></div>}{reviewResult.remediation_plan&&<div className="surface"><h3>Remediation & regression-test plan</h3><p className="muted">Human review required. No patches, tests, branches or pull requests have been created.</p>{reviewResult.remediation_plan.actions.map((a,i)=><article key={i}><strong>{a.file}:{a.line} · {a.rule}</strong><p>Suggested change: {a.suggested_change}</p><p>Regression test: {a.regression_test}</p></article>)}</div>}<p className="muted">{reviewResult.source_files_scanned} source files inspected. {reviewResult.limitations}</p>{reviewResult.architecture&&<div className="surface"><h3>Architecture evidence</h3><p className="muted">{reviewResult.architecture.limitations}</p><h4>Framework hints</h4><p>{reviewResult.architecture.framework_hints.map(h=>h.name+' ('+h.import_occurrences+')').join(', ')||'No known framework imports found'}</p><h4>Source components</h4><ul>{reviewResult.architecture.components.map(c=><li key={c.file}>{c.file} · {c.language}{c.symbols.length?' · '+c.symbols.join(', '):''}</li>)}</ul></div>}{reviewResult.findings.map((f,i)=><article key={i} className="surface"><strong>{f.severity.toUpperCase()} · {f.rule}</strong><p>{f.file}:{f.line}</p><p>{f.evidence}</p><p className="muted">Suggested fix: {f.suggested_fix}</p></article>)}</section>}</div><label>Agent<select value={agent} onChange={e=>{setPendingReview(null);setAgent(e.target.value);}}><option>Automatic (preview)</option>{displayedAgents.map(a=><option key={a.name}>{a.name}</option>)}</select></label><label>Provider<select value={provider} onChange={e=>{setPendingReview(null);setProvider(e.target.value as 'copilot'|'ollama');}}><option value="copilot">GitHub Copilot</option><option value="ollama">Local Ollama</option></select></label>{provider==='copilot'?<label>Copilot model<select value={copilotModel} onChange={e=>{setPendingReview(null);setCopilotModel(e.target.value);}}><option value="auto">Automatic (task-based)</option>{copilotModels.map(m=><option key={m} value={m}>{m}</option>)}</select></label>:<label>Model<select value={model} onChange={e=>setModel(e.target.value)}><option value="">No model selected</option>{installedModels.map(m=><option key={m} value={m}>{m}</option>)}</select></label>}{provider==='copilot' && copilotDiscoveryError && <p className="muted">{copilotDiscoveryError} — automatic routing will fail closed.</p>}<div className="detail-divider"/><h3>Execution safeguards</h3><StatusLine label="Provider" state={(provider==='copilot'?copilotEnabled:chatEnabled)?"Enabled locally":"Disabled"}/><StatusLine label="Workspace access" state="In-chat approved source batches only"/><StatusLine label="Code modifications" state="Disabled"/><StatusLine label="Source review approval" state="Required"/><div className="details-note">Copilot uses the selected model and named Daeloryn agent when enabled. Smart Context keeps general messages text-only and prepares focused or explicit full source context only after approval. Provider usage is not independently metered. Provider model and agent compliance are not independently attested.</div></aside>}</div>
       </>}
       {view==='Agents'&&<><PageHeading eyebrow="SPECIALIST DIRECTORY" title="Agent catalog" description="Explore engineering roles. The full repository catalog will be loaded by the future API."/><div className="filter-bar"><input aria-label="Search agents" value={search} onChange={e=>setSearch(e.target.value)} placeholder="⌕  Search specialists…"/><span>{remoteAgents ? 'Repository catalog · '+remoteAgents.length+' agents' : 'Illustrative profiles · API offline'}</span></div><div className="agent-grid">{filteredAgents.map(a=><article className="agent-card" key={a.name}><div className="agent-card-top"><span className="agent-symbol">✧</span><span className="subtle-tag">{a.scope}</span></div><h3>{a.name}</h3><p>{a.description}</p><div className="agent-bottom"><span>○ Not connected</span><button onClick={()=>{setAgent(a.name);setView('Chat')}}>Select for chat →</button></div></article>)}</div>{filteredAgents.length===0&&<Empty text="No agents match your search."/>}</>}
-      {view==='Workflows'&&<><PageHeading eyebrow="EXECUTION ORCHESTRATION" title="Workflows" description="Review the staged engineering workflow and its explicit safety gates."/><EngineeringWorkflowGuide key={repositoryRecommendation+'|'+repositoryConfirmed} repository={repositoryRecommendation} confirmed={repositoryConfirmed} onOpenChat={()=>setView('Chat')}/><RepairDiagnostics/><InterruptedWorkflows/></>}
+      {view==='Workflows'&&<><PageHeading eyebrow="EXECUTION ORCHESTRATION" title="Workflows" description="Review the staged engineering workflow and its explicit safety gates."/><EngineeringWorkflowGuide repository={repositoryRecommendation} confirmed={repositoryConfirmed} onOpenChat={()=>setView('Chat')} onOpenBenchmarks={()=>setView('Benchmarks')}/><RepairDiagnostics/><InterruptedWorkflows/></>}
       {view==='Benchmarks'&&<><PageHeading eyebrow="QUALITY & EVIDENCE" title="Benchmarks" description="Run approved, paired read-only Copilot reviews; evaluate findings independently before claiming a winner."/><BenchmarkRunner projects={repositoryCatalog} models={copilotModels} agents={remoteAgents??[]} enabled={copilotEnabled} onOpenChat={()=>setView('Chat')}/><div className="metrics compact"><Metric label="Reported verified trials" value={benchmarks?String(benchmarks.verified_trial_count):"—"} note="Requires all verification flags" icon="✓"/><Metric label="Agent coverage" value={benchmarks?benchmarks.coverage_percent+"%":"—"} note={benchmarks?benchmarks.observed_cells+" / "+benchmarks.expected_cells+" cells":"Awaiting data"} icon="◇"/></div><section className="surface"><div className="surface-head"><h2>Comparison results</h2><span className="subtle-tag">{benchmarks?.trials?.length?`${benchmarks.trials.length} RECORDS`:'NO DATA'}</span></div><p className="muted">{benchmarks?.warning} No provider calls are started by this page.</p><div className="table-wrap"><table><thead><tr><th>Run / agent</th><th>Provider / arm</th><th>Requested models</th><th>Outcome</th><th>Evidence flags</th></tr></thead><tbody>{benchmarks?.trials?.length?benchmarks.trials.map(t=><tr key={JSON.stringify([t.agent,t.provider,t.arm,t.run_id])}><td>{t.run_id}<br/>{t.agent}</td><td>{t.provider}<br/>{t.arm}</td><td>Baseline: {t.baseline_model}<br/>Daeloryn: {t.daeloryn_model}</td><td>{t.outcome.split('_').join(' ')}</td><td>Model: {t.model_identity_verified?'reported verified':'unverified'}<br/>Agent: {t.agent_selection_verified?'reported verified':'unverified'}<br/>Checks: {t.independent_checks_executed?'reported executed':'not verified'}<br/>Comparable: {t.comparable?'reported yes':'no'}</td></tr>):<tr><td colSpan={5} className="table-empty">{benchmarks?'No per-trial records available. Configure --records-dir with benchmark-trial JSON files.':'Benchmark API unavailable.'}</td></tr>}</tbody></table></div></section></>}
       {view==='Models'&&<><PageHeading eyebrow="INTELLIGENT ROUTING" title="Model router" description="Choose a suitable model by task complexity, cost and capability when provider discovery is available."/><section className="surface"><h2>Discovered model catalogs</h2><p className="muted">These are model names discovered through enabled local provider APIs, not proof of an authenticated or successfully completed model session.</p><StatusLine label="Copilot catalog" state={copilotEnabled?(copilotModels.length?copilotModels.join(', '):'Unavailable · '+(copilotDiscoveryError||'No models returned')):'Disabled'}/><StatusLine label="Ollama catalog" state={chatEnabled?(installedModels.length?installedModels.join(', '):'No models returned'):'Disabled'}/></section><div className="model-grid">{[{name:'Lightweight tasks',model:'Haiku',icon:'⚡',description:'Simple classification, formatting and low-complexity requests.'},{name:'Engineering work',model:'Sonnet',icon:'⌘',description:'Code review, implementation and multi-file reasoning.'},{name:'Complex reasoning',model:'Opus',icon:'◈',description:'Architecture, difficult investigations and high-risk changes.'}].map(m=><article className="model-card" key={m.name}><span className="model-icon">{m.icon}</span><small>{m.name.toUpperCase()}</small><h2>{m.model}</h2><p>{m.description}</p><div className="model-footer">Illustrative routing tier · not discovered</div></article>)}</div><div className="notice"><span className="notice-icon">ⓘ</span><div><strong>Model availability is not verified</strong><p>These tiers are illustrative. The discovered catalog above reflects the local provider API, not independently verified model availability or live prices.</p></div></div></>}
       {view==='Settings'&&<><PageHeading eyebrow="WORKSPACE CONFIGURATION" title="Settings" description="Connection status and security boundaries for this local frontend."/><div className="settings-grid"><section className="surface"><h2>Connections</h2><StatusLine label="AI API" state={(copilotEnabled?'Copilot enabled; ':'Copilot disabled; ')+(chatEnabled?'Local Ollama enabled':'Local Ollama disabled')}/><StatusLine label="Backend API" state={apiStatus}/><StatusLine label="Repository catalog" state={remoteAgents?"Read-only loaded":"Unavailable"}/><StatusLine label="Benchmark execution" state="Durable local runs with polling; not token streaming"/>{dataError&&<p className="muted" role="status">API: {dataError}</p>}</section><section className="surface"><h2>Privacy & controls</h2><p className="muted">Chat names and messages are saved unencrypted in localStorage in this browser profile, up to 50 conversations and 2 MB. They persist on refresh, but are not synced to the backend or other devices. Clearing browser data removes them. Enabled providers receive submitted messages. Source review still requires separate approval.</p><div className="detail-divider"/><button className="outline-button" onClick={()=>{try{window.localStorage.removeItem(HISTORY_KEY);}catch{setHistoryError('Could not clear browser storage. Clear site data in browser settings.');return;}const freshId=Math.max(Date.now(),...sessions.map(s=>s.id+1));setHistoryBlocked(false);setSessions([{...INITIAL[0],id:freshId}]);setSessionId(freshId);setDraft('');setRevealingId(null);setView('Chat')}}>Clear local conversation history</button></section></div></>}
