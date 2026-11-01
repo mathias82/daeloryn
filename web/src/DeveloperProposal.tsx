@@ -1,7 +1,7 @@
 import React,{useState} from 'react';
-type Input={repository:string;model:string;findings:string};
+type Input={repository:string;model:string;findings:string;path?:string};
 export function DeveloperProposal({input,onClose}:{input:Input;onClose:()=>void}){
- const [path,setPath]=useState(''),[approved,setApproved]=useState(false),[busy,setBusy]=useState(false);
+ const [path,setPath]=useState(input.path||''),[approved,setApproved]=useState(false),[busy,setBusy]=useState(false);
  const [prepared,setPrepared]=useState<{sha256:string;prompt:string;agent:string;agent_profile:string}|null>(null);
  const [error,setError]=useState(''),[result,setResult]=useState('');
  async function run(execute:boolean){
@@ -9,7 +9,7 @@ export function DeveloperProposal({input,onClose}:{input:Input;onClose:()=>void}
   setBusy(true);setError('');
   const controller=new AbortController(),timer=window.setTimeout(()=>controller.abort(),110000);
   try{
-   const response=await fetch('/api/copilot/developer/'+(execute?'execute':'prepare'),{method:'POST',signal:controller.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({...input,path,...(execute?{approved_sha256:prepared!.sha256}:{})})});
+   const response=await fetch('/api/copilot/developer/'+(execute?'execute':'prepare'),{method:'POST',signal:controller.signal,headers:{'Content-Type':'application/json'},body:JSON.stringify({repository:input.repository,model:input.model,findings:input.findings,path,...(execute?{approved_sha256:prepared!.sha256}:{})})});
    const data=await response.json();if(!response.ok)throw new Error(data.error||'Developer unavailable');
    if(execute){setResult(data.status==='no_change'?'Developer proposed no change.':data.patch.diff);setPrepared(null);setApproved(false);}
    else{setPrepared(data);setApproved(false);}

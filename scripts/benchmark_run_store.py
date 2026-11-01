@@ -371,7 +371,7 @@ class RunStore:
                         record["error"] = ("Stopped by user. Pending batches were not invoked. "
                                            "In-flight provider outcomes may be unknown; no auto-retry.")
                     elif result["status"] != "completed":
-                        record["error"] = ("Partial benchmark: a provider batch failed, timed out "
+                        record["error"] = ("All approved batches finished; source coverage is incomplete. No remaining model calls." if len(result.get('arms', {})) == 2 and all(row.get('execution_complete') for row in result['arms'].values()) else "Partial benchmark: a provider batch failed, timed out "
                                            "or reached a review budget. See per-arm failure; do not auto-retry.")
                     record["updated_at"] = _utc()
                     self._save(record)

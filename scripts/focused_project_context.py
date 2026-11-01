@@ -17,7 +17,7 @@ MAX_BYTES = 64 * 1024
 MAX_FILE_BYTES = 24 * 1024
 EXTRA_EXTENSIONS = {".yaml", ".yml", ".properties"}
 CODE_EXTENSIONS = {".java", ".kt", ".py", ".ts", ".tsx", ".js", ".jsx", ".go"}
-BUG_REVIEW = re.compile(r"\b(?:bugs?|defects?|errors?|vulnerabilit(?:y|ies)|code\s+review|inspect|scan|review)\b|σφάλμ|έλεγξ|ελαττώμ", re.I)
+BUG_REVIEW = re.compile(r"\b(?:bugs?|defects?|errors?|vulnerabilit(?:y|ies)|code\s+review|inspect|scan|review|read|classes|class|list)\b|σφάλμ|έλεγξ|ελαττώμ|κ[ώω]δικ|κλ[άα]σ|διάβασ|διαβασ", re.I)
 NARROW_TARGET = re.compile(r"\b(?:pom(?:\.xml)?|build\.gradle(?:\.kts)?|readme(?:\.md)?|docs?|documentation|single\s+file)\b", re.I)
 FOUNDATIONS = {"README.md", "pom.xml", "build.gradle", "build.gradle.kts",
                "package.json", "pyproject.toml"}

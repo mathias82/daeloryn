@@ -1,7 +1,7 @@
 /** Only references to lines found in the approved source manifest are navigable. */
 export type SourceBlock={file:string;line:number;column:number;end_line:number;source:string};
-export type SourceReference={file:string;line:number;endLine:number;batch:number;excerpt:string;verified:boolean;kind:'bug'|'change'|'reference';suggestionText?:string};
-export type InspectorSnapshot={repository:string;sha256:string;sources:SourceBlock[];references:SourceReference[];completed:number;total:number;status:string};
+export type SourceReference={file:string;line:number;endLine:number;batch:number;excerpt:string;verified:boolean;kind:'bug'|'change'|'reference';suggestionText?:string;citationText?:string};
+export type InspectorSnapshot={repository:string;sha256:string;model?:string;sources:SourceBlock[];references:SourceReference[];completed:number;total:number;status:string};
 export function manifestSources(prompt:string,files:string[]):SourceBlock[]{
   const allow=new Set(files);
   const out:SourceBlock[]=[];
@@ -23,8 +23,11 @@ export function extractSourceReferences(reply:string,batch:number,sources:Source
   const found:SourceReference[]=[];
   const paths=[...new Set(sources.map(s=>s.file))].sort((a,b)=>b.length-a.length);
   for(const path of paths){
+    const base=path.split('/').pop()!;
+    const unique=paths.filter(p=>p.split('/').pop()===base).length===1;
+    const alias=unique?'(?:'+[path,base].filter((v,i,a)=>a.indexOf(v)===i).map(v=>v.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')+')':null;
     const escaped=path.replace(/[.*+?^$()|[\]\\{}]/g,'\\$&');
-    const expression=new RegExp(escaped+'(?:[:#]L?|\\s+[Ll]ines?\\s+)(\\d{1,6})(?:\\s*[-–]\\s*(\\d{1,6}))?','g');
+    const expression=new RegExp('(?<![\\w./-])'+(alias||escaped)+'[`*]*(?:[:#]L?|[,，]?\\s+(?:[Ll]ines?|γραμμ(?:ή|ές|η|ες))\\s+)(\\d{1,6})(?:\\s*[-–]\\s*(\\d{1,6}))?','gu');
     let match:RegExpExecArray|null;
     while((match=expression.exec(reply))!==null&&found.length<max){
       const line=Number(match[1]);
@@ -48,7 +51,7 @@ export function extractSourceReferences(reply:string,batch:number,sources:Source
           }
         }
       }
-      found.push({file:path,line,endLine,batch,verified:present,kind,excerpt,suggestionText});
+      found.push({file:path,line,endLine,batch,verified:present,kind,excerpt,suggestionText,citationText:match[0]});
     }
   }
   return found.sort((a,b)=>a.batch-b.batch||a.file.localeCompare(b.file)||a.line-b.line);
