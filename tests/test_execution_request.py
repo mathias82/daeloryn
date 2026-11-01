@@ -15,6 +15,12 @@ class ExecutionRequestTests(unittest.TestCase):
    with self.subTest(key=key):
     with self.assertRaises(ValueError):
      parse_request(json.dumps({**self.data,key:value}).encode())
+ def test_reject_duplicate_keys_and_unhashable_suite(self):
+  duplicate=('{"repository":"org/repo","repository":"org/other","suite":"python","digest":"'+"a"*64+'","approval_token":"token"}').encode()
+  with self.assertRaises(ValueError):parse_request(duplicate)
+  for suite in ([],{},["python"],42,None):
+   with self.subTest(suite=suite),self.assertRaises(ValueError):
+    parse_request(json.dumps({**self.data,"suite":suite}).encode())
  def test_reject_oversized_and_invalid(self):
   for payload in (b"x"*4097,b"not json",b"[]",b"{}"):
    with self.subTest(payload=payload[:10]),self.assertRaises(ValueError):
