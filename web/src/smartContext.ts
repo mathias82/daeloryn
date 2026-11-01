@@ -15,6 +15,12 @@ const CURIOSITY=/(?:\b(?:what|how\s+(?:does|is)|where\s+(?:is|are)|explain|find|
 // Merely mentioning a technology ("Explain Kafka") must not cause file reads.
 const REPOSITORY_ANCHOR=/(?:\b(?:project|repository|repo|codebase|service|controller|endpoint|source\s+files?|my\s+code|our\s+code|pom\.xml|build\.gradle|application\.ya?ml|class|module|package)\b|κ[ώω]δικ[\p{L}]*|έργ[\p{L}]*|εφαρμογ[\p{L}]*|κλ[άα]σ[\p{L}]*|αρχε[ίι][\p{L}]*)/iu;
 
+// High-confidence repository review requests are actionable even when users
+// naturally omit "the project" after selecting a local checkout.
+// This only prepares a manifest; model calls still require explicit approval.
+const SOURCE_REVIEW_INTENT=/(?:\b(?:can\s+you\s+|please\s+)?(?:analy[sz]e|review|inspect|audit|find|identify|check|look\s+for|fix)\b.{0,75}\b(?:bugs?|defects?|code\s+issues?|vulnerabilit(?:y|ies)|security\s+flaws?|code\s+review)\b|\b(?:code\s+review|bug\s+hunt|find\s+bugs|review\s+(?:my|our|the)\s+code)\b|(?:βρ(?:ε|ες)|βρες|βρ[εέ]στε|κ[άα]νε|[έε]λεγξ|αναλ[υύ]σ)[\p{L}\s]{0,55}(?:bug[s]?|σφ[άα]λμα[\p{L}]*|προβλ[ήη]μα[\p{L}]*|κ[ώω]δικ[\p{L}]*))/iu;
+const GENERAL_HOWTO=/^(?:how\s+(?:do|can|should)\s+(?:i|we)|how\s+to|what\s+is|explain\s+how\s+to|πώς\s+μπορώ\s+να|πώς\s+να)\b/iu;
+
 const SMALL_TALK=/^(?:hi|hello|hey|good\s+(?:morning|evening)|thanks?|thank\s+you|ok(?:ay)?|yes|no|γει[άα](?:\s+σου)?|καλημ[έε]ρα|καλησπ[έε]ρα|ευχαριστ[ώω]|ναι|[όο]χι|[έε]γινε|τι\s+κ[άα]νεις)[!?.\s]*$/iu;
 
 /**
@@ -26,6 +32,7 @@ export function routeContext(task:string, preference:ContextPreference='smart'):
   if(preference==='full')return 'full';
   const query=task.trim().slice(0,3000);
   if(!query||SMALL_TALK.test(query))return 'none';
+  if(!GENERAL_HOWTO.test(query)&&SOURCE_REVIEW_INTENT.test(query))return 'full';
   if(WHOLE.test(query)&&PROJECT.test(query))return 'full';
   if(PROJECT.test(query)&&CURIOSITY.test(query)&&REPOSITORY_ANCHOR.test(query))return 'focused';
   return 'none';
