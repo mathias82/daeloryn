@@ -101,8 +101,11 @@ receive submitted prompts. Never send secrets or expose these servers publicly.
    positives independently. The result clearly reads **Winner: Not determined**;
    no unsupported evaluation metric or independent model identity attestation is
    invented. This pilot is intentionally **not** counted as a verified trial in
-   the existing Benchmarks coverage matrix. Page refresh does not persist private
-   model transcripts. An interrupted browser stream may leave a provider call
+   the existing Benchmarks coverage matrix. Optional human-entered counts for
+   confirmed unique defects, false positives and file/line references can produce
+   a clearly labeled **human-assessed pilot advantage**, only if one arm dominates
+   both measures. These are not verified benchmark scores. Page refresh does not
+   persist private model transcripts. An interrupted browser stream may leave a provider call
    with unknown external outcome.
 
 Source inclusion is limited to eligible supported text files under existing
