@@ -125,7 +125,7 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
   function chooseMode(next:Mode){setMode(next);setAgent(defaults[next]);clear();}
   const selection={repository,mode,model:chosenModel,agent:selectedAgent};
   const canPrepare=Boolean(enabled&&repository&&projects.some(p=>p.name===repository)&&
-    chosenModel&&selectedAgent&&!busy&&!inFlight.current);
+    chosenModel&&selectedAgent&&!busy&&!inFlight.current&&!savedRuns.some(r=>r.status==='running'));
 
   async function prepare(){
     if(!canPrepare)return;
@@ -203,6 +203,22 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
       <p>Same source snapshot, task and requested Copilot model. Plain Copilot vs Copilot + trusted Daeloryn agent.</p></div>
       <span className="subtle-tag">READ-ONLY PILOT</span>
     </div>
+
+    <section className="benchmark-history" aria-label="Saved benchmark runs">
+      <div className="surface-head"><h3>Saved A/B runs</h3><span className="subtle-tag">LOCAL DISK · PILOT RESULTS</span></div>
+      <p className="muted">Approved benchmarks continue on the local API when you change pages. Results persist through browser refresh and backend restart. A run interrupted by a backend restart is marked interrupted, never retried automatically. Provider responses are stored on this computer.</p>
+      {historyError&&<p role="alert">{historyError}</p>}
+      {savedRuns.length>0?<label>Open saved run
+        <select aria-label="Saved benchmark run" value={selectedRunId} onChange={e=>{
+          setSelectedRunId(e.target.value);setResult(null);setPartial({baseline:'',daeloryn:''});
+          setManifest(null);setApproved(false);setAssessments(emptyAssessment());setHumanChecked(false);
+        }}>
+          <option value="">Select a saved run</option>
+          {savedRuns.map(r=><option key={r.run_id} value={r.run_id}>{r.repository} · {r.mode} · {r.status} · {new Date(r.created_at).toLocaleString()} · {r.run_id.slice(0,8)}</option>)}
+        </select>
+      </label>:<p>No saved runs yet. Results lost before this feature was installed cannot be reconstructed from discarded browser state.</p>}
+      {runReceipt&&<p role="status"><strong>Run {runReceipt.run_id.slice(0,8)} · {runReceipt.status}</strong> · Created {new Date(runReceipt.created_at).toLocaleString()} · Updated {new Date(runReceipt.updated_at).toLocaleString()}</p>}
+    </section>
     <div className="benchmark-form">
       <label>Local project
         <select aria-label="Benchmark project" value={repository} disabled={busy} onChange={e=>{setRepository(e.target.value);clear();}}>
@@ -256,23 +272,25 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
         <button type="button" className="outline-button" disabled={busy} onClick={clear}>Discard preparation</button>
       </div>
     </div>}
-    {busy&&<p role="status">{progress}</p>}
+    {(busy||runReceipt)&&<p role="status">{progress}</p>}
     {error&&<p role="alert">{error}</p>}
-    {(running||result||partial.baseline||partial.daeloryn)&&<div className="benchmark-results">
+    {(runReceipt||running||result||partial.baseline||partial.daeloryn)&&<div className="benchmark-results">
       <div className="benchmark-columns">
         {(['baseline','daeloryn'] as const).map(arm=><article className="benchmark-arm" key={arm}>
           <h3>{arm==='baseline'?'Plain Copilot':'Copilot + Daeloryn'}</h3>
-          <p>{result?.arms[arm]?result.arms[arm]?.status:'Pending / in progress'}</p>
-          <pre>{result?.arms[arm]?.review?.reply||partial[arm]||'No model response yet'}</pre>
+          <p>{runReceipt?.arms[arm]?runReceipt.arms[arm].status+' · '+runReceipt.arms[arm].completed_batches+'/'+runReceipt.arms[arm].total_batches+' batches':'Pending / in progress'}</p>
+          {runReceipt?.arms[arm]?.failure&&<p role="alert">Failure: {runReceipt.arms[arm].failure}</p>
+          <pre>{runReceipt?.arms[arm]?.reply||result?.arms[arm]?.review?.reply||partial[arm]||'No model response yet'}</pre>
         </article>)}
       </div>
+      {runReceipt?.error&&<p role="alert">{runReceipt.error}</p>}
       {result&&<div className="benchmark-conclusion">
         <strong>Winner: Not determined</strong>
         <p>{result.warning}</p>
         <p>Model identity independently verified: No · Agent activation independently verified: No · Regression checks executed: No.</p>
         <p>Compare confirmed unique findings, false positives, fix usefulness and source coverage manually before drawing a conclusion.</p>
       </div>}
-      {result&&result.status==='completed'&&mode==='review'&&<section className="benchmark-adjudication" aria-label="Human review of benchmark findings">
+      {result&&result.status==='completed'&&runReceipt?.mode==='review'&&<section className="benchmark-adjudication" aria-label="Human review of benchmark findings">
         <h3>Optional manual evidence assessment</h3>
         <p className="muted">Check actual file/line evidence and deduplicate root causes first. Enter counts for each arm; this assessment is user-supplied and is not an independently verified trial.</p>
         <div className="benchmark-columns">
@@ -295,6 +313,6 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
         <p role="status"><strong>{assessmentResult()}</strong></p>
       </section>}
     </div>}
-    {running&&<button className="outline-button" type="button" onClick={()=>{active.current?.abort();setProgress('Stopping observation; an in-flight remote call may have unknown outcome.');}}>Stop observing (no auto retry)</button>}
+    {running&&<p className="muted">Running on the local API. Navigation does not interrupt provider calls. Interrupted or partial outcomes are never automatically retried.</p>}
   </section>;
 }
