@@ -666,7 +666,7 @@ test('Smart code review selects Java Reviewer and Inspector receives safe links 
   await page.keyboard.press('Escape');
   await expect(page.getByRole('complementary',{name:'Code Inspector'})).toBeVisible();
   await inspector.getByRole('button',{name:'Full screen Code Inspector'}).click();
-  await inspector.getByRole('button',{name:'Exit full screen Code Inspector'}).click();
+  await page.getByRole('dialog',{name:'Code Inspector'}).getByRole('button',{name:'Exit full screen Code Inspector'}).click();
   await expect(page.locator('.code-inspector-fullscreen')).toHaveCount(0);
   await inspector.getByRole('button',{name:'Edit suggestion mode'}).click();
   const suggestions=inspector.getByRole('region',{name:'Edit suggestion draft'});
