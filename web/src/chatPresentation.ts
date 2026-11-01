@@ -4,7 +4,7 @@
 export type ReplyPart={kind:'prose'|'code';text:string;language?:string;closed?:boolean};
 export function readableProse(raw:string):string{
   return raw
-    .replace(/^\s{0,3}#{1,6}\s+/gm,'')
+    .replace(/^[ \t]{0,3}#{1,6}[ \t]+/gm,'')
     .replace(/(?<!\w)\*\*([^*\n]+)\*\*(?!\w)/g,'$1')
     .replace(/(?<!\w)__([^_\n]+)__(?!\w)/g,'$1')
     .replace(/(?<!\w)\*([^*\n]+)\*(?!\w)/g,'$1')
