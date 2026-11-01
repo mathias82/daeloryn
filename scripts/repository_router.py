@@ -6,6 +6,7 @@ Operators explicitly configure trusted local checkout roots.
 import os
 from pathlib import Path
 import re
+from project_stack import detect_technologies
 
 MAX_REPOS = 100
 MAX_ROOTS = 10
@@ -43,7 +44,7 @@ def discover(roots):
                 if marker.is_file() and not marker.is_symlink():
                     markers.append(label)
             results.append({"name": child.name, "path": str(canonical),
-                            "technologies": sorted(set(markers))})
+                            "technologies": sorted(set(markers) | set(detect_technologies(child)))})
     return results
 
 def suggest(task, repositories):

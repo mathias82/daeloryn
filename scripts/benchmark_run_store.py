@@ -12,6 +12,7 @@ from pathlib import Path
 import re
 import threading
 import uuid
+from paired_evidence_evaluator import evaluate as evaluate_evidence, source_from_prepared, source_from_context, context_digest
 
 RUN_ID = re.compile(r"[0-9a-f]{32}\Z")
 MAX_RECORDS = 30
@@ -101,6 +102,62 @@ class RunStore:
                              "created_at", "updated_at", "error")})
             return rows
 
+    def comparison_summaries(self):
+        """Expose every persisted run, including pending/partial comparisons.
+
+        Never synthesize missing scores or call a provider. A legacy or
+        interrupted run remains visible with explicit unavailable evidence.
+        """
+        with self.guard:
+            results = []
+            for row in self.list():
+                detail = self._read(row["run_id"])
+                comparison = detail.get("comparison")
+                if isinstance(comparison, dict):
+                    scores = comparison.get("arms", {})
+                    baseline = scores.get("baseline", {})
+                    challenger = scores.get("daeloryn", {})
+                    status = comparison.get("status", "unavailable")
+                    lead = comparison.get("provisional_evidence_lead", "not_determined")
+                    b_score = baseline.get("evidence_traceability_score")
+                    d_score = challenger.get("evidence_traceability_score")
+                else:
+                    # Explicitly show that the run exists, not a fabricated 0.
+                    status = ("pending" if row["status"] in ("running", "stopping") else
+                              "source_evidence_unavailable")
+                    lead, b_score, d_score = "not_determined", None, None
+                results.append({
+                    "run_id": row["run_id"],
+                    "repository": row["repository"],
+                    "mode": row["mode"],
+                    "model": row["model"],
+                    "agent": row["agent"],
+                    "status": row["status"],
+                    "evaluation_status": status,
+                    "provisional_evidence_lead": lead,
+                    "baseline_score": b_score,
+                    "daeloryn_score": d_score,
+                    "verified_winner": None,
+                })
+            return results
+
+    def evaluate_saved(self, run_id, context):
+        """Post-hoc offline evaluation of legacy run; fail closed on source drift."""
+        with self.guard:
+            record = self._read(run_id)
+            if record["status"] in ("running", "stopping") or run_id == self.active:
+                raise RuntimeError("wait for both model arms to finish")
+            if context_digest(context) != record.get("source_sha256"):
+                raise PermissionError("approved source snapshot changed; cannot evaluate old replies against different code")
+            source = source_from_context(context)
+            if not source:
+                raise ValueError("no eligible original source for comparison")
+            comparison = evaluate_evidence(record, source)
+            record["comparison"] = comparison
+            record["updated_at"] = _utc()
+            self._save(record)
+            return {"run_id": run_id, "comparison": comparison}
+
     def stop(self, run_id):
         with self.guard:
             record = self._read(run_id)
@@ -178,6 +235,7 @@ class RunStore:
             record['resume_attempts']=record.get('resume_attempts',0)+1
             record['status']='running'
             record['error']=None
+            record.pop('comparison', None)
             record['result']=None
             record['updated_at']=_utc()
             # start() writes the journal under the same lock and creates the
@@ -264,6 +322,16 @@ class RunStore:
                 if _resume is not None:
                     run_kwargs['resume_completed']=_resume[1]
                 result = runner(prepared, approved_digest, **run_kwargs)
+                # Reuse only the in-memory approved source snapshot (no
+                # provider call or filesystem rescan). Older/fixture runners
+                # may not carry per-batch source prompts. Evidence evaluation
+                # must never turn a valid partial or completed provider receipt
+                # into "failed": preserve model output and disclose the missing
+                # evaluation separately.
+                try:
+                    source = source_from_prepared(prepared)
+                except (KeyError, TypeError, ValueError):
+                    source = {}
                 with self.guard:
                     # Avoid duplicating large model transcripts in the receipt.
                     record["result"] = {
@@ -285,6 +353,20 @@ class RunStore:
                                 "reply": (outcome.get("review", {}).get("reply", "") or
                                           record["arms"][arm]["reply"])[:200000]
                             })
+                    if source:
+                        try:
+                            record["comparison"] = evaluate_evidence(record, source)
+                            record.pop("comparison_error", None)
+                        except (KeyError, TypeError, ValueError):
+                            record.pop("comparison", None)
+                            record["comparison_error"] = (
+                                "Offline evidence evaluation was unavailable; original "
+                                "model results are preserved. No winner was verified.")
+                    else:
+                        record.pop("comparison", None)
+                        record["comparison_error"] = (
+                            "Approved source-line manifest unavailable for offline "
+                            "evaluation. The saved run and model replies are preserved.")
                     if cancel_event.is_set():
                         record["error"] = ("Stopped by user. Pending batches were not invoked. "
                                            "In-flight provider outcomes may be unknown; no auto-retry.")

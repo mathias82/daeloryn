@@ -11,6 +11,25 @@ test.beforeEach(async({page})=>{
       '/api/agents':{agents:[{name:'java-reviewer',scope:'java',description:'Fixture reviewer'}]},
       '/api/benchmarks':{agent_count:1,expected_cells:8,observed_cells:1,verified_trial_count:0,coverage_percent:12.5,warning:'Fixture data; identities unverified',trials},
       '/api/benchmark/runs':{runs:[],persistence:'local-private-disk',verified_trial:false},
+      '/api/benchmark/campaign':{
+        kind:'daeloryn-sequential-agent-campaign',schema_version:1,
+        total_agents:1,provisionally_assessed:0,next_agent:'java-reviewer',
+        generated_at:'2026-11-01T21:00:00Z',weaker_traceability_agents:0,
+        warning:'Read-only queued pilot; no provider calls or verified winners.',
+        provider_calls_started:false,rules_modified:false,independently_verified_winners:0,
+        entries:[{order:1,agent:'java-reviewer',scope:'java',benchmark_mode:'review',
+          domain_scenario:'Inspect Java concurrency, null-handling and resource lifecycle.',
+          state:'not_started',latest_run_id:null,latest_run_status:null,
+          traceability_scores:null,provisional_evidence_lead:'not_determined',
+          verified_winner:null,candidate_rule_improvements:[]}],
+        project_campaigns:[{repository:'demo',technologies:['java'],total_agents:1,
+          applicable_agents:1,provisionally_assessed:0,next_agent:'java-reviewer',
+          entries:[{order:1,agent:'java-reviewer',scope:'java',benchmark_mode:'review',
+            domain_scenario:'Inspect Java concurrency, null-handling and resource lifecycle.',
+            state:'not_started',latest_run_id:null,latest_run_status:null,
+            traceability_scores:null,provisional_evidence_lead:'not_determined',
+            verified_winner:null,candidate_rule_improvements:[],applicable:true}]}]
+      },
       '/api/models':{models:[],chat_enabled:false},
       '/api/copilot/status':{enabled:true},
       '/api/copilot/models':{models},
@@ -658,6 +677,27 @@ test('Smart code review selects Java Reviewer and Inspector receives safe links 
   await expect(link).toBeVisible();
   await link.click();
   await expect(inspector.locator('.inspector-code-target')).toContainText('x.toString()');
+  await expect(inspector.locator('.inspector-code-bug')).toContainText('x.toString()');
+  await expect(inspector.getByText(/Highlighted: possible bug/)).toBeVisible();
+  await inspector.getByRole('button',{name:'Full screen Code Inspector'}).click();
+  await expect(page.getByRole('dialog',{name:'Code Inspector'})).toBeVisible();
+  await expect(page.locator('.code-inspector-fullscreen .inspector-code-bug')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('complementary',{name:'Code Inspector'})).toBeVisible();
+  await inspector.getByRole('button',{name:'Full screen Code Inspector'}).click();
+  await page.getByRole('dialog',{name:'Code Inspector'}).getByRole('button',{name:'Exit full screen Code Inspector'}).click();
+  await expect(page.locator('.code-inspector-fullscreen')).toHaveCount(0);
+  await inspector.getByRole('button',{name:'Edit suggestion mode'}).click();
+  const suggestions=inspector.getByRole('region',{name:'Edit suggestion draft'});
+  await expect(suggestions.getByText(/This is a proposed replacement/)).toBeVisible();
+  await expect(suggestions.getByRole('region',{name:'Original source lines'})).toContainText('x.toString()');
+  const input=suggestions.getByRole('textbox',{name:'Suggested replacement'});
+  await input.fill('  String read(){ return x == null ? "" : x.toString(); }');
+  await expect(suggestions.getByRole('region',{name:'Suggested diff preview content'})).toContainText('-  String read(){ return x.toString(); }');
+  await expect(suggestions.getByRole('region',{name:'Suggested diff preview content'})).toContainText('+  String read(){ return x == null');
+  await expect(suggestions.getByRole('button',{name:'Copy proposed patch'})).toBeEnabled();
+  await inspector.getByRole('button',{name:'Inspect mode'}).click();
+  await expect(suggestions).toHaveCount(0);
   await page.getByRole('button',{name:'Toggle session details'}).click();
   await expect(page.getByLabel(/^Agent/)).toHaveValue('java-reviewer');
 });
@@ -724,4 +764,94 @@ test('Benchmarks resume same partial run ID and require explicit approval of unk
   await runner.getByRole('button',{name:'Approve & resume saved run'}).click();
   await expect.poll(()=>resumes).toBe(1);
   await expect(runner.getByText(/Resuming dddddddd/)).toBeVisible();
+});
+
+test('Comparison results shows persisted evidence scores and no fabricated verified winner',async({page})=>{
+  const rows=[{run_id:'c'.repeat(32),repository:'demo',mode:'review',model:models[0],
+    agent:'java-reviewer',status:'completed',evaluation_status:'provisional_traceability',
+    provisional_evidence_lead:'daeloryn',baseline_score:0,daeloryn_score:36,verified_winner:null}];
+  await page.route('**/api/benchmarks',route=>route.fulfill({json:{
+    agent_count:22,expected_cells:176,observed_cells:0,verified_trial_count:0,
+    coverage_percent:0,warning:'No independently certified trials',trials:[],
+    paired_comparisons:rows
+  }}));
+  await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
+  const table=page.getByRole('region',{name:'Comparison results'});
+  await expect(table.getByText('36/100')).toBeVisible();
+  await expect(table.getByText('0/100')).toBeVisible();
+  await expect(table.getByText(/Not verified · no independent defect/)).toBeVisible();
+  await expect(table.getByRole('cell',{name:/daeloryn provisional/})).toBeVisible();
+});
+
+test('agent campaign chooses next role-specific benchmark without launching a model',async({page})=>{
+  let providerCalls=0;
+  page.on('request',request=>{
+    if(request.method()==='POST'&&/\/api\/benchmark\/(?:start|execute)/.test(request.url()))providerCalls++;
+  });
+  await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
+  const campaign=page.getByRole('region',{name:'22-agent evaluation campaign'});
+  await expect(campaign.getByText(/Next: 1\/1 · java-reviewer/)).toBeVisible();
+  await expect(campaign.getByLabel('Campaign project')).toHaveValue('demo');
+  await campaign.getByRole('button',{name:/Set up next A\/B benchmark/}).click();
+  const runner=page.getByRole('region',{name:'Paired benchmark runner'});
+  await expect(runner.getByLabel('Benchmark project')).toHaveValue('demo');
+  await expect(runner.getByLabel('Benchmark agent')).toHaveValue('java-reviewer');
+  await expect(runner.getByLabel('Benchmark type')).toHaveValue('review');
+  expect(providerCalls).toBe(0);
+  const downloadPromise=page.waitForEvent('download');
+  await campaign.getByRole('button',{name:'Export evaluation report (Markdown)'}).click();
+  const download=await downloadPromise;
+  expect(download.suggestedFilename()).toBe('daeloryn-agent-evaluation-report.md');
+});
+
+test('campaign isolates React project from Java/Spring agent results',async({page})=>{
+  const agents=[
+    {name:'java-reviewer',scope:'java',description:'Java defects'},
+    {name:'spring-boot-engineer',scope:'spring',description:'Spring Boot'},
+    {name:'react-reviewer',scope:'react',description:'React hooks'}];
+  const projects=[
+    {name:'java-app',path:'/fixture/java-app',technologies:['java','java-maven']},
+    {name:'spring-app',path:'/fixture/spring-app',technologies:['java','spring','java-maven']},
+    {name:'react-ui',path:'/fixture/react-ui',technologies:['node','react','typescript']}];
+  const entries=agents.map((agent,index)=>({
+    order:index+1,agent:agent.name,scope:agent.scope,benchmark_mode:'review',
+    domain_scenario:'Inspect '+agent.scope+' defects',state:'not_started',
+    latest_run_id:null,latest_run_status:null,traceability_scores:null,
+    provisional_evidence_lead:'not_determined',verified_winner:null,
+    candidate_rule_improvements:[]}));
+  const scoped=projects.map(project=>{
+    const applicable=entries.map(agent=>{
+      const allowed=project.technologies.includes(agent.scope);
+      return {...agent,applicable:allowed,state:allowed?'not_started':'not_applicable'};
+    });
+    return {repository:project.name,technologies:project.technologies,total_agents:3,
+      applicable_agents:applicable.filter(x=>x.applicable).length,provisionally_assessed:0,
+      next_agent:applicable.find(x=>x.applicable)?.agent||null,entries:applicable};
+  });
+  await page.route('**/api/repositories',route=>route.fulfill({json:{repositories:projects}}));
+  await page.route('**/api/agents',route=>route.fulfill({json:{agents}}));
+  await page.route('**/api/benchmark/campaign',route=>route.fulfill({json:{
+    kind:'daeloryn-sequential-agent-campaign',schema_version:1,generated_at:'2026-11-01T20:00:00Z',
+    total_agents:3,provisionally_assessed:0,next_agent:'java-reviewer',
+    weaker_traceability_agents:0,entries,
+    warning:'Source citation comparison only',provider_calls_started:false,
+    rules_modified:false,independently_verified_winners:0,
+    project_campaigns:scoped
+  }}));
+  await page.reload();
+  await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
+  const campaign=page.getByRole('region',{name:'22-agent evaluation campaign'});
+  await expect(campaign.getByText(/Next: 1\/1 · java-reviewer/)).toBeVisible();
+  await campaign.getByLabel('Campaign project').selectOption('react-ui');
+  await expect(campaign.getByText(/Next: 1\/1 · react-reviewer/)).toBeVisible();
+  await expect(campaign.getByText(/1 matching agents/)).toBeVisible();
+  await campaign.getByRole('button',{name:/Set up next A\/B benchmark/}).click();
+  const runner=page.getByRole('region',{name:'Paired benchmark runner'});
+  await expect(runner.getByLabel('Benchmark project')).toHaveValue('react-ui');
+  await expect(runner.getByLabel('Benchmark agent')).toHaveValue('react-reviewer');
+  await campaign.getByLabel('Campaign project').selectOption('spring-app');
+  await expect(campaign.getByText(/Next: 1\/2 · java-reviewer/)).toBeVisible();
+  await expect(campaign.getByText(/2 matching agents/)).toBeVisible();
+  await campaign.getByLabel('Campaign project').selectOption('java-app');
+  await expect(campaign.getByText(/1 matching agents/)).toBeVisible();
 });

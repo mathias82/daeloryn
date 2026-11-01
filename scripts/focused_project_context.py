@@ -16,6 +16,9 @@ MAX_MATCHES = 8
 MAX_BYTES = 64 * 1024
 MAX_FILE_BYTES = 24 * 1024
 EXTRA_EXTENSIONS = {".yaml", ".yml", ".properties"}
+CODE_EXTENSIONS = {".java", ".kt", ".py", ".ts", ".tsx", ".js", ".jsx", ".go"}
+BUG_REVIEW = re.compile(r"\b(?:bugs?|defects?|errors?|vulnerabilit(?:y|ies)|code\s+review|inspect|scan|review)\b|σφάλμ|έλεγξ|ελαττώμ", re.I)
+NARROW_TARGET = re.compile(r"\b(?:pom(?:\.xml)?|build\.gradle(?:\.kts)?|readme(?:\.md)?|docs?|documentation|single\s+file)\b", re.I)
 FOUNDATIONS = {"README.md", "pom.xml", "build.gradle", "build.gradle.kts",
                "package.json", "pyproject.toml"}
 STOP = {"what", "where", "when", "does", "this", "that", "which", "with",
@@ -55,6 +58,10 @@ def snapshot_focused(root, repository, task):
     analyze_local(root, repository)
     base = Path(root).resolve(strict=True) / repository
     terms = query_terms(task)
+    # A generic bug review must actually inspect program source, even when no
+    # filenames happen to contain terms like 'bug' or 'inspect'. This remains
+    # focused (up to eight files); full coverage still requires explicit scope.
+    generic_bug_review = bool(BUG_REVIEW.search(task) and not NARROW_TARGET.search(task))
     candidates = []
     entries = 0
 
@@ -90,6 +97,14 @@ def snapshot_focused(root, repository, task):
                 if path.name.startswith("application.") and any(
                         term in terms for term in ("observability", "telemetry", "metrics", "kafka", "security")):
                     score += 5
+                if generic_bug_review and path.suffix.lower() in CODE_EXTENSIONS:
+                    # Prioritize production code over README/pom; don't
+                    # claim the first few representative files cover all bugs.
+                    score += 32 if '/src/main/' in '/' + lowered else 24
+                    if '/src/test/' in '/' + lowered or '.test.' in lowered:
+                        score -= 16
+                if generic_bug_review and is_foundation:
+                    score -= 8
                 if score > 0:
                     candidates.append((score, rel, path))
 
@@ -120,14 +135,18 @@ def snapshot_focused(root, repository, task):
         body = "".join("[REDACTED]\n" if SENSITIVE.search(line) else line for line in lines)
         files.append({"path": rel, "source": body, "line_count": len(lines)})
         total += len(raw)
+    if generic_bug_review and not any(item['path'].lower().endswith(tuple(CODE_EXTENSIONS)) for item in files):
+        raise ValueError('Generic bug review selected no eligible source files; specify a source path or explicitly request a full scan')
     if not files:
         raise ValueError("No relevant eligible files matched the focused question. Use a more specific question or explicitly request a full review")
     return {
         "files": files, "omitted": omitted, "excluded": [],
         "bytes_read": total, "scope_type": "focused",
-        "scope": ("FOCUSED path-match only: README/build and relevant filenames/config; "
-                  "not a content search, full inventory, or complete source coverage. "
-                  "Other files may contain important relationships."),
+        "scope": (("FOCUSED representative code inspection: production source prioritized; "
+                   "up to eight files, NOT all project files. Explicitly request 'full scan of the entire project' for full coverage. ")
+                  if generic_bug_review else
+                  ("FOCUSED filename-based selection with relevant README/build files. "
+                   "Not full source coverage; other files may contain important relationships.")),
         "all_eligible_files_included": False,
         "matching_candidates": len(candidates),
         "max_selected_files": MAX_MATCHES,

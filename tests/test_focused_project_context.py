@@ -43,6 +43,22 @@ class FocusedContextTests(unittest.TestCase):
         self.assertFalse(context["all_eligible_files_included"])
         self.assertEqual("focused", context["scope_type"])
 
+    def test_generic_bug_review_reads_real_java_source_not_only_readme_and_pom(self):
+        context = snapshot_focused(self.parent, "demo", "inspect the project for bugs")
+        paths = [item["path"] for item in context["files"]]
+        self.assertIn("src/Inventory.java", paths)
+        self.assertIn("src/TelemetryService.java", paths)
+        self.assertTrue(any(path.endswith(".java") for path in paths))
+        self.assertLessEqual(len(paths), 8)
+        self.assertFalse(context["all_eligible_files_included"])
+        self.assertIn("NOT all project files", context["scope"])
+
+    def test_generic_bug_review_fails_without_any_program_source(self):
+        (self.project / "src/TelemetryService.java").unlink()
+        (self.project / "src/Inventory.java").unlink()
+        with self.assertRaisesRegex(ValueError, "no eligible source"):
+            snapshot_focused(self.parent, "demo", "inspect the project for bugs")
+
     def test_scope_changes_digest_and_full_scope_reads_more(self):
         task = "How does observability work in this project?"
         focused = prepare(self.parent, "demo", task, "test", scope="focused")

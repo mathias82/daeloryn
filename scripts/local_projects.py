@@ -8,6 +8,7 @@ import tempfile
 from threading import Lock
 
 from project_analysis import NAME
+from project_stack import detect_technologies
 
 MAX_PROJECTS = 100
 MAX_ENTRIES = 10000
@@ -46,7 +47,7 @@ def project(value, allowed_roots=None):
                ("pyproject.toml", "python"), ("requirements.txt", "python"), ("go.mod", "go"))
     technologies = sorted({label for name, label in markers
                            if (path / name).is_file() and not (path / name).is_symlink()})
-    return {'name': path.name, 'path': str(path), 'technologies': technologies}
+    return {'name': path.name, 'path': str(path), 'technologies': sorted(set(technologies) | set(detect_technologies(path)))}
 
 
 def candidates(value, recursive=False, allowed_roots=None):

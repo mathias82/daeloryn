@@ -8,10 +8,10 @@ Requires Python 3.11+, Node.js/npm and, for Copilot requests, an installed/authe
 
 ```bash
 cd web && npm ci && cd ..
-python3 scripts/console.py --enable-copilot-chat --enable-project-picker --open
+./start.sh
 ```
 
-Use `--help` for local configuration. Both servers bind to loopback; the console does not silently reclaim occupied ports.
+`./start.sh` starts the API and Vite together with explicit Copilot chat and project-picker opt-ins, then opens the browser. You can forward launcher flags like `./start.sh --repository-root /path/to/projects`. Press **Ctrl+C** to stop both owned services. Existing processes on occupied ports are never killed; missing dependencies produce actionable errors. For custom/manual startup, the equivalent is `python3 scripts/console.py --enable-copilot-chat --enable-project-picker --open`. Use `python3 scripts/console.py --help` for all flags. Both servers bind to loopback; the console does not silently reclaim occupied ports.
 
 For agent-only installation without a web console:
 
@@ -47,8 +47,61 @@ Larger batches generally reduce the number of calls compared with the previous 2
 - **Delete:** only terminal runs can be deleted. Deleting a chat does not delete benchmark receipts.
 - **Evaluation:** comparing text replies does not prove a winner. Independently inspect unique real defects, false positives, source coverage, proposed fixes and actual regression tests before making a quality claim.
 
+## Sequential evaluation of all 22 specialist agents
+
+The **Sequential agent evaluation** panel in Benchmarks displays all 22 trusted
+profiles in a deterministic order, with domain-specific assessment criteria for
+Java, Spring, React, security, integration, reliability, containers, Kubernetes
+and CI/CD. **First select the local project.** The backend reads bounded, standard
+build manifests (`pom.xml`, Gradle, `package.json`, Docker/Helm/CI markers)
+and one level of component folders to detect its technologies without executing
+a build or scanning source. Only compatible roles enter that project's ordered
+queue: Java-only projects get Java agents; Spring Boot projects get Java + Spring;
+React projects get React specialists; full-stack projects may receive all relevant
+families and platform agents when their actual manifests justify them. Unrelated
+roles remain listed as **not applicable** and do not block the queue. Each
+project keeps its own progress and A/B evidence; a score from another checkout
+cannot advance its queue. Unknown technologies are never guessed to be React or
+Spring. Within a project, each comparable A/B run advances to the next eligible
+role. A/B arms see the **identical task, source snapshot and requested Copilot
+model**, while the challenger alone loads the specialist.
+
+Select a registered local checkout whose technology matches the role and click
+**Set up next A/B benchmark**. This only fills the local benchmark form; it
+does not contact Copilot. Inspect the entire snapshot, batch count and source
+manifest, and approve the potentially billable run explicitly. Incomplete runs
+should first be resumed with the original snapshot and unknown-call acknowledgment
+where required. Saved completed runs missing a comparison can be evaluated
+offline, without model calls. Model identity and effectiveness remain unverified
+without independent attestation and regression testing.
+
+Use **Export evaluation report (Markdown)** or **Export structured JSON** to
+save a **project-specific** report containing all 22 statuses (including not
+applicable roles), its actual technology markers, domain scenarios, source
+citation scores, and candidate rule improvements for later review. Export does not include full model
+transcripts or source bodies. A lower Daeloryn citation score triggers a
+**proposed rule improvement** checklist for that agent: require evidence,
+reduce unsupported references, and verify on a previously unseen holdout
+project. These are **proposals** only—no background agent self-modification,
+automatic repository edits, fabricated winner or unapproved model calls.
+Improving citation traceability alone is *not* proof of finding more real bugs.
+
 ## Security and operational boundaries
 
 The local code context contains untrusted source, never executable agent instructions. Profiles come from Daeloryn's trusted catalog. Copilot runs with tool access disabled and without working-directory access to the inspected checkout. The console does not apply patches, run commands or publish pull requests as part of the chat review. Verify authorization before reviewing proprietary code.
 
 For additional information: [Benchmark protocol](benchmark-protocol.md) · [Local Java review](local-java-review-benchmark.md) · [Production readiness](production-readiness.md).
+
+## Full-screen Code Inspector and model-highlighted lines
+
+In Chat, the read-only Code Inspector shows file:line references reported by completed review batches. Click a grounded reference to jump to the matching line in the approved snapshot. A model-reported **possible bug** and a **suggested change** have different highlights; ungrounded references remain non-navigable. A highlighted code line is *not* proof of a defect. Select **Full screen** to expand the panel, browse source lines, and use **Esc** or **Exit full screen** to return. Select **Edit suggestion** to draft a source replacement beside the original lines. You can change the proposed code, preview a unified diff, copy the patch, or load an explicit model-proposed code snippet if one was returned near the cited location. Suggestions are never written to project files by this UI. Changing the approved source snapshot clears drafts. This UI never edits a checkout.
+
+## Source coverage: generic bugs versus explicit full scan
+
+Questions such as `inspect the project for bugs` trigger a bounded focused review **prioritizing eligible production source** over README/pom; it searches up to eight files, not the full repository. The UI must not claim it analyzed the whole project. For real full scope use explicit language such as `full scan of the entire project for bugs`, inspect file coverage/exclusions, then approve the exact snapshot and model-call count. Docs-only never sends program source.
+
+## Evidence-only A/B evaluation and comparison results
+
+After both arms finish, Daeloryn evaluates their stored replies **offline**, without additional provider calls. The evaluator counts deduplicated source-line locations that actually exist in the same approved snapshot and unsupported citations. It shows an explanatory traceability score from 0 to 100 and, only for fully completed comparable arms, a **provisional evidence lead** (Plain Copilot, Daeloryn, tie or inconclusive). It **does not** prove a cited line is a real bug, that a fix works, or that the requested model/agent identity was verified. Independent regression tests and human adjudication remain separate. The main Benchmarks **Comparison results** table polls saved local comparisons; the independent verified-trial table reports external attestations separately.
+
+For older saved runs without a comparison, choose **Evaluate saved run (offline, no AI calls)**. Re-evaluation re-reads the registered local repository and refuses the request if its source digest changed. An incomplete run can be evaluated for diagnostic evidence but is **not** marked comparable; Resume still requires explicit consent for unconfirmed provider calls.
