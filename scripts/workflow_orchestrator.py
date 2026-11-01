@@ -3,6 +3,8 @@
 No command execution, AI calls, or implicit approvals.
 """
 import json
+import contextlib
+import fcntl
 import os
 import re
 import tempfile
@@ -25,6 +27,17 @@ class WorkflowStore:
  def __init__(self, directory):
   self.directory=Path(directory).resolve()
   self.directory.mkdir(parents=True,exist_ok=True)
+ @contextlib.contextmanager
+ def _lock(self,identifier):
+  path=self._path(identifier).with_suffix(".lock")
+  if path.is_symlink():raise ValueError("symlink lock file")
+  fd=os.open(path,os.O_CREAT|os.O_RDWR|os.O_NOFOLLOW,0o600)
+  try:
+   fcntl.flock(fd,fcntl.LOCK_EX)
+   yield
+  finally:
+   fcntl.flock(fd,fcntl.LOCK_UN)
+   os.close(fd)
  def _path(self,identifier):
   if not isinstance(identifier,str) or not IDENTIFIER.fullmatch(identifier):
    raise ValueError("invalid workflow identifier")
@@ -53,9 +66,13 @@ class WorkflowStore:
   if not isinstance(repository,str) or not repository.strip() or not isinstance(task,str) or not 1<=len(task.strip())<=300:
    raise ValueError("repository and bounded task required")
   state={"id":identifier,"repository":repository,"task":task,"stage":"planned","version":0,"attempts":0,"events":[]}
-  self._save(identifier,state,create=True)
+  with self._lock(identifier):
+   self._save(identifier,state,create=True)
   return state
  def transition(self,identifier,event,*,expected_version,approved=False,evidence=None):
+  with self._lock(identifier):
+   return self._transition_locked(identifier,event,expected_version=expected_version,approved=approved,evidence=evidence)
+ def _transition_locked(self,identifier,event,*,expected_version,approved=False,evidence=None):
   state=self.load(identifier)
   if not isinstance(expected_version,int) or isinstance(expected_version,bool) or expected_version!=state["version"]:
    raise RuntimeError("stale workflow version")
@@ -65,7 +82,7 @@ class WorkflowStore:
    raise PermissionError("explicit approval required")
   if event in ("tests_passed","published") and (not isinstance(evidence,dict) or evidence.get("verified") is not True):
    raise PermissionError("verified evidence required")
-  if event=="tests_failed" and state["attempts"]>=3:
+  if event=="start_tests" and state["attempts"]>=3:
    raise RuntimeError("retry limit exceeded")
   state["stage"]=next_stage
   state["version"]+=1
