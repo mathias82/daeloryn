@@ -52,3 +52,17 @@ Larger batches generally reduce the number of calls compared with the previous 2
 The local code context contains untrusted source, never executable agent instructions. Profiles come from Daeloryn's trusted catalog. Copilot runs with tool access disabled and without working-directory access to the inspected checkout. The console does not apply patches, run commands or publish pull requests as part of the chat review. Verify authorization before reviewing proprietary code.
 
 For additional information: [Benchmark protocol](benchmark-protocol.md) · [Local Java review](local-java-review-benchmark.md) · [Production readiness](production-readiness.md).
+
+## Full-screen Code Inspector and model-highlighted lines
+
+In Chat, the read-only Code Inspector shows file:line references reported by completed review batches. Click a grounded reference to jump to the matching line in the approved snapshot. A model-reported **possible bug** and a **suggested change** have different highlights; ungrounded references remain non-navigable. A highlighted code line is *not* proof of a defect. Select **Full screen** to expand the panel, browse source lines, and use **Esc** or **Exit full screen** to return. This UI never edits a checkout.
+
+## Source coverage: generic bugs versus explicit full scan
+
+Questions such as `inspect the project for bugs` trigger a bounded focused review **prioritizing eligible production source** over README/pom; it searches up to eight files, not the full repository. The UI must not claim it analyzed the whole project. For real full scope use explicit language such as `full scan of the entire project for bugs`, inspect file coverage/exclusions, then approve the exact snapshot and model-call count. Docs-only never sends program source.
+
+## Evidence-only A/B evaluation and comparison results
+
+After both arms finish, Daeloryn evaluates their stored replies **offline**, without additional provider calls. The evaluator counts deduplicated source-line locations that actually exist in the same approved snapshot and unsupported citations. It shows an explanatory traceability score from 0 to 100 and, only for fully completed comparable arms, a **provisional evidence lead** (Plain Copilot, Daeloryn, tie or inconclusive). It **does not** prove a cited line is a real bug, that a fix works, or that the requested model/agent identity was verified. Independent regression tests and human adjudication remain separate. The main Benchmarks **Comparison results** table polls saved local comparisons; the independent verified-trial table reports external attestations separately.
+
+For older saved runs without a comparison, choose **Evaluate saved run (offline, no AI calls)**. Re-evaluation re-reads the registered local repository and refuses the request if its source digest changed. An incomplete run can be evaluated for diagnostic evidence but is **not** marked comparable; Resume still requires explicit consent for unconfirmed provider calls.
