@@ -1,4 +1,4 @@
-import {sourceLinkSegments} from './sourceLinks';
+import {sourceLinkSegments} from './sourceLinks.js';
 /** Only references to lines found in the approved source manifest are navigable. */
 export type SourceBlock={file:string;line:number;column:number;end_line:number;source:string};
 export type SourceReference={file:string;line:number;endLine:number;batch:number;excerpt:string;verified:boolean;kind:'bug'|'change'|'reference';suggestionText?:string};
