@@ -600,3 +600,85 @@ test('pom version question with selected checkout requires focused source approv
   expect(scope).toBe('focused');
   expect(plainChatRequests).toBe(0);
 });
+
+
+test('Chat presents natural prose with code only inside a copyable code box',async({page})=>{
+  await page.route('**/api/copilot/chat',route=>route.fulfill({json:{
+    reply:'## Explanation\n\n**Use this code** in Java:\n\n`'.replace('`','`'.repeat(3))+
+      'java\nclass Example {}\n'+ '`'.repeat(3)+'\n\nThat is all.'
+  }}));
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await page.getByRole('textbox',{name:'Message',exact:true}).fill('Explain a simple example');
+  await page.getByRole('button',{name:/Send message/}).click();
+  const reply=page.locator('.bubble.assistant').last();
+  await expect(reply.getByText('Explanation')).toBeVisible();
+  await expect(reply.getByRole('region',{name:'Code snippet'})).toBeVisible();
+  await expect(reply.locator('pre code')).toContainText('class Example {}');
+  await expect(reply.getByRole('button',{name:'Copy code'})).toBeEnabled();
+  await expect(reply).not.toContainText('## Explanation');
+  await expect(reply).not.toContainText('**Use this code**');
+});
+
+test('Smart code review selects Java Reviewer and Inspector receives safe links by batch',async({page})=>{
+  const approvedBlock=JSON.stringify({
+    file:'App.java',line:1,column:1,end_line:4,
+    source:'class App {\n  String x;\n  String read(){ return x.toString(); }\n}\n'
+  });
+  let requestedAgent='';
+  await page.route('**/api/copilot/review/prepare',route=>{
+    const selection=route.request().postDataJSON();
+    requestedAgent=selection.agent;
+    expect(selection).toMatchObject({repository:'demo',scope:'focused',agent:'java-reviewer'});
+    return route.fulfill({json:{...selection,model:models[0],prompt:approvedBlock,
+      sha256:'a'.repeat(64),files:['App.java'],batch_count:1,warning:'One review call',
+      agent_profile:'trusted agent',agent_profile_sha256:'b'.repeat(64),
+      approval_required:true,coverage:{scope:'focused',all_eligible_files_included:false,omitted:[],excluded:[]}}});
+  });
+  await page.route('**/api/copilot/review/execute',route=>route.fulfill({
+    contentType:'application/x-ndjson',body:[
+      {type:'progress',phase:'completed_batch',completed:1,total:1,batch:1},
+      {type:'batch_reply',batch:1,reply:'Possible null dereference at App.java:3 (verify preconditions).'},
+      {type:'result',result:{status:'completed',completed_batches:1,total_batches:1,
+        review:{reply:'Possible null dereference at App.java:3 (verify preconditions).'},
+        coverage:{all_eligible_files_included:false}}}
+    ].map(x=>JSON.stringify(x)).join('\n')+'\n'
+  }));
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await page.getByLabel(/^Local repository/).selectOption('demo');
+  await page.getByRole('textbox',{name:'Message',exact:true}).fill('Review Java class for bugs');
+  await page.getByRole('button',{name:/Send message/}).click();
+  await expect(page.getByRole('region',{name:'Chat project context approval'})).toBeVisible();
+  await expect(page.getByRole('complementary',{name:'Code Inspector'})).toBeVisible();
+  expect(requestedAgent).toBe('java-reviewer');
+  await page.getByRole('checkbox',{name:/I inspected the exact source context/}).check();
+  await page.getByRole('button',{name:'Approve and analyze project'}).click();
+  const inspector=page.getByRole('complementary',{name:'Code Inspector'});
+  const link=inspector.getByRole('button',{name:/App.java:3/});
+  await expect(link).toBeVisible();
+  await link.click();
+  await expect(inspector.locator('.inspector-code-target')).toContainText('x.toString()');
+  await page.getByRole('button',{name:'Toggle session details'}).click();
+  await expect(page.getByLabel(/^Agent/)).toHaveValue('java-reviewer');
+});
+
+test('Docs only prepares only docs and never requests a full source scan',async({page})=>{
+  const requests:string[]=[];
+  await page.route('**/api/copilot/review/prepare',route=>{
+    const body=route.request().postDataJSON();
+    requests.push(body.scope);
+    expect(body).toMatchObject({repository:'demo',scope:'docs'});
+    return route.fulfill({json:{...body,model:models[0],sha256:'a'.repeat(64),
+      prompt:JSON.stringify({file:'README.md',line:1,column:1,end_line:1,source:'# Documentation'}),
+      files:['README.md'],batch_count:1,warning:'Docs only',approval_required:true,
+      agent_profile:null,agent_profile_sha256:null,
+      coverage:{scope:'Markdown only',all_eligible_files_included:false,omitted:[],excluded:[]}}});
+  });
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await page.getByLabel(/^Local repository/).selectOption('demo');
+  await page.getByLabel('Context behavior').selectOption('docs');
+  await page.getByRole('textbox',{name:'Message',exact:true}).fill('Explain project documentation');
+  await page.getByRole('button',{name:/Send message/}).click();
+  await expect(page.getByRole('heading',{name:/Docs-only project context/})).toBeVisible();
+  expect(requests).toEqual(['docs']);
+  await expect(page.getByText(/No source code inspected/)).toBeVisible();
+});
