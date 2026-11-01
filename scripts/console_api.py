@@ -48,7 +48,27 @@ def benchmark_data(records_dir=None):
             if path.is_symlink() or not path.is_file() or path.stat().st_size > MAX_RECORD_BYTES:
                 raise ValueError("unsafe or oversized benchmark record")
             records.append(json.loads(path.read_text(encoding="utf-8")))
-    return matrix(records)
+    report = matrix(records)
+    # Expose an allowlist only: records may contain private transcripts/argv.
+    trials = []
+    for record in records:
+        models = record.get("requested_models", {})
+        if not isinstance(models, dict):
+            raise ValueError("invalid requested models")
+        values = [record["run_id"], *models.values()]
+        if any(not isinstance(value, str) or not value.strip() or len(value) > 160
+               or any(ord(char) < 32 for char in value) for value in values):
+            raise ValueError("invalid benchmark labels")
+        trials.append({"run_id": record["run_id"], "agent": record["agent"],
+                       "provider": record["provider"], "arm": record["arm"],
+                       "outcome": record["outcome"],
+                       "baseline_model": models.get("baseline", "Not recorded"),
+                       "daeloryn_model": models.get("daeloryn", "Not recorded"),
+                       "model_identity_verified": record.get("model_identity_verified") is True,
+                       "agent_selection_verified": record.get("agent_selection_verified") is True,
+                       "independent_checks_executed": record.get("independent_checks_executed") is True,
+                       "comparable": record.get("comparable") is True})
+    return {**report, "trials": trials}
 
 
 def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repository_roots=(), enable_github_repositories=False, workflow_dir=None):

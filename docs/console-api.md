@@ -206,6 +206,18 @@ operation; no source is sent to Copilot, no files are modified and no tests
 or agents are executed. The chat provider and model selector remain separate.
 
 
+## Recorded benchmark results in the console
+
+Start with `--records-dir /private/benchmark-trials` and open Benchmarks.
+The existing read-only `/api/benchmarks` response now includes `trials` with
+allowlisted run/agent/provider/arm, requested model labels, outcome and evidence
+flags. It does not return transcripts, argv, credentials or raw record contents.
+Old records without model labels display `Not recorded`; missing evidence flags
+remain false. The dashboard never starts a provider or evaluator call. Flags
+are producer-supplied claims, not independent attestation by the API. Records
+are loaded on page refresh; no directory is exposed without operator configuration.
+
+
 ## Copilot model + agent source review
 
 `POST /api/copilot/chat` accepts `{model, messages, agent?}`. Unknown profile
