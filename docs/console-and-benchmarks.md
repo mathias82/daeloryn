@@ -47,6 +47,34 @@ Larger batches generally reduce the number of calls compared with the previous 2
 - **Delete:** only terminal runs can be deleted. Deleting a chat does not delete benchmark receipts.
 - **Evaluation:** comparing text replies does not prove a winner. Independently inspect unique real defects, false positives, source coverage, proposed fixes and actual regression tests before making a quality claim.
 
+## Sequential evaluation of all 22 specialist agents
+
+The **Sequential agent evaluation** panel in Benchmarks displays all 22 trusted
+profiles in a deterministic order, with domain-specific assessment criteria for
+Java, Spring, React, security, integration, reliability, containers, Kubernetes
+and CI/CD. When each agent has a comparable saved A/B run, the queue advances
+to the next role. A/B arms see the **identical task, source snapshot and
+requested Copilot model**, while the challenger alone loads the specialist.
+
+Select a registered local checkout whose technology matches the role and click
+**Set up next A/B benchmark**. This only fills the local benchmark form; it
+does not contact Copilot. Inspect the entire snapshot, batch count and source
+manifest, and approve the potentially billable run explicitly. Incomplete runs
+should first be resumed with the original snapshot and unknown-call acknowledgment
+where required. Saved completed runs missing a comparison can be evaluated
+offline, without model calls. Model identity and effectiveness remain unverified
+without independent attestation and regression testing.
+
+Use **Export evaluation report (Markdown)** or **Export structured JSON** to
+save all role statuses, domain scenarios, source-citation scores, and candidate
+rule improvements for later review. Export does not include full model
+transcripts or source bodies. A lower Daeloryn citation score triggers a
+**proposed rule improvement** checklist for that agent: require evidence,
+reduce unsupported references, and verify on a previously unseen holdout
+project. These are **proposals** only—no background agent self-modification,
+automatic repository edits, fabricated winner or unapproved model calls.
+Improving citation traceability alone is *not* proof of finding more real bugs.
+
 ## Security and operational boundaries
 
 The local code context contains untrusted source, never executable agent instructions. Profiles come from Daeloryn's trusted catalog. Copilot runs with tool access disabled and without working-directory access to the inspected checkout. The console does not apply patches, run commands or publish pull requests as part of the chat review. Verify authorization before reviewing proprietary code.
