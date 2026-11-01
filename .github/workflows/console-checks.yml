@@ -60,6 +60,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_authenticated_execution.py' -v
           python3 -m unittest discover -s tests -p 'test_authenticated_container_tests.py' -v
           python3 -m unittest discover -s tests -p 'test_trusted_checkout_registry.py' -v
+          python3 -m unittest discover -s tests -p 'test_registered_container_tests.py' -v
           python3 -m unittest discover -s tests -p 'test_approved_execution_dispatch.py' -v
           python3 -m unittest discover -s tests -p 'test_execution_receipts.py' -v
           python3 -m unittest discover -s tests -p 'test_dispatch_receipts.py' -v
