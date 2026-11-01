@@ -24,7 +24,7 @@ def append_receipt(path,*,subject,repository,action,digest,outcome):
    raise PermissionError("receipt file must not be group/world accessible")
   with os.fdopen(fd,"a",encoding="utf-8") as f:
    fd=-1
-   f.write(json.dumps(record,sort_keys=True)+"\\n")
+   f.write(json.dumps(record,sort_keys=True)+"\n")
    f.flush()
    os.fsync(f.fileno())
  finally:
