@@ -10,6 +10,7 @@ import uuid
 from approved_copilot_review import prepare as prepare_review, execute as execute_review
 from copilot_chat import copilot_chat
 from project_review_context import snapshot
+from agent_benchmark_campaign import task_for_agent
 
 TASKS = {
     "review": (
@@ -54,7 +55,7 @@ def prepare(root, repository, mode, model, agent):
         raise ValueError("unsupported benchmark mode")
     if not isinstance(agent, str) or not agent:
         raise ValueError("select a trusted specialist agent")
-    task = TASKS[mode]
+    task = task_for_agent(agent, mode, TASKS[mode])
     # One exact source snapshot shared by both arms. No second filesystem walk
     # between preparation of baseline and specialist.
     context = snapshot(root, repository)
