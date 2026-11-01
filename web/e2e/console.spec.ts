@@ -480,3 +480,70 @@ test('Workflow shows real recorded batches and never checks off unsupported patc
   expect(layout.overflowing).toBe(false);
   expect(layout.columns.trim().split(/\s+/).length).toBe(1);
 });
+
+
+test('Stop benchmark requests backend cancellation without deleting the run',async({page})=>{
+  const id='d'.repeat(32);
+  const calls:string[]=[];
+  let state='running';
+  await page.route('**/api/benchmark/runs',route=>route.fulfill({json:{runs:[{
+    run_id:id,status:state,repository:'demo',mode:'review',model:models[0],
+    agent:'java-reviewer',created_at:'2026-11-01T18:00:00+00:00',
+    updated_at:'2026-11-01T18:01:00+00:00'}]}}));
+  await page.route('**/api/benchmark/runs/*/stop',route=>{
+    calls.push('stop');
+    expect(route.request().postDataJSON()).toEqual({});
+    state='stopping';
+    return route.fulfill({json:{run_id:id,status:state}});
+  });
+  await page.route('**/api/benchmark/runs/*',route=>route.fulfill({json:{
+    run_id:id,status:state,repository:'demo',mode:'review',model:models[0],
+    agent:'java-reviewer',created_at:'2026-11-01T18:00:00+00:00',
+    updated_at:'2026-11-01T18:01:00+00:00',
+    error:null,arms:{baseline:{status:'running',completed_batches:1,total_batches:52,reply:'Batch 1: finding'},
+      daeloryn:{status:'pending',completed_batches:0,total_batches:52,reply:''}}
+  }}));
+  await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
+  const runner=page.getByRole('region',{name:'Paired benchmark runner'});
+  await expect(runner.getByRole('button',{name:'Stop run'})).toBeVisible();
+  await expect(runner.getByText('1/52 batches',{exact:false})).toBeVisible();
+  await runner.getByRole('button',{name:'Stop run'}).click();
+  await expect(runner.getByText(/Stopping: in-flight provider calls/)).toBeVisible();
+  expect(calls).toEqual(['stop']);
+  await expect(runner.getByRole('button',{name:'Delete run'})).toHaveCount(0);
+});
+
+test('Delete benchmark requires confirmation and removes only selected completed receipt',async({page})=>{
+  const run='c'.repeat(32);
+  let deleted=false;
+  const posts:string[]=[];
+  await page.route('**/api/benchmark/runs',route=>route.fulfill({json:{runs:deleted?[]:[{
+    run_id:run,status:'partial',repository:'demo',mode:'review',
+    model:models[0],agent:'java-reviewer',created_at:'2026-11-01T18:00:00+00:00',
+    updated_at:'2026-11-01T18:01:00+00:00'}]}}));
+  await page.route('**/api/benchmark/runs/*/delete',route=>{
+    posts.push('delete');
+    expect(route.request().postDataJSON()).toEqual({});
+    deleted=true;
+    return route.fulfill({json:{run_id:run,deleted:true}});
+  });
+  await page.route('**/api/benchmark/runs/*',route=>route.fulfill({json:{
+    run_id:run,status:'partial',repository:'demo',mode:'review',model:models[0],
+    agent:'java-reviewer',created_at:'2026-11-01T18:00:00+00:00',
+    updated_at:'2026-11-01T18:01:00+00:00',
+    error:'Provider time budget reached',
+    arms:{baseline:{status:'partial',completed_batches:4,total_batches:52,reply:'Some findings'},
+      daeloryn:{status:'pending',completed_batches:0,total_batches:52,reply:''}}
+  }}));
+  await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
+  const runner=page.getByRole('region',{name:'Paired benchmark runner'});
+  await runner.getByRole('button',{name:'Delete run'}).click();
+  const confirmation=runner.getByRole('group',{name:'Confirm delete benchmark run'});
+  await expect(confirmation).toBeVisible();
+  await confirmation.getByRole('button',{name:'Cancel'}).click();
+  expect(posts).toEqual([]);
+  await runner.getByRole('button',{name:'Delete run'}).click();
+  await confirmation.getByRole('button',{name:'Confirm delete run'}).click();
+  await expect(runner.getByText(/No saved runs yet/)).toBeVisible();
+  expect(posts).toEqual(['delete']);
+});
