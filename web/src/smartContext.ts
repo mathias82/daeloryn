@@ -6,11 +6,11 @@
 export type ContextScope='none'|'focused'|'full';
 export type ContextPreference='smart'|'text-only'|'full';
 
-const WHOLE=/(?:\b(?:full|complete|entire|whole|all)\b.{0,40}\b(?:project|repo(?:sitory)?|codebase|source|files|review|scan|audit)\b|\b(?:review|scan|audit|analy[sz]e|inspect)\b.{0,40}\b(?:entire|whole|full|all)\b|\b(?:every|all)\s+(?:source|java|code|repository)\s+files?\b|ολ[όο]κληρ\w*|πλ[ήη]ρ\w*\s+(?:αν[άα]λυσ\w*|[έε]λεγχ\w*)|[όο]λα\s+τα\s+αρχε[ίι]α|[όο]λο\s+το\s+(?:project|έργο|repository)|σ[άα]ρωσε\s+τα\s+π[άα]ντα)/iu;
+const WHOLE=/(?:\b(?:full|complete|entire|whole|all)\b.{0,40}\b(?:project|repo(?:sitory)?|codebase|source|files|review|scan|audit)\b|\b(?:review|scan|audit|analy[sz]e|inspect)\b.{0,40}\b(?:entire|whole|full|all)\b|\b(?:every|all)\s+(?:source|java|code|repository)\s+files?\b|ολ[όο]κληρ[\p{L}]*|πλ[ήη]ρ[\p{L}]*\s+(?:αν[άα]λυσ[\p{L}]*|[έε]λεγχ[\p{L}]*)|[όο]λα\s+τα\s+αρχε[ίι]α|[όο]λο\s+το\s+(?:project|έργο|repository)|σ[άα]ρωσε\s+τα\s+π[άα]ντα)/iu;
 
-const PROJECT=/(?:\b(?:project|repository|repo|codebase|source\s+code|source\s+files?|my\s+code|our\s+code|service|controller|endpoint|spring\s+boot|architecture|observability|logging|metrics|trace|telemetry|kafka|docker|kubernetes|pom\.xml|build\.gradle|application\.ya?ml|class|module|package)\b|(?:[οό]?\s*(?:κ[ώω]δικ\w*|έργ\w*|αρχιτεκτονικ\w*|αρχε[ίι]\w*|κλ[άα]σ\w*|μ[έε]τρικ\w*|παρατηρησιμ\w*|καταγραφ\w*|ιχνηλ[άα]τ\w*|εφαρμογ\w*|π[ώω]ς\s+υλοποι\w*)))/iu;
+const PROJECT=/(?:\b(?:project|repository|repo|codebase|source\s+code|source\s+files?|my\s+code|our\s+code|service|controller|endpoint|spring\s+boot|architecture|observability|logging|metrics|trace|telemetry|kafka|docker|kubernetes|pom\.xml|build\.gradle|application\.ya?ml|class|module|package)\b|(?:[οό]?\s*(?:κ[ώω]δικ[\p{L}]*|έργ[\p{L}]*|αρχιτεκτονικ[\p{L}]*|αρχε[ίι][\p{L}]*|κλ[άα]σ[\p{L}]*|μ[έε]τρικ[\p{L}]*|παρατηρησιμ[\p{L}]*|καταγραφ[\p{L}]*|ιχνηλ[άα]τ[\p{L}]*|εφαρμογ[\p{L}]*|π[ώω]ς\s+υλοποι[\p{L}]*)))/iu;
 
-const CURIOSITY=/(?:\b(?:what|how\s+(?:does|is)|where\s+(?:is|are)|explain|find|show|inspect|review|check|analy[sz]e|what\s+does)\b|π[ώω]ς|πο[ύυ]|εξ[ήη]γησ\w*|δείξε|δες|[έε]λεγξ\w*|αν[άα]λυσ\w*|τι\s+κ[άα]νει)/iu;
+const CURIOSITY=/(?:\b(?:what|how\s+(?:does|is)|where\s+(?:is|are)|explain|find|show|inspect|review|check|analy[sz]e|what\s+does)\b|π[ώω]ς|πο[ύυ]|εξ[ήη]γησ[\p{L}]*|δείξε|δες|[έε]λεγξ[\p{L}]*|αν[άα]λυσ[\p{L}]*|τι\s+κ[άα]νει)/iu;
 
 const SMALL_TALK=/^(?:hi|hello|hey|good\s+(?:morning|evening)|thanks?|thank\s+you|ok(?:ay)?|yes|no|γει[άα](?:\s+σου)?|καλημ[έε]ρα|καλησπ[έε]ρα|ευχαριστ[ώω]|ναι|[όο]χι|[έε]γινε|τι\s+κ[άα]νεις)[!?.\s]*$/iu;
 
