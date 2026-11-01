@@ -6,10 +6,11 @@ sandbox isolation or attest actual provider model/agent identity.
 """
 import argparse
 import json
+import os
 from pathlib import Path
 import sys
 
-from capture_provider_cli import capture, HOSTS
+from capture_provider_cli import capture, HOSTS, MODEL
 from compare_implementation_trials import compare
 from assemble_benchmark_trial import assemble
 
@@ -30,10 +31,14 @@ def validate(plan, trial):
     trial = Path(trial).resolve(strict=True)
     for arm in ("baseline", "daeloryn"):
         config = arms[arm]
-        if not isinstance(config, dict) or (not isinstance(config.get("model"), str) or not config["model"].strip()):
+        if not isinstance(config, dict) or (not isinstance(config.get("model"), str) or not MODEL.fullmatch(config["model"])):
             raise ValueError("explicit model required")
-        if not isinstance(config.get("argv"), list):
-            raise ValueError("explicit argv required")
+        argv = config.get("argv")
+        if not isinstance(argv, list) or not argv or not all(
+                isinstance(arg, str) and arg and "\x00" not in arg for arg in argv):
+            raise ValueError("explicit nonempty argv strings required for both arms")
+        if os.path.basename(argv[0]) not in (provider, provider + ".exe"):
+            raise ValueError("both executables must match declared provider")
         path = trial / arm
         if path.is_symlink() or not path.is_dir() or path.resolve() != path:
             raise ValueError("real prepared arm required")
