@@ -100,7 +100,7 @@ def prepare(root, repository, task, model, agent=None, *, _context=None, scope='
             'warning': 'Inspect all source before approval. Heuristic redaction is not a secret scanner. Each batch is a separate potentially billable model call. Review stops after 5 minutes or output budget; partial outcomes are reported. Cross-batch reasoning is not guaranteed.'}
 
 
-def execute(prepared, model, approved_digest, *, transport=copilot_chat, progress=None, stream_replies=False, cancel_event=None, parallelism=1):
+def execute(prepared, model, approved_digest, *, transport=copilot_chat, progress=None, stream_replies=False, cancel_event=None, parallelism=1, resume_batches=None):
     if not isinstance(prepared, dict) or not isinstance(prepared.get('prompt'), str):
         raise ValueError('invalid prepared context')
     prompt = prepared['prompt']
@@ -128,11 +128,18 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
         requests.append(request)
     if not isinstance(parallelism, int) or not 1 <= parallelism <= 2:
         raise ValueError('unsupported batch concurrency: maximum 2')
+    if resume_batches is None:
+        resume_batches = {}
+    if not isinstance(resume_batches, dict) or any(
+            not isinstance(i, int) or isinstance(i, bool) or not 1 <= i <= len(requests) or
+            not isinstance(reply, str) or not reply
+            for i, reply in resume_batches.items()):
+        raise ValueError('invalid confirmed resume batch receipts')
     replies, failure, attempted = [], None, 0
     started = time.monotonic()
     if parallelism == 2:
-        results, pending, attempted = {}, {}, 0
-        total_output = 0
+        results, pending, attempted = {i-1: {'reply': reply} for i, reply in resume_batches.items()}, {}, 0
+        total_output = sum(len(reply) for reply in resume_batches.values())
         def run_one(index):
             request = requests[index]
             batch = request['messages'][0]['content']
@@ -152,8 +159,14 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
                        (cancel_event is None or not cancel_event.is_set()) and
                        time.monotonic()-started < MAX_SECONDS and total_output < MAX_REVIEW_OUTPUT):
                     index = attempted
-                    pending[executor.submit(run_one, index)] = index
                     attempted += 1
+                    if index in results:
+                        continue
+                    # Journal intent to call before scheduling a worker. On
+                    # crash, this batch is UNKNOWN rather than falsely pending.
+                    if progress:
+                        progress({'type':'batch_started','batch':index+1})
+                    pending[executor.submit(run_one, index)] = index
                     if progress:
                         progress({'type':'progress','phase':'running','completed':len(results),
                                   'total':len(requests),'batch':index+1})
@@ -176,6 +189,8 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
                             if stream_replies:
                                 progress({'type':'batch_reply','batch':index+1,'reply':response['reply']})
                     except (RuntimeError, TimeoutError, OSError, PermissionError, ValueError):
+                        if progress:
+                            progress({'type':'batch_failed','batch':index+1})
                         failure = ('Provider call failed or stopped; external outcome may be unknown. '
                                    'Remaining batches not invoked; no retry performed.')
                 if cancel_event is not None and cancel_event.is_set():
@@ -187,7 +202,10 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
                 dispatch()
         replies = [results[i] for i in sorted(results)]
     else:
-        for request in requests:
+        for index, request in enumerate(requests):
+            if index+1 in resume_batches:
+                replies.append({'reply':resume_batches[index+1]})
+                continue
             batch = request['messages'][0]['content']
             if cancel_event is not None and cancel_event.is_set():
                 failure = 'Stop requested; no more batches started. Provider outcome may be unknown.'
@@ -204,20 +222,24 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
                 progress({'type': 'progress', 'phase': 'running', 'completed': len(replies),
                           'total': len(prompts), 'batch': attempted + 1})
             attempted += 1
+            if progress:
+                progress({'type':'batch_started','batch':index+1})
             try:
                 response = transport(request, **kwargs)
                 if not isinstance(response, dict) or not isinstance(response.get('reply'), str):
                     raise RuntimeError('invalid provider response')
                 replies.append(response)
             except (RuntimeError, TimeoutError, OSError, PermissionError):
+                if progress:
+                    progress({'type':'batch_failed','batch':index+1})
                 failure = 'Provider call failed; external outcome may be unknown. Remaining batches not invoked; no retry performed.'
                 break
             if progress:
                 progress({'type': 'progress', 'phase': 'completed_batch', 'completed': len(replies),
-                          'total': len(prompts), 'batch': attempted})
+                          'total': len(prompts), 'batch': index+1})
                 if stream_replies:
                     # Completed model replies are streamed per batch, not per token.
-                    progress({'type': 'batch_reply', 'batch': attempted, 'reply': response['reply']})
+                    progress({'type': 'batch_reply', 'batch': index+1, 'reply': response['reply']})
     if not failure and prepared.get('scope', 'full') == 'full' and not prepared.get('coverage', {}).get('all_eligible_files_included', False):
         failure = 'Some eligible sources were omitted; see coverage. This is not a complete project review.'
     if cancel_event is not None and cancel_event.is_set():
@@ -238,6 +260,6 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
                        'partial' if failure else 'completed'), 'failure': failure,
             'source_transmitted': attempted > 0, 'approved_sha256': digest,
             'completed_batches': complete_count, 'total_batches': len(prompts),
-            'remaining_not_run': len(prompts) - attempted, 'coverage': prepared.get('coverage'),
+            'remaining_not_run': max(0, len(prompts) - (attempted if parallelism==2 else len(resume_batches)+attempted)), 'coverage': prepared.get('coverage'),
             'patch_applied': False, 'tests_executed': False, 'pull_request_created': False,
             'verified_usage_credits': None, 'usage_note': 'Provider does not supply structured, verified credit usage through this CLI interface.'}
