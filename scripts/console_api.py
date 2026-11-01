@@ -260,6 +260,40 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     return
                 self.reply(200, result)
                 return
+            if self.path.startswith("/api/benchmark/runs/") and self.path.endswith("/resume"):
+                if not enable_copilot:
+                    self.reply(405, {"error":"Benchmark requires enabled Copilot"});return
+                if self.headers.get("Content-Type","").split(";")[0].strip()!="application/json":
+                    self.reply(415, {"error":"JSON required"});return
+                length=self.headers.get("Content-Length","")
+                if not length.isdigit() or not 0<int(length)<=256:
+                    self.reply(413, {"error":"Invalid resume request size"});return
+                try:
+                    request=json.loads(self.rfile.read(int(length)))
+                    if (not isinstance(request,dict) or
+                        set(request)!={"approved_sha256","acknowledge_unknown"} or
+                        not isinstance(request["approved_sha256"],str) or
+                        not isinstance(request["acknowledge_unknown"],bool)):
+                        raise ValueError("explicit approval digest and unknown-call selection required")
+                    run_id=self.path.removeprefix("/api/benchmark/runs/").removesuffix("/resume")
+                    previous=run_store.get(run_id)
+                    matches=resolve_repository(previous["repository"])
+                    if len(matches)!=1:
+                        raise ValueError("registered source project unavailable")
+                    prepared=prepare_pair(matches[0],previous["repository"],previous["mode"],
+                                          previous["model"],previous["agent"])
+                    receipt=run_store.resume(run_id,prepared,request["approved_sha256"],
+                                             execute_pair,acknowledge_unknown=request["acknowledge_unknown"])
+                except PermissionError as exc:
+                    self.reply(409, {"error":str(exc)});return
+                except RuntimeError as exc:
+                    self.reply(409, {"error":str(exc)});return
+                except FileNotFoundError:
+                    self.reply(404, {"error":"benchmark run unavailable"});return
+                except (ValueError,TypeError,KeyError, json.JSONDecodeError,OSError) as exc:
+                    self.reply(400, {"error":"Resume rejected: "+str(exc)});return
+                self.reply(202,receipt)
+                return
             if self.path == "/api/benchmark/start":
                 if not enable_copilot:
                     self.reply(405, {"error": "Benchmark requires enabled Copilot"})
