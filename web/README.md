@@ -79,6 +79,40 @@ not an OS sandbox; provider model/agent compliance is not independently attested
 Chat names and messages persist unencrypted in browser localStorage; enabled providers
 receive submitted prompts. Never send secrets or expose these servers publicly.
 
+## Run a paired read-only A/B benchmark from the frontend
+
+1. Launch the loopback console with `--enable-copilot-chat --enable-project-picker`,
+   with Copilot CLI installed/authenticated and the optional SDK available for
+   live model discovery. Register an explicit local checkout using Chat → Add project.
+2. Open **Benchmarks** → **New A/B benchmark**. Select that local project, a real
+   discovered Copilot model, benchmark mode and a trusted Daeloryn specialist.
+   Code review and architecture modes analyze sources; fix-plan mode only proposes
+   changes/tests (it does **not** apply patches or execute checks).
+3. Select **Prepare A/B benchmark**. The API builds a single bounded source snapshot
+   shared by baseline and specialist. Inspect **both exact source prompts**, omissions,
+   selected model, agent, source/approval SHA-256 hashes and combined potentially
+   billable batch-call count. No model call occurs during preparation.
+4. Check the explicit approval box, then choose **Approve & run A/B**. The API
+   re-reads the project and rejects stale source/agent/model changes, starts only
+   one A/B run at a time, invokes Copilot without file/shell/network/memory tools
+   in separate temporary sessions, and streams completed batches and both answers.
+   It never automatically retries unknown outcomes.
+5. Compare side-by-side cited issues and validate genuine defects and false
+   positives independently. The result clearly reads **Winner: Not determined**;
+   no unsupported evaluation metric or independent model identity attestation is
+   invented. This pilot is intentionally **not** counted as a verified trial in
+   the existing Benchmarks coverage matrix. Page refresh does not persist private
+   model transcripts. An interrupted browser stream may leave a provider call
+   with unknown external outcome.
+
+Source inclusion is limited to eligible supported text files under existing
+source/call/time budgets. Batches are independent; this is not a complete
+cross-file reasoning guarantee. The Copilot deny flags are **not an OS sandbox**.
+Do not use confidential customer checkouts, host credentials or an untrusted
+development workstation without external isolation and authorization. For a
+real **Bug Fix + Regression Tests** contest, use the separately documented
+frozen-test/isolated evaluator protocol until the secure runner is integrated.
+
 ## Production integration requirements
 
 Before enabling any remote functionality: authenticate users, enforce backend authorization per workspace and agent, use CSRF protections as appropriate, enforce server-side request limits, never accept arbitrary shell commands, use isolated workers and ephemeral scoped credentials, require explicit approval for write actions, and expose independently validated execution events. The frontend must distinguish requested model from verified model identity. Do not claim live execution from a CLI invocation alone.
