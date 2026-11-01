@@ -275,7 +275,6 @@ function EngineeringWorkflowGuide({repository,confirmed,onOpenChat,onOpenBenchma
   {name:'Publish draft PR',description:'Not executed by this workflow',status:'locked',phase:'later'}
  ] as const;
  const verifiedStages=stages.slice(0,3).filter(stage=>stage.status==='complete').length;
- const running=stages.some(stage=>stage.status==='running');
  const failed=stages.some(stage=>stage.status==='failed');
  const visibleRuns=confirmed?runs.filter(r=>r.repository===repository):runs;
  const badgeLabel=(status:string)=>status==='complete'?'Completed':
