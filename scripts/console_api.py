@@ -233,6 +233,33 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     return
                 self.reply(200, result)
                 return
+            if self.path.startswith("/api/benchmark/runs/") and (
+                    self.path.endswith("/stop") or self.path.endswith("/delete")):
+                if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                    self.reply(415, {"error": "JSON required"})
+                    return
+                length = self.headers.get("Content-Length", "")
+                if not length.isdigit() or not 0 < int(length) <= 64:
+                    self.reply(413, {"error": "invalid benchmark action size"})
+                    return
+                try:
+                    payload = json.loads(self.rfile.read(int(length)))
+                    if payload != {}:
+                        raise ValueError("empty JSON object required")
+                    action = self.path.rsplit("/", 1)[1]
+                    run_id = self.path.removeprefix("/api/benchmark/runs/").rsplit("/", 1)[0]
+                    result = run_store.stop(run_id) if action == "stop" else run_store.delete(run_id)
+                except FileNotFoundError:
+                    self.reply(404, {"error": "benchmark run unavailable"})
+                    return
+                except RuntimeError as exc:
+                    self.reply(409, {"error": str(exc)})
+                    return
+                except (ValueError, OSError, TypeError, json.JSONDecodeError) as exc:
+                    self.reply(400, {"error": "Run action rejected: " + str(exc)})
+                    return
+                self.reply(200, result)
+                return
             if self.path == "/api/benchmark/start":
                 if not enable_copilot:
                     self.reply(405, {"error": "Benchmark requires enabled Copilot"})
