@@ -184,3 +184,26 @@
  .code-inspector-fullscreen .inspector-source{grid-column:1;grid-row:4}
  .code-inspector-fullscreen footer{grid-row:5}
 }
+
+/* Explicit, in-browser edit suggestions; source file remains read-only. */
+.inspector-suggestion-panel{display:grid;gap:11px;border:1px solid #66588d;border-radius:10px;
+  padding:12px;background:#201d31;min-width:0;flex-shrink:0;max-height:min(43vh,440px);overflow:auto}
+.inspector-suggestion-heading{display:flex;justify-content:space-between;gap:10px;align-items:center;flex-wrap:wrap}
+.inspector-suggestion-heading strong{color:#d8caff;font-size:12px}
+.inspector-suggestion-panel .muted{font-size:11px;line-height:1.55}
+.inspector-suggestion-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.inspector-suggestion-grid label{display:grid;min-width:0;gap:6px;color:#b2bde1;font-size:11px}
+.inspector-suggestion-grid pre,.inspector-diff pre,.inspector-suggestion-grid textarea{
+  margin:0;background:#101827;border:1px solid #3b475c;color:#e0e7f5;border-radius:7px;
+  padding:10px;font:11px/1.5 ui-monospace,SFMono-Regular,Consolas,monospace;
+  min-height:95px;max-height:205px;overflow:auto;white-space:pre}
+.inspector-suggestion-grid textarea{resize:vertical;width:100%;max-height:240px}
+.inspector-suggestion-actions{display:flex;gap:8px;flex-wrap:wrap}
+.inspector-suggestion-actions button{padding:9px 12px;border-radius:8px}
+.inspector-suggestion-actions button:disabled{opacity:.45;cursor:not-allowed}
+.inspector-diff{min-width:0;display:grid;gap:7px}
+.inspector-diff strong{font-size:11px;color:#b9acf9}
+.inspector-diff pre{max-height:155px;overflow:auto;white-space:pre}
+.code-inspector-fullscreen .inspector-suggestion-panel{max-height:40vh}
+@media(max-width:760px){.inspector-suggestion-grid{grid-template-columns:1fr}
+  .inspector-suggestion-panel{max-height:38vh}}
