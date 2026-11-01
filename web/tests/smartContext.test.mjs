@@ -47,3 +47,9 @@ test('code reviews are focused unless whole-project wording is explicit',()=>{
  assert.equal(routeContext('Perform a full scan of the entire project'),'full');
  assert.equal(routeContext('What is Java?'),'none');
 });
+
+test('Greek requests to inspect code or identify classes prepare project context',()=>{
+ for(const task of ['χρησιμοποιησε εργαλεια να δεις τον κωδικα και πες μου ποιες ειναι','ποιες είναι οι κλάσεις του project;','διάβασε τον κώδικα','δείξε τις κλάσεις'])assert.equal(routeContext(task),'focused');
+ assert.equal(routeContext('διάβασε τον κώδικα','text-only'),'none');
+ assert.equal(routeContext('χρησιμοποίησε εργαλεία να δεις τον κώδικα','docs'),'docs');
+});
