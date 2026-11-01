@@ -16,6 +16,7 @@ from approved_copilot_review import prepare as prepare_ai_review, execute as exe
 from paired_review_benchmark import prepare as prepare_pair, execute as execute_pair, TASKS as BENCHMARK_TASKS
 from threading import Lock
 from benchmark_run_store import RunStore
+from agent_benchmark_campaign import campaign_report
 from patch_workspace import preview as preview_patch
 from repair_agent import suggest as diagnose_failure
 from workflow_recovery import inspect_interrupted
@@ -167,6 +168,9 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                 elif path.path == "/api/benchmark/runs":
                     payload = {"runs": run_store.list(), "persistence": "local-private-disk",
                                "verified_trial": False}
+                elif path.path == "/api/benchmark/campaign":
+                    payload = campaign_report(run_store.list(), run_store.comparison_summaries(),
+                                              agents=agent_data())
                 elif path.path.startswith("/api/benchmark/runs/"):
                     run_id = path.path.removeprefix("/api/benchmark/runs/")
                     try:
