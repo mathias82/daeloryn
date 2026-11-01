@@ -18,13 +18,18 @@ def make_execution_handler(authenticator,registry,approval_gate,*,receipt_path=N
    self.end_headers()
    self.wfile.write(raw)
   def do_POST(self):
+   # Reject ambiguous framing and duplicate security-sensitive headers.
+   if any(len(self.headers.get_all(name,[]))!=1 for name in ("Host","Content-Type","Content-Length")):
+    return self.respond(400,{"error":"ambiguous headers"})
+   if len(self.headers.get_all("Authorization",[]))!=1:
+    return self.respond(403,{"error":"authorization required"})
    host=self.headers.get("Host","")
    expected=("127.0.0.1:"+str(self.server.server_port),"localhost:"+str(self.server.server_port))
    if host not in expected or self.headers.get("Origin") is not None:
     return self.respond(403,{"error":"forbidden"})
    if self.path!="/api/execution/tests" or self.headers.get("Content-Type")!="application/json":
     return self.respond(404,{"error":"not found"})
-   if self.headers.get("Transfer-Encoding") is not None:
+   if self.headers.get_all("Transfer-Encoding",[]):
     return self.respond(400,{"error":"unsupported transfer encoding"})
    lengths=self.headers.get_all("Content-Length",[])
    if len(lengths)!=1 or not lengths[0].isascii() or not lengths[0].isdecimal():
