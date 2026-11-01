@@ -13,6 +13,7 @@ from github_repository_catalog import list_github_repositories
 from project_analysis import analyze_local
 from code_review import review
 from approved_copilot_review import prepare as prepare_ai_review, execute as execute_ai_review
+from approved_source_view import read_approved_source
 from paired_review_benchmark import prepare as prepare_pair, execute as execute_pair, TASKS as BENCHMARK_TASKS
 from threading import Lock
 from benchmark_run_store import RunStore
@@ -442,6 +443,44 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                 finally:
                     if acquired:
                         benchmark_run_lock.release()
+                return
+            if self.path == "/api/copilot/review/source":
+                # Local-only inspector: no model calls, no provider charge,
+                # and no generic file-reading endpoint. A full file may be
+                # opened only if it belongs to this exact approved manifest.
+                if not enable_copilot:
+                    self.reply(405, {"error": "Source review not enabled"});return
+                if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                    self.reply(415, {"error": "JSON required"});return
+                length = self.headers.get("Content-Length", "")
+                if not length.isdigit() or not 0 < int(length) <= 8192:
+                    self.reply(413, {"error": "invalid source view request"});return
+                try:
+                    payload = json.loads(self.rfile.read(int(length)))
+                    required = {"repository", "task", "model", "agent", "scope", "approved_sha256", "file"}
+                    if (not isinstance(payload, dict) or set(payload) != required or
+                            not all(isinstance(payload[k], str) for k in
+                                    ("repository", "task", "model", "scope", "approved_sha256", "file")) or
+                            (payload["agent"] is not None and not isinstance(payload["agent"], str)) or
+                            payload["scope"] not in ("focused", "full", "docs") or
+                            payload["model"] == "auto"):
+                        raise ValueError("exact approved local source selection required")
+                    roots = resolve_repository(payload["repository"])
+                    if len(roots) != 1:
+                        raise ValueError("registered project is ambiguous")
+                    prepared = prepare_ai_review(
+                        roots[0], payload["repository"], payload["task"],
+                        payload["model"], payload["agent"], scope=payload["scope"])
+                    result = read_approved_source(
+                        roots[0], payload["repository"], prepared,
+                        payload["approved_sha256"], payload["file"])
+                except PermissionError as exc:
+                    self.reply(409, {"error": str(exc)});return
+                except FileNotFoundError:
+                    self.reply(404, {"error": "source changed or unavailable"});return
+                except (ValueError, TypeError, KeyError, UnicodeError, OSError, json.JSONDecodeError) as exc:
+                    self.reply(400, {"error": "Source view unavailable: "+str(exc)});return
+                self.reply(200, result)
                 return
             if self.path in ("/api/copilot/review/prepare", "/api/copilot/review/execute"):
                 if not enable_copilot:
