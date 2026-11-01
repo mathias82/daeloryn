@@ -16,7 +16,15 @@ export function CodeInspector({snapshot,onClose}:{
   const [editMode,setEditMode]=useState(false);
   const [draft,setDraft]=useState<SuggestionDraft|null>(null);
   const [draftMessage,setDraftMessage]=useState('');
-  const [fullSource,setFullSource]=useState<{file:string;lines:string[];redacted_lines:number[];line_count:number}|null>(null);
+  const [branch,setBranch]=useState(()=>('daeloryn/fix-'+Date.now().toString(36)));
+  const [applyConfirmed,setApplyConfirmed]=useState(false);
+  const [applyBusy,setApplyBusy]=useState(false);
+  const [applied,setApplied]=useState<{branch:string;file:string;tests_executed:boolean}|null>(null);
+  const [suite,setSuite]=useState('maven');
+  const [testsApproved,setTestsApproved]=useState(false);
+  const [testsBusy,setTestsBusy]=useState(false);
+  const [testOutcome,setTestOutcome]=useState<{suite:string;verified:boolean;returncode:number;output:string}|null>(null);
+  const [fullSource,setFullSource]=useState<{file:string;lines:string[];redacted_lines:number[];line_count:number;source_sha256:string}|null>(null);
   const [sourceLoading,setSourceLoading]=useState(false);
   const [sourceError,setSourceError]=useState('');
   const markedRef=useRef<HTMLDivElement|null>(null);
@@ -39,7 +47,7 @@ export function CodeInspector({snapshot,onClose}:{
     const start=active?.line??line,end=active?.endLine??line;
     const proposal=startSuggestion(snapshot.sources,selected,start,end,snapshot.sha256);
     if(!proposal){setDraftMessage('The selected source lines were not available completely in the approved snapshot. Select another line.');return;}
-    setDraft(proposal);setEditMode(true);setDraftMessage('');
+    setDraft(proposal);setEditMode(true);setDraftMessage('');setApplyConfirmed(false);
   }
   async function copyPatch(){
     if(!patch)return;
@@ -49,7 +57,49 @@ export function CodeInspector({snapshot,onClose}:{
     }catch{setDraftMessage('Clipboard permission unavailable. Select and copy the diff manually.');}
   }
 
-  useEffect(()=>{setFile(files[0]||'');setLine(1);setLineInput('1');setDraft(null);setEditMode(false);setDraftMessage('');},
+  async function applyApprovedPatch(){
+    const access=snapshot.sourceAccess;
+    if(!access||!draft||!patch||!fullSource||draft.file!==fullSource.file||
+      !applyConfirmed||applyBusy||applied||!/^daeloryn\/[a-z0-9][a-z0-9-]{0,50}$/.test(branch))return;
+    setApplyBusy(true);setDraftMessage('');
+    try{
+      const response=await fetch('/api/copilot/review/patch/apply',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({...access,file:draft.file,start:draft.start,end:draft.end,
+          original:draft.original,replacement:draft.replacement,
+          source_sha256:fullSource.source_sha256,branch,approved:true})
+      });
+      const value=await response.json() as {status?:string;branch?:string;file?:string;tests_executed?:boolean;error?:string};
+      if(!response.ok)throw new Error(value.error||'Local write refused ('+response.status+')');
+      if(value.status!=='applied'||value.branch!==branch||value.file!==draft.file)
+        throw new Error('Invalid local patch receipt');
+      setApplied({branch,file:draft.file,tests_executed:false});
+      setApplyConfirmed(false);
+      setDraftMessage('Approved patch applied to '+branch+'. No tests, commits or PRs were made. This review snapshot is now stale.');
+    }catch(error){setDraftMessage(error instanceof Error?error.message:'Patch could not be applied');}
+    finally{setApplyBusy(false);}
+  }
+  async function runApprovedTests(){
+    if(!applied||!testsApproved||testsBusy)return;
+    setTestsBusy(true);setDraftMessage('');
+    try{
+      const response=await fetch('/api/copilot/review/tests',{
+        method:'POST',headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({repository:snapshot.repository,branch:applied.branch,suite,approved:true})
+      });
+      const value=await response.json() as {verified?:boolean;suite?:string;returncode?:number;output?:string;error?:string};
+      if(!response.ok)throw new Error(value.error||'Test execution refused ('+response.status+')');
+      if(typeof value.verified!=='boolean'||typeof value.output!=='string'||
+        typeof value.returncode!=='number'||value.suite!==suite)
+        throw new Error('Invalid test result');
+      setTestOutcome({verified:value.verified,suite,returncode:value.returncode,output:value.output});
+      setDraftMessage(value.verified?'Approved host tests passed. Review the branch before a commit.':
+        'Approved tests failed. Inspect the output; no commit or PR was created.');
+    }catch(error){setDraftMessage(error instanceof Error?error.message:'Tests could not start');}
+    finally{setTestsBusy(false);setTestsApproved(false);}
+  }
+
+  useEffect(()=>{setFile(files[0]||'');setLine(1);setLineInput('1');setDraft(null);setEditMode(false);setDraftMessage('');setApplied(null);setApplyConfirmed(false);},
     [snapshot.sha256,files[0]]);
   useEffect(()=>{
     const nav=snapshot.navigation;
@@ -76,6 +126,7 @@ export function CodeInspector({snapshot,onClose}:{
           throw new Error(detail);
         }
         if(!data||typeof data!=='object'||!('file' in data)||data.file!==selected||
+            !('source_sha256' in data)||typeof data.source_sha256!=='string'||
             !('lines' in data)||!Array.isArray(data.lines)||
             !data.lines.every((line:unknown)=>typeof line==='string')||
             !('redacted_lines' in data)||!Array.isArray(data.redacted_lines)||
@@ -83,7 +134,7 @@ export function CodeInspector({snapshot,onClose}:{
             !('model_calls' in data)||data.model_calls!==0)
           throw new Error('Invalid local source preview response');
         if(!controller.signal.aborted)
-          setFullSource(data as {file:string;lines:string[];redacted_lines:number[];line_count:number});
+          setFullSource(data as {file:string;lines:string[];redacted_lines:number[];line_count:number;source_sha256:string});
       }catch(e){
         if(!controller.signal.aborted)
           setSourceError('Full-class preview unavailable: '+(e instanceof Error?e.message:'unknown error')+
