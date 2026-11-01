@@ -761,5 +761,5 @@ test('Comparison results shows persisted evidence scores and no fabricated verif
   await expect(table.getByText('36/100')).toBeVisible();
   await expect(table.getByText('0/100')).toBeVisible();
   await expect(table.getByText(/Not verified · no independent defect/)).toBeVisible();
-  await expect(table.getByText('daeloryn')).toBeVisible();
+  await expect(table.getByRole('cell',{name:/daeloryn provisional/})).toBeVisible();
 });
