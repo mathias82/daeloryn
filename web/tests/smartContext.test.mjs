@@ -27,3 +27,12 @@ test('manual overrides are explicit',()=>{
   assert.equal(routeContext('What observability does my project have?','text-only'), 'none');
   assert.equal(routeContext('Hello','full'), 'full');
 });
+
+
+test('build-file follow-ups use focused approved project context',()=>{
+  for(const task of ['check pom does it has bugs or deprecated libraries?',
+    'Review pom.xml dependencies and versions', 'Inspect build.gradle.kts plugins']) {
+      assert.equal(routeContext(task),'focused',task);
+  }
+  assert.equal(routeContext('Explain Maven generally'),'none');
+});
