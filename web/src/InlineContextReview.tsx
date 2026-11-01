@@ -51,7 +51,9 @@ export function InlineContextReview({selection,onCompleted,onCancelled}:{
         if(!controller.signal.aborted)setError(e instanceof Error?e.message:'Project context unavailable');
       }finally{if(!controller.signal.aborted)setBusy(false);}
     }
-    void prepare();
+    // StrictMode mounts effects twice in development. Defer the read to a
+    // microtask so the first (cleaned-up) effect never reaches the API.
+    queueMicrotask(()=>{if(!controller.signal.aborted)void prepare();});
     return()=>controller.abort();
   },[selection.repository,selection.task,selection.model,selection.agent]);
   useEffect(()=>()=>{active.current?.abort();},[]);
