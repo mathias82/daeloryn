@@ -13,6 +13,8 @@ from github_repository_catalog import list_github_repositories
 from project_analysis import analyze_local
 from code_review import review
 from approved_copilot_review import prepare as prepare_ai_review, execute as execute_ai_review
+from paired_review_benchmark import prepare as prepare_pair, execute as execute_pair, TASKS as BENCHMARK_TASKS
+from threading import Lock
 from patch_workspace import preview as preview_patch
 from repair_agent import suggest as diagnose_failure
 from workflow_recovery import inspect_interrupted
@@ -75,6 +77,7 @@ def benchmark_data(records_dir=None):
 
 def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repository_roots=(), enable_github_repositories=False, workflow_dir=None, projects_file=None, project_picker_roots=None):
     registry = ProjectRegistry(projects_file, project_picker_roots) if projects_file is not None else None
+    benchmark_run_lock = Lock()  # No overlapping potentially billable A/B provider calls.
 
     def repository_catalog():
         rows = discover(repository_roots)
@@ -216,6 +219,86 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     self.reply(503, {"error": "Folder chooser unavailable or timed out; enter the absolute path instead"})
                     return
                 self.reply(200, result)
+                return
+            if self.path in ("/api/benchmark/prepare", "/api/benchmark/execute"):
+                if not enable_copilot:
+                    self.reply(405, {"error": "Benchmark requires enabled Copilot"})
+                    return
+                if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                    self.reply(415, {"error": "JSON required"})
+                    return
+                length = self.headers.get("Content-Length", "")
+                if not length.isdigit() or not 0 < int(length) <= 8192:
+                    self.reply(413, {"error": "invalid benchmark request size"})
+                    return
+                is_execute = self.path.endswith("/execute")
+                streaming = False
+                def stream_event(event):
+                    nonlocal streaming
+                    if not streaming:
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+                        self.send_header("Cache-Control", "no-store")
+                        self.send_header("X-Content-Type-Options", "nosniff")
+                        self.send_header("Connection", "close")
+                        self.end_headers()
+                        self.close_connection = True
+                        streaming = True
+                    self.wfile.write((json.dumps(event) + "\n").encode("utf-8"))
+                    self.wfile.flush()
+                acquired = False
+                try:
+                    payload = json.loads(self.rfile.read(int(length)))
+                    required = {"repository", "mode", "model", "agent"}
+                    if is_execute:
+                        required = required | {"approved_sha256"}
+                    if not isinstance(payload, dict) or set(payload) != required or                             not all(isinstance(payload[k], str) for k in required):
+                        raise ValueError("invalid benchmark selection")
+                    if payload["mode"] not in BENCHMARK_TASKS:
+                        raise ValueError("unsupported benchmark mode")
+                    if not is_execute and payload["model"] == "auto":
+                        routed, _ = route_chat({
+                            "model": "auto",
+                            "messages": [{"role": "user", "content": BENCHMARK_TASKS[payload["mode"]]}],
+                        })
+                        payload["model"] = routed["model"]
+                    matches = resolve_repository(payload["repository"])
+                    if len(matches) != 1:
+                        raise ValueError("benchmark requires a uniquely registered local project")
+                    if is_execute:
+                        acquired = benchmark_run_lock.acquire(blocking=False)
+                        if not acquired:
+                            self.reply(409, {"error": "Another benchmark is running; no model calls started"})
+                            return
+                    prepared = prepare_pair(matches[0], payload["repository"], payload["mode"],
+                                            payload["model"], payload["agent"])
+                    if is_execute:
+                        if payload["approved_sha256"] != prepared["sha256"]:
+                            raise PermissionError("source/model/agent changed; prepare and approve again")
+                        if self.headers.get("Accept") != "application/x-ndjson":
+                            self.reply(406, {"error": "Benchmark execution requires an event stream"})
+                            return
+                        result = execute_pair(prepared, payload["approved_sha256"], progress=stream_event)
+                        stream_event({"type": "result", "result": result})
+                        return
+                    self.reply(200, prepared)
+                except (ValueError, TypeError, KeyError, json.JSONDecodeError, PermissionError, OSError) as exc:
+                    if not streaming:
+                        self.reply(400, {"error": "Benchmark preparation or approval rejected: " + str(exc)})
+                    # Disconnection after streaming started prevents additional calls.
+                    return
+                except (RuntimeError, TimeoutError):
+                    if not streaming:
+                        self.reply(503, {"error": "Benchmark or Copilot unavailable"})
+                    else:
+                        try:
+                            stream_event({"type": "error", "error": "Benchmark interrupted; external provider outcome unknown. No automatic retry."})
+                        except OSError:
+                            pass
+                    return
+                finally:
+                    if acquired:
+                        benchmark_run_lock.release()
                 return
             if self.path in ("/api/copilot/review/prepare", "/api/copilot/review/execute"):
                 if not enable_copilot:
