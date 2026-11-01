@@ -1,5 +1,5 @@
-import {sourcePreview} from './sourceInspector';
-import type {SourceBlock} from './sourceInspector';
+import {sourcePreview} from './sourceInspector.js';
+import type {SourceBlock} from './sourceInspector.js';
 
 /** A local, uncommitted suggestion against one verified line/range in an approved snapshot. */
 export type SuggestionDraft={
