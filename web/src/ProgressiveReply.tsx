@@ -19,14 +19,23 @@ export function ProgressiveReply({text,animate,onProgress,references=[],onRefere
  },[text,animate]);
  useEffect(()=>{if(animate)onProgress?.();},[visible,animate,onProgress]);
  function linked(prose:string){
-  const nodes:React.ReactNode[]=[];let remaining=prose,key=0;
-  while(remaining){
-   const hits=references.filter(r=>r.verified&&r.citationText).map(r=>({r,index:remaining.indexOf(readableProse(r.citationText!))})).filter(h=>h.index>=0).sort((a,b)=>a.index-b.index);
-   const hit=hits[0];if(!hit){nodes.push(remaining);break;}
-   nodes.push(remaining.slice(0,hit.index));
-   nodes.push(<button type="button" className="text-action source-citation" key={key++} onClick={()=>onReference?.(hit.r)}>{readableProse(hit.r.citationText!)}</button>);
-   remaining=remaining.slice(hit.index+readableProse(hit.r.citationText!).length);
-  }return nodes;
+  const nodes:React.ReactNode[]=[];let cursor=0,key=0;
+  const hits=references.filter(r=>r.verified&&r.citationText).map(r=>{
+   const label=readableProse(r.citationText!);
+   // A short natural-language line label belongs to its own paragraph. The
+   // same range in another file's paragraph must not reuse this reference.
+   const context=r.contextText?readableProse(r.contextText):null;
+   const start=context?prose.indexOf(context):0;
+   const index=start<0?-1:prose.indexOf(label,start);
+   return {r,label,index};
+  }).filter(hit=>hit.index>=0).sort((a,b)=>a.index-b.index);
+  for(const hit of hits){
+   if(hit.index<cursor)continue;
+   nodes.push(prose.slice(cursor,hit.index));
+   nodes.push(<button type="button" className="text-action source-citation" key={key++} onClick={()=>onReference?.(hit.r)}>{hit.label}</button>);
+   cursor=hit.index+hit.label.length;
+  }
+  nodes.push(prose.slice(cursor));return nodes;
  }
  const parts=splitReply(text.slice(0,visible));
  return <div className="conversational-reply">

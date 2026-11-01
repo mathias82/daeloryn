@@ -1,6 +1,6 @@
 /** Only references to lines found in the approved source manifest are navigable. */
 export type SourceBlock={file:string;line:number;column:number;end_line:number;source:string};
-export type SourceReference={file:string;line:number;endLine:number;batch:number;excerpt:string;verified:boolean;kind:'bug'|'change'|'reference';suggestionText?:string;citationText?:string};
+export type SourceReference={file:string;line:number;endLine:number;batch:number;excerpt:string;verified:boolean;kind:'bug'|'change'|'reference';suggestionText?:string;citationText?:string;contextText?:string};
 export type InspectorSnapshot={repository:string;sha256:string;model?:string;sources:SourceBlock[];references:SourceReference[];completed:number;total:number;status:string};
 export function manifestSources(prompt:string,files:string[]):SourceBlock[]{
   const allow=new Set(files);
@@ -22,40 +22,61 @@ export function manifestSources(prompt:string,files:string[]):SourceBlock[]{
 export function extractSourceReferences(reply:string,batch:number,sources:SourceBlock[],max=60):SourceReference[]{
   const found:SourceReference[]=[];
   const paths=[...new Set(sources.map(s=>s.file))].sort((a,b)=>b.length-a.length);
-  for(const path of paths){
-    const suffixes=path.split('/').map((_,i)=>path.split('/').slice(i).join('/'));
-    const aliases=[path];
-    for(const suffix of suffixes){
-      if(paths.filter(p=>p===suffix||p.endsWith('/'+suffix)).length!==1)continue;
-      aliases.push(suffix);
-      if(suffix.includes('/'))aliases.push('…/'+suffix,'.../'+suffix);
-    }
-    const escaped=[...new Set(aliases)].sort((a,b)=>b.length-a.length).map(v=>v.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
-    const expression=new RegExp('(?<![\\w./-])(?:'+escaped+')[`*]*(?:[:#]L?|[,，]?\\s+(?:[Ll]ines?|γραμμ(?:ή|ές|η|ες))\\s+)(\\d{1,6})(?:\\s*[-–]\\s*(\\d{1,6}))?','gu');
-    let match:RegExpExecArray|null;
-    while((match=expression.exec(reply))!==null&&found.length<max){
-      const line=Number(match[1]);
-      const endLine=match[2]?Number(match[2]):line;
-      const present=endLine>=line&&endLine-line<=80&&Array.from({length:endLine-line+1},(_,i)=>line+i).every(n=>sources.some(s=>s.file===path&&n>=s.line&&n<=s.end_line));
-      const excerpt=reply.slice(Math.max(0,match.index-120),Math.min(reply.length,match.index+170)).replace(/\s+/g,' ');
-      const kind=/\b(?:bug|defect|vulnerab|exception|unsafe|leak|race|NPE|null dereference|error|σφάλμ)\w*/i.test(excerpt)?'bug':
-        /\b(?:fix|change|modify|replace|refactor|update|should|must|διορθ|αλλαγ)\w*/i.test(excerpt)?'change':'reference';
-      // A fenced suggestion may be displayed as a DRAFT only when it follows
-      // this citation closely and its surrounding prose explicitly suggests
-      // changing the source. Never treat it as an approved patch.
-      let suggestionText:string|undefined;
-      if(present&&/\b(?:fix|replace|change|suggest|proposed|refactor|patch|διορθ|αλλαγ)\w*/iu.test(excerpt)){
-        const fence=reply.indexOf(String.fromCharCode(96).repeat(3),match.index+match[0].length);
-        if(fence>=0&&fence-(match.index+match[0].length)<500){
-          const firstLine=reply.indexOf('\n',fence);
-          const close=firstLine>=0?reply.indexOf(String.fromCharCode(96).repeat(3),firstLine+1):-1;
-          if(firstLine>=0&&firstLine-fence<45&&close>firstLine&&close-firstLine<=8000){
-            const candidate=reply.slice(firstLine+1,close).trimEnd();
-            if(candidate)suggestionText=candidate;
-          }
+  const escape=(value:string)=>value.replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+  const aliasesFor=(path:string)=>{
+    const parts=path.split('/');
+    const suffixes=parts.map((_,i)=>parts.slice(i).join('/'));
+    const stem=parts[parts.length-1].replace(/\.(?:java|kt|tsx?|jsx?)$/,'');
+    return [...new Set([...suffixes,...suffixes.filter(v=>v.includes('/')).flatMap(v=>['…/'+v,'.../'+v]),
+      ...(/^[A-Z][A-Za-z0-9_$]*$/.test(stem)?[stem]:[])])];
+  };
+  const allAliases=paths.map(path=>({path,aliases:aliasesFor(path)}));
+  function append(path:string,at:number,citationText:string,line:number,endLine:number,contextText?:string){
+    if(found.length>=max||found.some(r=>r.file===path&&r.line===line&&r.endLine===endLine))return;
+    const present=endLine>=line&&endLine-line<=80&&Array.from({length:endLine-line+1},(_,i)=>line+i).every(n=>sources.some(s=>s.file===path&&n>=s.line&&n<=s.end_line));
+    const paragraphStart=reply.lastIndexOf('\n\n',at);
+    const paragraphEnd=reply.indexOf('\n\n',at);
+    const start=Math.max(paragraphStart<0?0:paragraphStart+2,at-1000);
+    const end=Math.min(paragraphEnd<0?reply.length:paragraphEnd,at+1500);
+    const excerpt=reply.slice(start,end).replace(/\s+/g,' ');
+    const kind=/(?:bug|defect|vulnerab|exception|unsafe|leak|race|NPE|null dereference|error|σφάλμ)/iu.test(excerpt)?'bug':
+      /(?:fix|change|modify|replace|refactor|update|should|must|διορθ|αλλαγ)/iu.test(excerpt)?'change':'reference';
+    let suggestionText:string|undefined;
+    if(present&&/(?:fix|replace|change|suggest|proposed|refactor|patch|διορθ|αλλαγ)/iu.test(excerpt)){
+      const fence=reply.indexOf(String.fromCharCode(96).repeat(3),at+citationText.length);
+      if(fence>=0&&fence-(at+citationText.length)<500){
+        const firstLine=reply.indexOf('\n',fence);
+        const close=firstLine>=0?reply.indexOf(String.fromCharCode(96).repeat(3),firstLine+1):-1;
+        if(firstLine>=0&&firstLine-fence<45&&close>firstLine&&close-firstLine<=8000){
+          const candidate=reply.slice(firstLine+1,close).trimEnd();
+          if(candidate)suggestionText=candidate;
         }
       }
-      found.push({file:path,line,endLine,batch,verified:present,kind,excerpt,suggestionText,citationText:match[0]});
+    }
+    found.push({file:path,line,endLine,batch,verified:present,kind,excerpt,suggestionText,citationText,contextText});
+  }
+  for(const {path,aliases} of allAliases){
+    const unique=aliases.filter(alias=>allAliases.filter(entry=>entry.aliases.includes(alias)).length===1);
+    const escaped=unique.sort((a,b)=>b.length-a.length).map(escape).join('|');
+    const expression=new RegExp('(?<![\\p{L}\\p{N}_$./-])(?:'+escaped+')[`*]*(?:[:#]L?|[,，]?\\s+(?:[Ll]ines?|γραμμ(?:ή|ές|η|ες))\\s+)(\\d{1,6})(?:\\s*[-–—]\\s*(\\d{1,6}))?','gu');
+    let match:RegExpExecArray|null;
+    while((match=expression.exec(reply))!==null&&found.length<max){
+      append(path,match.index,match[0],Number(match[1]),Number(match[2]||match[1]));
+    }
+  }
+  // Natural-language reviews often name a type once, then cite several ranges
+  // in the same paragraph. Resolve only one unambiguous approved file; never
+  // carry the context into another paragraph or infer a path from an exception.
+  for(const paragraph of reply.matchAll(/[^\n]+(?:\n(?!\n)[^\n]+)*/g)){
+    const text=paragraph[0];
+    const mentioned=allAliases.filter(entry=>entry.aliases.some(alias=>
+      new RegExp('(?<![\\p{L}\\p{N}_$./-])'+escape(alias)+'(?![\\p{L}\\p{N}_$/-]|\\.[\\p{L}\\p{N}_$])','u').test(text)));
+    if(mentioned.length!==1)continue;
+    const path=mentioned[0].path;
+    const explicitFiles=[...text.matchAll(/[\w./-]+\.(?:java|kt|tsx?|jsx?)(?![\w])/g)];
+    if(explicitFiles.some(token=>!allAliases.some(entry=>entry.aliases.includes(token[0]))))continue;
+    for(const citation of text.matchAll(/(?:[Ll]ines?|γραμμ(?:ή|ές|η|ες))\s+(\d{1,6})(?:\s*[-–—]\s*(\d{1,6}))?/gu)){
+      append(path,paragraph.index!+citation.index!,citation[0],Number(citation[1]),Number(citation[2]||citation[1]),text);
     }
   }
   return found.sort((a,b)=>a.batch-b.batch||a.file.localeCompare(b.file)||a.line-b.line);

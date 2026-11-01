@@ -65,3 +65,31 @@ test('abbreviated unique paths and contiguous blocks resolve all cited lines',()
  const missing=[src[0],{...src[1],line:4}];
  assert.equal(extractSourceReferences('…/demo/config/App.java, γραμμές 2–4',1,missing)[0].verified,false);
 });
+
+
+test('natural Greek class paragraphs resolve multiple source ranges without file extensions',()=>{
+ const file='src/advice/ControllerAdvisor.java';
+ const sources=[{file,line:37,column:1,end_line:45,source:'approved generic handler'},
+   {file,line:96,column:1,end_line:104,source:'approved specific handler'}];
+ const reply='Η κλάση που χρειάζεται προσοχή είναι η ControllerAdvisor. Στις γραμμές 37–45 επιστρέφει το e.getMessage(). Η διόρθωση είναι ένα σταθερό μήνυμα προς τον client. Το ίδιο ισχύει για NoResultException (γραμμές 96–104).';
+ const refs=extractSourceReferences(reply,1,sources);
+ assert.equal(refs.length,2);assert.ok(refs.every(r=>r.verified&&r.file===file));
+ assert.deepEqual(refs.map(r=>r.line),[37,96]);
+ assert.ok(refs.every(r=>r.excerpt.includes('σταθερό μήνυμα')));
+ assert.equal(refs[0].contextText,reply);
+ assert.equal(extractSourceReferences('ControllerAdvisor, lines 37–45',1,sources)[0].verified,true);
+ assert.equal(extractSourceReferences('ControllerAdvisor (γραμμές 37–45)',1,sources)[0].verified,true);
+});
+
+test('natural citations refuse ambiguous, unknown, cross-paragraph and unavailable source',()=>{
+ const src={file:'src/ControllerAdvisor.java',line:37,column:1,end_line:45,source:'approved'};
+ const reply='ControllerAdvisor. Στις γραμμές 37–45 προτείνω αλλαγή.';
+ assert.equal(extractSourceReferences(reply,1,[src,{...src,file:'other/ControllerAdvisor.java'}]).length,0);
+ assert.equal(extractSourceReferences('OtherControllerAdvisor. Στις γραμμές 37–45.',1,[src]).length,0);
+ assert.equal(extractSourceReferences('ControllerAdvisor.\n\nΣτις γραμμές 37–45.',1,[src]).length,0);
+ assert.equal(extractSourceReferences('ControllerAdvisor και Missing.java. Στις γραμμές 37–45.',1,[src]).length,0);
+ assert.equal(extractSourceReferences('ControllerAdvisor και App. Στις γραμμές 37–45.',1,[src,{...src,file:'src/App.java'}]).length,0);
+ assert.equal(extractSourceReferences('ControllerAdvisor. Στις γραμμές 37–46.',1,[src])[0].verified,false);
+ assert.equal(extractSourceReferences('ControllerAdvisor. Στις γραμμές 37–999999.',1,[src])[0].verified,false);
+ assert.equal(extractSourceReferences('ControllerAdvisor. Στις γραμμές 37–45.',1,[src],0).length,0);
+});
