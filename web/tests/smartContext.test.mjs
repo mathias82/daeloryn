@@ -4,7 +4,7 @@ import {routeContext} from '../.test-build/smartContext.js';
 
 test('greetings and general questions never request repository files',()=>{
   for (const text of ['Hello','hello!', 'γειά σου', 'Καλημέρα', 'Thanks',
-    'Explain dependency injection','What time is it?','Tell me a joke','Thanks for the project advice']) {
+    'Explain dependency injection','Explain Kafka','What is observability?','What time is it?','Tell me a joke','Thanks for the project advice']) {
     assert.equal(routeContext(text), 'none', text);
   }
 });
