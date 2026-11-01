@@ -15,7 +15,10 @@ type PreparedPair={
 };
 type ArmReceipt={status:string;completed_batches:number;total_batches:number;failure?:string|null;review?:{reply:string}};
 type SavedArm={status:string;completed_batches:number;total_batches:number;reply:string;failure?:string|null;batches?:Record<string,{status:string;reply:string}>};
-type SavedRun={run_id:string;status:string;repository:string;mode:Mode;model:string;agent:string;created_at:string;updated_at:string;error?:string|null;approved_sha256:string;source_sha256:string;resume_attempts?:number;arms:Record<Arm,SavedArm>;result?:PairResult|null};
+type Reference={file:string;line:number;status:string;source_kind?:string};
+type EvidenceArm={evidence_traceability_score:number;cited_references:number;source_matched_references:number;unique_code_locations:number;unsupported_references:number;duplicate_matched_citations:number;citation_precision_percent:number|null;references:Reference[]};
+type EvidenceComparison={kind:string;method:string;status:string;comparable_completed_arms:boolean;provisional_evidence_lead:string;verified_winner:null;score_definition:string;warning:string;source_files_inspected:number;arms:Record<Arm,EvidenceArm>};
+type SavedRun={run_id:string;status:string;repository:string;mode:Mode;model:string;agent:string;created_at:string;updated_at:string;error?:string|null;approved_sha256:string;source_sha256:string;resume_attempts?:number;arms:Record<Arm,SavedArm>;comparison?:EvidenceComparison|null;result?:PairResult|null};
 type RunSummary=Pick<SavedRun,'run_id'|'status'|'repository'|'mode'|'model'|'agent'|'created_at'|'updated_at'>;
 type PairResult={kind:string;status:string;model:string;agent:string;source_sha256:string;
   winner:string;arms:Partial<Record<Arm,ArmReceipt>>;warning:string;
@@ -211,6 +214,22 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
     }catch(e){setError('Resume rejected: '+(e instanceof Error?e.message:'request failed'));}
     finally{setRunActionBusy(false);}
   }
+  async function evaluateSaved(){
+    if(!runReceipt||runActionBusy||['running','stopping'].includes(runReceipt.status))return;
+    const id=runReceipt.run_id;
+    setRunActionBusy(true);setError('');
+    try{
+      const response=await fetch('/api/benchmark/runs/'+encodeURIComponent(id)+'/evaluate',{
+        method:'POST',headers:{'Content-Type':'application/json'},body:'{}'
+      });
+      const receipt=await response.json() as {comparison?:EvidenceComparison;error?:string};
+      if(!response.ok)throw new Error(receipt.error||'Offline evidence evaluation failed');
+      if(!receipt.comparison)throw new Error('No comparison returned');
+      setRunReceipt(previous=>previous?.run_id===id?{...previous,comparison:receipt.comparison}:previous);
+      setProgress('Evidence comparison created from saved outputs. No Copilot calls were made.');
+    }catch(e){setError('Offline evaluation unavailable: '+(e instanceof Error?e.message:'unknown failure'));}
+    finally{setRunActionBusy(false);}
+  }
   async function actOnRun(action:'stop'|'delete'){
     if(!runReceipt||runReceipt.run_id!==selectedRunId||runActionBusy)return;
     const runId=selectedRunId;
@@ -368,6 +387,34 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
         </article>)}
       </div>
       {runReceipt?.error&&<p role="alert">{runReceipt.error}</p>}
+      {runReceipt&&!['running','stopping'].includes(runReceipt.status)&&!runReceipt.comparison&&
+        <div className="benchmark-actions">
+          <button type="button" className="outline-button" disabled={runActionBusy}
+            onClick={()=>void evaluateSaved()}>Evaluate saved run (offline, no AI calls)</button>
+          <p className="muted">The source must still match the original approved SHA-256. Older stored runs can be compared without paying for another provider request.</p>
+        </div>}
+      {runReceipt?.comparison&&<section className="benchmark-conclusion" aria-label="Automated evidence comparison">
+        <h3>Automated comparison · source citations</h3>
+        <p><strong>{runReceipt.comparison.comparable_completed_arms?
+            'Provisional traceability lead: '+runReceipt.comparison.provisional_evidence_lead:
+            'Partial/incomplete · no comparable outcome'}</strong></p>
+        <p>Verified bug-finding winner: <strong>Not independently determined</strong>. This score measures whether cited code lines exist, not whether the findings are true defects.</p>
+        <div className="benchmark-columns">
+          {(['baseline','daeloryn'] as const).map(arm=><article className="benchmark-arm" key={arm}>
+            <h3>{arm==='baseline'?'Plain Copilot':'Copilot + Daeloryn'}</h3>
+            <p><strong>{runReceipt.comparison!.arms[arm].evidence_traceability_score}/100</strong> evidence traceability (not correctness)</p>
+            <p>Grounded code locations: {runReceipt.comparison!.arms[arm].unique_code_locations} · Unsupported citations: {runReceipt.comparison!.arms[arm].unsupported_references} · Duplicate citations: {runReceipt.comparison!.arms[arm].duplicate_matched_citations}</p>
+            <details><summary>Inspect cited source references</summary>
+              <div className="comparison-references">{runReceipt.comparison!.arms[arm].references.length?
+                runReceipt.comparison!.arms[arm].references.map((r,i)=><p key={i}>
+                  <code>{r.file}:{r.line}</code> · {r.status==='source_line_found'?'line exists in snapshot':'not grounded in approved snapshot'}
+                </p>):<p>No detectable file:line citations.</p>}</div>
+            </details>
+          </article>)}
+        </div>
+        <p className="muted">{runReceipt.comparison.score_definition}</p>
+        <p className="muted">{runReceipt.comparison.warning}</p>
+      </section>}
       {result&&<div className="benchmark-conclusion">
         <strong>Winner: Not determined</strong>
         <p>{result.warning}</p>
