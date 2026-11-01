@@ -76,7 +76,8 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_approved_repair_proposal.py' -v
           python3 -m unittest discover -s tests -p 'test_approved_repair_validation.py' -v
   frontend:
-    runs-on: ubuntu-latest
+    # Playwright 1.56.1 supports Ubuntu 24.04; avoid ubuntu-latest OS drift.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
       run:
