@@ -56,3 +56,12 @@ test('Greek basename citations resolve only uniquely approved files and exact ra
  assert.equal(extractSourceReferences('evil/App.java, γραμμή 2',1,blocks).length,0);
  assert.equal(extractSourceReferences('App.java, γραμμές 2–999',1,blocks)[0].verified,false);
 });
+
+
+test('abbreviated unique paths and contiguous blocks resolve all cited lines',()=>{
+ const src=[{file:'src/demo/config/App.java',line:1,column:1,end_line:2,source:'one\ntwo\n'},{file:'src/demo/config/App.java',line:3,column:1,end_line:4,source:'three\nfour\n'}];
+ const refs=extractSourceReferences('…/demo/config/App.java, γραμμές 2–4',1,src);
+ assert.equal(refs.length,1);assert.equal(refs[0].verified,true);assert.equal(refs[0].file,src[0].file);
+ const missing=[src[0],{...src[1],line:4}];
+ assert.equal(extractSourceReferences('…/demo/config/App.java, γραμμές 2–4',1,missing)[0].verified,false);
+});

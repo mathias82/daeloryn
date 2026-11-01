@@ -1,3 +1,4 @@
+import json
 import sys
 import tempfile
 import unittest
@@ -15,7 +16,7 @@ class DeveloperTests(unittest.TestCase):
   calls=[]
   def transport(request,**kwargs):
    calls.append(request);self.assertEqual('java-developer',request['agent'])
-   return {'reply':'class App { int x = 1; }\n'}
+   return {'reply':json.dumps({'replacement':'class App { int x = 1; }\n'})}
   with self.assertRaises(PermissionError):execute(p,'bad',self.root,transport=transport)
   self.assertEqual([],calls)
   result=execute(p,p['sha256'],self.root,transport=transport)
@@ -28,7 +29,7 @@ class DeveloperTests(unittest.TestCase):
  def test_changed_source_during_model_call_discards_patch(self):
   p=prepare(self.root,'demo','App.java','Review','sonnet')
   def transport(*args,**kwargs):
-   self.file.write_text('class Concurrent {}\n');return {'reply':'class Proposed {}\n'}
+   self.file.write_text('class Concurrent {}\n');return {'reply':json.dumps({'replacement':'class Proposed {}\n'})}
   with self.assertRaises(PermissionError):execute(p,p['sha256'],self.root,transport=transport)
  def test_crlf_handoff_hash_preview_and_apply_preserve_exact_bytes(self):
   from unittest.mock import patch
@@ -38,7 +39,7 @@ class DeveloperTests(unittest.TestCase):
   self.file.write_bytes(original)
   prepared = prepare(self.root,'demo','App.java','Review','sonnet')
   self.assertEqual(original.decode(),prepared['source'])
-  result = execute(prepared,prepared['sha256'],self.root,transport=lambda *a,**kw:{'reply':replacement})
+  result = execute(prepared,prepared['sha256'],self.root,transport=lambda *a,**kw:{'reply':json.dumps({'replacement':replacement})})
   self.assertEqual(original,self.file.read_bytes())
   with patch('engineering_executor.command',return_value={'returncode':0,'output':''}):
    applied = apply(self.root,'demo','App.java',replacement,result['patch']['sha256'],'daeloryn/crlf-fix')
@@ -49,6 +50,13 @@ class DeveloperTests(unittest.TestCase):
   changed = prepare(self.root,'demo','App.java','Review','sonnet')
   with self.assertRaises(PermissionError):
    execute(changed,prepared['sha256'],self.root,transport=lambda *a,**kw:self.fail('provider invoked'))
+ def test_unchanged_source_with_cli_statistics_produces_no_patch(self):
+  p=prepare(self.root,'demo','App.java','List the classes','sonnet')
+  reply=json.dumps({'replacement':p['source']})+'\nChanges +0 -0\nAI Credits 4.23 (4s)\nTokens 100\nResume copilot --resume=abc-123'
+  result=execute(p,p['sha256'],self.root,transport=lambda *a,**kw:{'reply':reply})
+  self.assertEqual('no_change',result['status'])
+  self.assertNotIn('patch',result)
+
  def test_paths_redaction_and_auto_rejected(self):
   for path in ['../App.java','/etc/passwd','missing.java']:
    with self.assertRaises(ValueError):prepare(self.root,'demo',path,'Review','sonnet')
@@ -78,3 +86,15 @@ class DeveloperApiTests(unittest.TestCase):
     code,_=post('/api/copilot/developer/execute',{**request,'approved_sha256':prepared['sha256']});self.assertEqual(400,code)
     code,_=post('/api/copilot/developer/prepare',{**request,'run_shell':True});self.assertEqual(400,code)
    finally:server.shutdown();server.server_close();thread.join(2)
+
+
+class DeveloperEnvelopeTests(unittest.TestCase):
+ def test_cli_statistics_never_become_source(self):
+  from review_developer import parse_replacement
+  source='class App {}\n'
+  trailer='\n\nChanges +0 -0\nAI Credits 4.23 (4s)\nTokens ↑ 17.9k • ↓ 292\nResume copilot --resume=abc-123'
+  self.assertEqual(source,parse_replacement(json.dumps({'replacement':source})+trailer))
+ def test_ambiguous_raw_source_or_extra_payload_fails_closed(self):
+  from review_developer import parse_replacement
+  for answer in ['class App {}\nAI Credits 4.23',json.dumps({'replacement':'class App {}'})+' malicious text',json.dumps({'replacement':'x','command':'run'}),'```json\n{}\n```']:
+   with self.assertRaises(ValueError):parse_replacement(answer)

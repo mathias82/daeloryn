@@ -23,16 +23,20 @@ export function extractSourceReferences(reply:string,batch:number,sources:Source
   const found:SourceReference[]=[];
   const paths=[...new Set(sources.map(s=>s.file))].sort((a,b)=>b.length-a.length);
   for(const path of paths){
-    const base=path.split('/').pop()!;
-    const unique=paths.filter(p=>p.split('/').pop()===base).length===1;
-    const alias=unique?'(?:'+[path,base].filter((v,i,a)=>a.indexOf(v)===i).map(v=>v.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|')+')':null;
-    const escaped=path.replace(/[.*+?^$()|[\]\\{}]/g,'\\$&');
-    const expression=new RegExp('(?<![\\w./-])'+(alias||escaped)+'[`*]*(?:[:#]L?|[,，]?\\s+(?:[Ll]ines?|γραμμ(?:ή|ές|η|ες))\\s+)(\\d{1,6})(?:\\s*[-–]\\s*(\\d{1,6}))?','gu');
+    const suffixes=path.split('/').map((_,i)=>path.split('/').slice(i).join('/'));
+    const aliases=[path];
+    for(const suffix of suffixes){
+      if(paths.filter(p=>p===suffix||p.endsWith('/'+suffix)).length!==1)continue;
+      aliases.push(suffix);
+      if(suffix.includes('/'))aliases.push('…/'+suffix,'.../'+suffix);
+    }
+    const escaped=[...new Set(aliases)].sort((a,b)=>b.length-a.length).map(v=>v.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')).join('|');
+    const expression=new RegExp('(?<![\\w./-])(?:'+escaped+')[`*]*(?:[:#]L?|[,，]?\\s+(?:[Ll]ines?|γραμμ(?:ή|ές|η|ες))\\s+)(\\d{1,6})(?:\\s*[-–]\\s*(\\d{1,6}))?','gu');
     let match:RegExpExecArray|null;
     while((match=expression.exec(reply))!==null&&found.length<max){
       const line=Number(match[1]);
       const endLine=match[2]?Number(match[2]):line;
-      const present=endLine>=line&&endLine-line<=80&&sources.some(s=>s.file===path&&line>=s.line&&endLine<=s.end_line);
+      const present=endLine>=line&&endLine-line<=80&&Array.from({length:endLine-line+1},(_,i)=>line+i).every(n=>sources.some(s=>s.file===path&&n>=s.line&&n<=s.end_line));
       const excerpt=reply.slice(Math.max(0,match.index-120),Math.min(reply.length,match.index+170)).replace(/\s+/g,' ');
       const kind=/\b(?:bug|defect|vulnerab|exception|unsafe|leak|race|NPE|null dereference|error|σφάλμ)\w*/i.test(excerpt)?'bug':
         /\b(?:fix|change|modify|replace|refactor|update|should|must|διορθ|αλλαγ)\w*/i.test(excerpt)?'change':'reference';
