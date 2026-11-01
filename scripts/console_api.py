@@ -154,14 +154,15 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                 try:
                     payload = json.loads(self.rfile.read(int(length)))
                     is_execute = self.path.endswith("/execute")
-                    expected = {"repository", "task", "model", "approved_sha256"} if is_execute else {"repository", "task"}
-                    if not isinstance(payload, dict) or set(payload) != expected:
+                    expected = {"repository", "task", "model", "approved_sha256"} if is_execute else {"repository", "task", "model"}
+                    if not isinstance(payload, dict) or set(payload) not in (expected, expected | {"agent"}):
                         raise ValueError("invalid review payload")
                     matches = [root for root in repository_roots
                                if any(r["name"] == payload["repository"] for r in discover([root]))]
                     if len(matches) != 1:
                         raise ValueError("repository must resolve uniquely")
-                    prepared = prepare_ai_review(matches[0], payload["repository"], payload["task"])
+                    prepared = prepare_ai_review(matches[0], payload["repository"], payload["task"],
+                                                 payload["model"], payload.get("agent"))
                     if is_execute:
                         result = execute_ai_review(prepared, payload["model"], payload["approved_sha256"])
                     else:

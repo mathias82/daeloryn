@@ -14,8 +14,9 @@ def available_models():
     return asyncio.run(discover_copilot(executable))
 
 def route_chat(request, discover=available_models):
-    if not isinstance(request, dict) or set(request) != {"model", "messages"}:
-        raise ValueError("model and messages required")
+    from copilot_chat import validate
+    # Validate model, conversation and selected profile before provider discovery.
+    validate(request)
     if request["model"] != "auto":
         return request, None
     messages = request["messages"]
@@ -24,9 +25,6 @@ def route_chat(request, discover=available_models):
     last = messages[-1]
     if last.get("role") != "user" or not isinstance(last.get("content"), str):
         raise ValueError("last message must be user text")
-    # Validate all input before any potentially expensive provider discovery.
-    from copilot_chat import validate
-    validate({"model": "auto", "messages": messages})
     models = discover()
     plan = select(models, last["content"], kind="auto")
-    return {"model": plan["requested_model"], "messages": messages}, plan
+    return {**request, "model": plan["requested_model"]}, plan
