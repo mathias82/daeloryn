@@ -15,7 +15,8 @@ type PreparedPair={
   baseline:PreparedArm;daeloryn:PreparedArm;total_model_calls:number;warning:string;
 };
 type ArmReceipt={status:string;completed_batches:number;total_batches:number;failure?:string|null;review?:{reply:string}};
-type SavedArm={status:string;completed_batches:number;total_batches:number;reply:string;failure?:string|null;batches?:Record<string,{status:string;reply:string}>};
+type FailureDetail={code:string;batch:number;message:string;exit_code?:number;timeout_seconds?:number};
+type SavedArm={status:string;completed_batches:number;total_batches:number;reply:string;failure?:string|null;failure_details?:FailureDetail|null;batches?:Record<string,{status:string;reply:string}>};
 type Reference={file:string;line:number;status:string;source_kind?:string};
 type EvidenceArm={evidence_traceability_score:number;cited_references:number;source_matched_references:number;unique_code_locations:number;unsupported_references:number;duplicate_matched_citations:number;citation_precision_percent:number|null;references:Reference[]};
 type EvidenceComparison={kind:string;method:string;status:string;comparable_completed_arms:boolean;provisional_evidence_lead:string;verified_winner:null;score_definition:string;warning:string;source_files_inspected:number;arms:Record<Arm,EvidenceArm>};
@@ -395,6 +396,12 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat,campa
           <h3>{arm==='baseline'?'Plain Copilot':'Copilot + Daeloryn'}</h3>
           <p>{runReceipt?.arms[arm]?runReceipt.arms[arm].status+' · '+runReceipt.arms[arm].completed_batches+'/'+runReceipt.arms[arm].total_batches+' batches':'Pending / in progress'}</p>
           {runReceipt?.arms[arm]?.failure&&<p role="alert">Failure: {runReceipt.arms[arm].failure}</p>}
+          {runReceipt?.arms[arm]?.failure_details&&<p role="status">
+            Batch {runReceipt.arms[arm].failure_details!.batch} · {runReceipt.arms[arm].failure_details!.code}
+            {typeof runReceipt.arms[arm].failure_details!.exit_code==='number'?' · CLI exit '+runReceipt.arms[arm].failure_details!.exit_code:''}
+            {typeof runReceipt.arms[arm].failure_details!.timeout_seconds==='number'?' · timeout '+runReceipt.arms[arm].failure_details!.timeout_seconds+'s':''}
+          </p>}
+          {runReceipt?.arms[arm]?.failure&&<p className="muted">Completed batch replies are saved. Use Resume remaining batches after checking the failure. Unknown attempts need separate confirmation; remote charges may already exist. No automatic retry.</p>}
           <pre>{runReceipt?.arms[arm]?.reply||result?.arms[arm]?.review?.reply||partial[arm]||'No model response yet'}</pre>
         </article>)}
       </div>

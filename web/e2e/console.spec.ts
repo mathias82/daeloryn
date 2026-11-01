@@ -46,6 +46,30 @@ test.beforeEach(async({page})=>{
   await expect(page.getByText('Loaded from repository',{exact:true})).toBeVisible();
 });
 
+test('saved batch failure shows exact cause and preserves completed responses before resume',async({page})=>{
+ const runId='e'.repeat(32);let posts=0;
+ page.on('request',request=>{if(request.method()==='POST')posts++;});
+ const summary={run_id:runId,status:'partial',repository:'demo',mode:'review',model:models[0],agent:'java-reviewer',
+   created_at:'2026-11-01T18:00:00+00:00',updated_at:'2026-11-01T18:01:00+00:00'};
+ await page.route('**/api/benchmark/runs',route=>route.fulfill({json:{runs:[summary]}}));
+ await page.route('**/api/benchmark/runs/'+runId,route=>route.fulfill({json:{...summary,
+   source_sha256:'a'.repeat(64),approved_sha256:'b'.repeat(64),error:'Provider call stopped; partial results saved',
+   arms:{baseline:{status:'completed',completed_batches:32,total_batches:32,reply:'Saved baseline result',batches:{}},
+     daeloryn:{status:'partial',completed_batches:8,total_batches:32,reply:'Saved specialist result',
+       failure:'Batch 9: Copilot call timed out; remote outcome unknown',
+       failure_details:{code:'provider_timeout',batch:9,message:'Copilot call timed out',timeout_seconds:90},
+       batches:{'8':{status:'completed',reply:'Saved specialist result'},'9':{status:'unknown',reply:''}}}}
+ }}));
+ await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
+ const runner=page.getByRole('region',{name:'Paired benchmark runner'});
+ await expect(runner.getByText(/Batch 9 · provider_timeout · timeout 90s/)).toBeVisible();
+ await expect(runner.getByText('Saved baseline result',{exact:true})).toBeVisible();
+ await expect(runner.getByText('Saved specialist result',{exact:true})).toBeVisible();
+ await runner.getByRole('button',{name:'Resume remaining batches'}).click();
+ await expect(runner.getByRole('button',{name:'Approve & resume saved run'})).toBeDisabled();
+ expect(posts).toBe(0);
+});
+
 test('chat sends chosen model and agent together',async({page})=>{
   await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
   await page.getByLabel(/^Agent/).selectOption('java-reviewer');

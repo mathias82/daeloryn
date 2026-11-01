@@ -283,6 +283,8 @@ class RunStore:
                         event_type = event.get("type")
                         if event_type == "arm_started":
                             row["status"] = "running"
+                            row["failure"] = None
+                            row["failure_details"] = None
                         elif event_type == "progress":
                             row["completed_batches"] = event.get("completed", row["completed_batches"])
                             row["total_batches"] = event.get("total", row["total_batches"])
@@ -294,6 +296,8 @@ class RunStore:
                             number=event.get('batch')
                             if isinstance(number,int) and number>0:
                                 row['batches'][str(number)]={'status':'unknown','reply':''}
+                                if isinstance(event.get('diagnostic'), dict):
+                                    row['batches'][str(number)]['diagnostic']=event['diagnostic']
                         elif event_type == "batch_reply" and isinstance(event.get("reply"), str):
                             # Per-batch receipts are persisted before the next remote call.
                             # Bound transcript size; show truncation honestly.
@@ -350,6 +354,7 @@ class RunStore:
                                 "completed_batches": outcome.get("completed_batches", 0),
                                 "total_batches": outcome.get("total_batches", 0),
                                 "failure": outcome.get("failure"),
+                                "failure_details": outcome.get("failure_details"),
                                 "reply": (outcome.get("review", {}).get("reply", "") or
                                           record["arms"][arm]["reply"])[:200000]
                             })
