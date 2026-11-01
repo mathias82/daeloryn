@@ -31,7 +31,7 @@ class DraftPublicationTests(unittest.TestCase):
    result=publish_workflow_draft(store,"run1",state["version"],principal,registry,
                                  "a"*64,token,gate,"Title","Body","b"*40,publisher=publisher)
    self.assertEqual("published",result["workflow"]["stage"])
-   self.assertEqual([(root,True)],calls)
+   self.assertEqual([(root.resolve(),True)],calls)
    with self.assertRaises(RuntimeError):
     publish_workflow_draft(store,"run1",state["version"],principal,registry,
                            "a"*64,token,gate,"Title","Body","b"*40,publisher=publisher)

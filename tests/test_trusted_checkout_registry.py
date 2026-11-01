@@ -11,7 +11,7 @@ class CheckoutRegistryTests(unittest.TestCase):
    root=Path(d)/"repo"
    (root/".git").mkdir(parents=True)
    registry=TrustedCheckoutRegistry({"org/repo":root})
-   self.assertEqual(root,registry.resolve("org/repo"))
+   self.assertEqual(root.resolve(),registry.resolve("org/repo"))
    with self.assertRaises(PermissionError):registry.resolve("../repo")
    with self.assertRaises(PermissionError):registry.resolve("org/other")
  def test_symlink_checkout_rejected(self):

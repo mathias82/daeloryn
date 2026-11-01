@@ -19,5 +19,5 @@ class NegativeSecurityCases(unittest.TestCase):
     raise AssertionError("must not consume")
   p=Principal("dev",frozenset({"repo-a"}),frozenset({"run_tests"}),True)
   with self.assertRaises(PermissionError):
-   preflight(p,"repo-b","run_tests","a"*64,"token",Gate())
+   authorize_and_consume(p,"repo-b","run_tests","a"*64,"token",Gate())
 if __name__=="__main__":unittest.main()
