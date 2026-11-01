@@ -411,7 +411,7 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     if not isinstance(payload, dict) or not expected.issubset(payload) or not set(payload).issubset(expected | optional):
                         raise ValueError("invalid review payload")
                     scope = payload.get("scope", "full")
-                    if scope not in ("full", "focused"):
+                    if scope not in ("full", "focused", "docs"):
                         raise ValueError("invalid review scope")
                     # Resolve automatic routing only at preparation time. The UI
                     # submits the resulting concrete model with the approved digest
@@ -428,9 +428,9 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                         raise ValueError("repository must resolve uniquely")
                     # Scope is bound into the approved prompt SHA; execute re-reads
                     # the same selected subset and rejects changed source/selection.
-                    if scope == "focused":
+                    if scope in ("focused", "docs"):
                         prepared = prepare_ai_review(matches[0], payload["repository"], payload["task"],
-                                                     payload["model"], payload.get("agent"), scope="focused")
+                                                     payload["model"], payload.get("agent"), scope=scope)
                     else:
                         prepared = prepare_ai_review(matches[0], payload["repository"], payload["task"],
                                                      payload["model"], payload.get("agent"))
