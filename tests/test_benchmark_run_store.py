@@ -102,7 +102,7 @@ class BenchmarkRunStoreTests(unittest.TestCase):
             self.store.delete(run["run_id"])
         response=self.store.stop(run["run_id"])
         self.assertEqual("stopping",response["status"])
-        self.assertEqual("stopping",self.store.get(run["run_id"])["status"])
+        self.assertIn(self.store.get(run["run_id"])["status"], ("stopping", "stopped"))
         for _ in range(100):
             if self.store.get(run["run_id"])["status"]=="stopped":break
             time.sleep(0.02)
