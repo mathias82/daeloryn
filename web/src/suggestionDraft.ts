@@ -37,19 +37,3 @@ export function draftPatch(draft:SuggestionDraft):string|null{
     ...removed.map(line=>'-'+line),...added.map(line=>'+'+line),
   ].join('\n')+'\n';
 }
-/** Only fenced code found close to a cited file:line and explicit change wording.
- * This is a proposed example, never a verified patch or automatic edit.
- */
-export function findNearbyCodeSuggestion(reply:string,citationOffset:number):string|null{
-  if(citationOffset<0||citationOffset>=reply.length)return null;
-  const surrounding=reply.slice(Math.max(0,citationOffset-200),Math.min(reply.length,citationOffset+1100));
-  if(!/\b(?:fix|replace|change|suggest|proposed|instead|refactor|patch|διορθ|αλλαγ)\w*/iu.test(surrounding))return null;
-  const start=reply.indexOf('`'.repeat(3),citationOffset);
-  if(start<0||start-citationOffset>650)return null;
-  const newline=reply.indexOf('\n',start);
-  if(newline<0||newline-start>35)return null;
-  const closing=reply.indexOf('`'.repeat(3),newline+1);
-  if(closing<0||closing-newline>MAX_REPLACEMENT)return null;
-  const snippet=reply.slice(newline+1,closing).trimEnd();
-  return snippet&&snippet.length<=MAX_REPLACEMENT?snippet:null;
-}
