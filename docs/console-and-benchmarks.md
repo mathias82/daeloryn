@@ -52,9 +52,19 @@ Larger batches generally reduce the number of calls compared with the previous 2
 The **Sequential agent evaluation** panel in Benchmarks displays all 22 trusted
 profiles in a deterministic order, with domain-specific assessment criteria for
 Java, Spring, React, security, integration, reliability, containers, Kubernetes
-and CI/CD. When each agent has a comparable saved A/B run, the queue advances
-to the next role. A/B arms see the **identical task, source snapshot and
-requested Copilot model**, while the challenger alone loads the specialist.
+and CI/CD. **First select the local project.** The backend reads bounded, standard
+build manifests (`pom.xml`, Gradle, `package.json`, Docker/Helm/CI markers)
+and one level of component folders to detect its technologies without executing
+a build or scanning source. Only compatible roles enter that project's ordered
+queue: Java-only projects get Java agents; Spring Boot projects get Java + Spring;
+React projects get React specialists; full-stack projects may receive all relevant
+families and platform agents when their actual manifests justify them. Unrelated
+roles remain listed as **not applicable** and do not block the queue. Each
+project keeps its own progress and A/B evidence; a score from another checkout
+cannot advance its queue. Unknown technologies are never guessed to be React or
+Spring. Within a project, each comparable A/B run advances to the next eligible
+role. A/B arms see the **identical task, source snapshot and requested Copilot
+model**, while the challenger alone loads the specialist.
 
 Select a registered local checkout whose technology matches the role and click
 **Set up next A/B benchmark**. This only fills the local benchmark form; it
@@ -66,8 +76,9 @@ offline, without model calls. Model identity and effectiveness remain unverified
 without independent attestation and regression testing.
 
 Use **Export evaluation report (Markdown)** or **Export structured JSON** to
-save all role statuses, domain scenarios, source-citation scores, and candidate
-rule improvements for later review. Export does not include full model
+save a **project-specific** report containing all 22 statuses (including not
+applicable roles), its actual technology markers, domain scenarios, source
+citation scores, and candidate rule improvements for later review. Export does not include full model
 transcripts or source bodies. A lower Daeloryn citation score triggers a
 **proposed rule improvement** checklist for that agent: require evidence,
 reduce unsupported references, and verify on a previously unseen holdout
