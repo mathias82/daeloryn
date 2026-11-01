@@ -10,7 +10,7 @@ const WHOLE=/(?:\b(?:full|complete|entire|whole|all)\b.{0,40}\b(?:project|repo(?
 
 const PROJECT=/(?:\b(?:project|repository|repo|codebase|source\s+code|my\s+code|our\s+code|service|controller|endpoint|spring\s+boot|architecture|observability|logging|metrics|trace|telemetry|kafka|docker|kubernetes|pom\.xml|build\.gradle|application\.ya?ml|class|module|package)\b|(?:[οό]?\s*(?:κ[ώω]δικ\w*|έργ\w*|αρχιτεκτονικ\w*|αρχε[ίι]\w*|κλ[άα]σ\w*|μ[έε]τρικ\w*|παρατηρησιμ\w*|καταγραφ\w*|ιχνηλ[άα]τ\w*|εφαρμογ\w*|π[ώω]ς\s+υλοποι\w*)))/iu;
 
-const CURIOSITY=/(?:\b(?:how\s+(?:does|is)|where\s+(?:is|are)|explain|find|show|inspect|review|check|analy[sz]e|what\s+does)\b|π[ώω]ς|πο[ύυ]|εξ[ήη]γησ\w*|δείξε|δες|[έε]λεγξ\w*|αν[άα]λυσ\w*|τι\s+κ[άα]νει)/iu;
+const CURIOSITY=/(?:\b(?:what|how\s+(?:does|is)|where\s+(?:is|are)|explain|find|show|inspect|review|check|analy[sz]e|what\s+does)\b|π[ώω]ς|πο[ύυ]|εξ[ήη]γησ\w*|δείξε|δες|[έε]λεγξ\w*|αν[άα]λυσ\w*|τι\s+κ[άα]νει)/iu;
 
 const SMALL_TALK=/^(?:hi|hello|hey|good\s+(?:morning|evening)|thanks?|thank\s+you|ok(?:ay)?|yes|no|γει[άα](?:\s+σου)?|καλημ[έε]ρα|καλησπ[έε]ρα|ευχαριστ[ώω]|ναι|[όο]χι|[έε]γινε|τι\s+κ[άα]νεις)[!?.\s]*$/iu;
 
