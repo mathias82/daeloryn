@@ -20,7 +20,7 @@ const GENERIC_HOWTO=/^(?:how\s+(?:do|can|should)\s+(?:i|we)|how\s+to|what\s+is|e
 // conjugated differently from "βρες".
 const GREEK_SOURCE_TASK=/(?:βρ(?:ες|εις|[εέ]στε)|εντ[όο]πισ[εη]|ψ[άα]ξ[εω]|σ[άα]ρωσ[εω]|σκ[άα]ναρ[εω]|[έε]λεγξ[εω]|εξ[έε]τασ[εω]|αναλ[υύ]σ[εη]|επιθε[ώω]ρησ[εη]|δ[εέ]ς|κ[άα]νε.{0,30}(?:[έε]λεγχο|review|αν[άα]λυση)|θ[έε]λω.{0,40}(?:σφ[άα]λμα|κ[ώω]δικ|bug))|(?:σφ[άα]λμα|σφ[άα]λματα|προβλ[ήη]ματα|bugs?|κ[ώω]δικ[αο]|κλ[άα]σ[ηεις]).{0,65}(?:έργ[οου]|project|κ[ώω]δικ))/iu;
 const GREEK_SOURCE_OBJECT=/(?:κ[ώω]δικ[αο]|κλ[άα]σ[ηεις]|αρχε[ίι][οα]|σφ[άα]λμα|σφ[άα]λματα|bugs?|project|έργο|repository|πακ[έε]τ[οου]|μ[έε]θοδ[οου])/iu;
-const GREEK_EXPLICIT_ALL=/(?:σ[ετ]s+)?(?:[όο]λ[οαη]|ολ[όο]κληρ[οη])s+τ[οα]s+(?:έργο|project|repository|κ[ώω]δικα|αρχε[ίι]α)|(?:σ[άα]ρωσε|scan|review)s+.{0,30}(?:[όο]λαs+ταs+αρχε[ίι]α|[όο]λοs+τοs+έργο)/iu;
+const GREEK_EXPLICIT_ALL=/(?:[όο]λ[οαη]\s+τ[οα]\s+(?:έργο|project|repository|κ[ώω]δικα|αρχε[ίι]α)|ολ[όο]κληρ[οη]\s+τ[οα]\s+(?:έργο|project|repository|κ[ώω]δικα)|(?:σ[άα]ρωσε|scan|review)\s+.{0,30}(?:[όο]λα\s+τα\s+αρχε[ίι]α|[όο]λο\s+το\s+έργο))/iu;
 
 /** Only explicit whole-project language produces full source coverage. */
 export function routeContext(task:string,preference:ContextPreference='smart'):ContextScope{
