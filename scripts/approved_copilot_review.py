@@ -89,7 +89,7 @@ def prepare(root, repository, task, model, agent=None):
             'warning': 'Inspect all source before approval. Heuristic redaction is not a secret scanner. Each batch is a separate potentially billable model call. Review stops after 5 minutes or output budget; partial outcomes are reported. Cross-batch reasoning is not guaranteed.'}
 
 
-def execute(prepared, model, approved_digest, *, transport=copilot_chat, progress=None):
+def execute(prepared, model, approved_digest, *, transport=copilot_chat, progress=None, stream_replies=False):
     if not isinstance(prepared, dict) or not isinstance(prepared.get('prompt'), str):
         raise ValueError('invalid prepared context')
     prompt = prepared['prompt']
@@ -139,6 +139,9 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
         if progress:
             progress({'type': 'progress', 'phase': 'completed_batch', 'completed': len(replies),
                       'total': len(prompts), 'batch': attempted})
+            if stream_replies:
+                # Completed model replies are streamed per batch, not per token.
+                progress({'type': 'batch_reply', 'batch': attempted, 'reply': response['reply']})
     if not failure and not prepared.get('coverage', {}).get('all_eligible_files_included', False):
         failure = 'Some eligible sources were omitted; see coverage. This is not a complete project review.'
     answer = '\n\n'.join(('Batch %d:\n' % (i + 1) if len(prompts) > 1 else '') + row['reply'] for i, row in enumerate(replies))

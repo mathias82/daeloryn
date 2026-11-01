@@ -53,6 +53,16 @@ class ApprovedReviewApiTests(unittest.TestCase):
   code,changed=self.post("/api/copilot/review/prepare",request)
   self.assertEqual(200,code)
   self.assertNotEqual(prepared["sha256"],changed["sha256"])
+ def test_auto_route_resolves_at_prepare_only(self):
+  request={"repository":"demo","task":"Review Java","model":"auto"}
+  with patch("console_api.route_chat",return_value=({"model":"test-concrete","messages":[{"role":"user","content":"Review Java"}]},None)) as router:
+   code,prepared=self.post("/api/copilot/review/prepare",request)
+  self.assertEqual(200,code)
+  self.assertEqual("test-concrete",prepared["model"])
+  self.assertNotEqual("auto",prepared["model"])
+  router.assert_called_once()
+  code,_=self.post("/api/copilot/review/execute",{**request,"approved_sha256":prepared["sha256"]})
+  self.assertEqual(400,code)
  def test_stream_flushes_progress_before_provider_completion(self):
   from approved_copilot_review import execute as actual
   entered=threading.Event()
@@ -79,6 +89,8 @@ class ApprovedReviewApiTests(unittest.TestCase):
    release.set()
    events=[json.loads(line) for line in response.read().splitlines()]
    self.assertEqual("completed_batch",events[0]["phase"])
+   self.assertEqual("batch_reply",events[1]["type"])
+   self.assertEqual("Fixture review",events[1]["reply"])
    self.assertEqual("completed",events[-1]["result"]["status"])
    self.assertIn("Fixture review",events[-1]["result"]["review"]["reply"])
 if __name__=="__main__":unittest.main()

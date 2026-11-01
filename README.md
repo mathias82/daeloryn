@@ -53,6 +53,9 @@ bind loopback; Ctrl+C stops both. Existing services on ports 5173/8765 are never
 killed or reused silently. Without the explicit enable flags, AI and project
 registration stay disabled. See [console setup](web/README.md) and the
 [paired Java review protocol](docs/local-java-review-benchmark.md).
+When a local project is selected, Chat's **Send** automatically prepares its
+read-only code context; one explicit manifest approval starts the bounded
+review batches and their progress is shown directly in the conversation.
 
 ## Why use it?
 

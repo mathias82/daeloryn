@@ -60,13 +60,21 @@ trusted catalog shipped with Daeloryn, not arbitrary profiles from your target
 repository or an existing IDE session. Automatic agent recommendations remain
 advisory; Automatic model routing preserves an explicitly selected agent.
 
-Plain chat sends messages without target repository access. For source review,
-confirm a local repository and a concrete model, enter the review task, then
-**Prepare AI review context**. Inspect the source excerpts and expandable agent
-profile, approve the selection, and send it. Source, repository, model, agent
-and profile digest are bound together; changing the selection resets approval.
-All eligible source/build/README files in the coverage manifest are prepared in bounded batches; inspect omissions and exclusions before approval.
-No source edits or tests are performed by this review path. CLI deny flags are
+With **GitHub Copilot** and a confirmed local project selected, sending a chat
+message automatically prepares a read-only snapshot of all eligible project source,
+build and README files. The chat shows the exact source manifest, chosen model,
+agent profile, exclusions and potentially billable call count before any source
+is transmitted. Inspect and explicitly approve the SHA-256-bound snapshot to begin;
+the server handles sequential batches and streams completed batch replies and
+progress into chat. Automatic model routing resolves to a concrete discovered model
+at preparation and cannot silently re-route after approval.
+
+Turn off **Use selected local project for chat** for inexpensive text-only prompts.
+The previous review flow is still available under **Advanced: manual source review**.
+Changing model, project or agent invalidates pending approval. Disconnections and
+unknown outcomes are never automatically retried. All batches are reviewed
+independently: complete source inclusion does not prove cross-file semantic analysis.
+Nothing in chat edits sources, executes commands or runs tests. CLI deny flags are
 not an OS sandbox; provider model/agent compliance is not independently attested.
 Chat names and messages persist unencrypted in browser localStorage; enabled providers
 receive submitted prompts. Never send secrets or expose these servers publicly.

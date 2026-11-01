@@ -13,7 +13,8 @@ test('source-review prepare and execute bind identical selection',()=>{
   const selection={repository:'demo',task:'Review',model:'claude-sonnet-4',agent:'java-reviewer'};
   assert.deepEqual(reviewRequest(selection),selection);
   assert.deepEqual(reviewRequest(selection,'digest'),{...selection,approved_sha256:'digest'});
-  for (const model of ['', 'auto']) assert.throws(()=>reviewRequest({...selection,model}));
+  assert.throws(()=>reviewRequest({...selection,model:''}));
+  assert.equal(reviewRequest({...selection,model:'auto'}).model,'auto'); // resolved to a concrete model at preparation time
 });
 test('every source-review selection change resets approval component identity',()=>{
   const selection={repository:'demo',task:'Review',model:'claude-sonnet-4',agent:'java-reviewer'};

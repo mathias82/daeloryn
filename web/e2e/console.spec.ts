@@ -43,6 +43,7 @@ test('changing approved model clears source-review approval without executing',a
   await page.getByLabel(/^Agent/).selectOption('java-reviewer');
   await page.getByLabel(/^Copilot model/).selectOption(models[0]);
   await page.getByLabel(/^Local repository/).selectOption('demo');
+  await page.getByText('Advanced: manual source review').click();
   await page.getByRole('button',{name:'Prepare AI review context',exact:true}).click();
   const approval=page.getByRole('checkbox',{name:/I inspected the context/});
   await approval.check();
@@ -122,7 +123,7 @@ test('Enter sends once, Shift+Enter adds a newline and composition never sends',
   expect(calls).toBe(1);
   await input.press('Enter');
   expect(calls).toBe(1);
-  await expect(page.getByText(/Copilot enabled locally · plain chat/)).toBeVisible();
+  await expect(page.getByText(/Copilot · text-only mode/)).toBeVisible();
 });
 
 test('rename and messages persist after reload; clear removes saved content',async({page})=>{
@@ -167,7 +168,8 @@ test('source review shows coverage and call count and saves its result in chat',
  await page.getByLabel(/^Agent/).selectOption('java-reviewer');
  await page.getByLabel(/^Copilot model/).selectOption(models[0]);
  await page.getByLabel(/^Local repository/).selectOption('demo');
- await page.getByRole('button',{name:'Prepare AI review context',exact:true}).click();
+ await page.getByText('Advanced: manual source review').click();
+  await page.getByRole('button',{name:'Prepare AI review context',exact:true}).click();
  await expect(page.getByText('2 files · 2 model calls (potentially billable).',{exact:true})).toBeVisible();
  await page.getByRole('checkbox',{name:/I inspected the context/}).check();
  await page.getByRole('button',{name:'Send approved context to Copilot',exact:true}).click();
@@ -188,10 +190,69 @@ test('streamed source review reports batch progress before final result',async({
  await page.getByLabel(/^Agent/).selectOption('java-reviewer');
  await page.getByLabel(/^Copilot model/).selectOption(models[0]);
  await page.getByLabel(/^Local repository/).selectOption('demo');
- await page.getByRole('button',{name:'Prepare AI review context',exact:true}).click();
+ await page.getByText('Advanced: manual source review').click();
+  await page.getByRole('button',{name:'Prepare AI review context',exact:true}).click();
  await page.getByRole('checkbox',{name:/I inspected the context/}).check();
  await page.getByRole('button',{name:'Send approved context to Copilot',exact:true}).click();
  await expect(page.locator('.bubble.assistant')).toContainText('Streamed finding');
  await expect(page.locator('.bubble.assistant')).toContainText('1/2 batches');
  await expect(page.getByRole('button',{name:'Prepare AI review context',exact:true})).toBeEnabled();
+});
+
+
+test('Send prepares project context in chat, waits for approval, then runs batches',async({page})=>{
+  const requests:string[]=[];
+  await page.route('**/api/copilot/review/prepare',async route=>{
+    requests.push('prepare');
+    const body=route.request().postDataJSON();
+    expect(body).toMatchObject({repository:'demo',task:'Review the project',model:'auto'});
+    await route.fulfill({json:{repository:'demo',model:models[0],agent:null,
+      prompt:'Fixture source snapshot',sha256:'a'.repeat(64),files:['App.java'],
+      batch_count:2,warning:'Fixture review has 2 potentially billable calls',
+      approval_required:true,agent_profile:null,agent_profile_sha256:null,
+      coverage:{all_eligible_files_included:true,scope:'Fixture source',omitted:[],excluded:[]}}});
+  });
+  await page.route('**/api/copilot/review/execute',async route=>{
+    requests.push('execute');
+    expect(route.request().postDataJSON()).toMatchObject({
+      repository:'demo',task:'Review the project',model:models[0],approved_sha256:'a'.repeat(64)});
+    await route.fulfill({contentType:'application/x-ndjson',body:[
+      {type:'progress',phase:'running',completed:0,total:2,batch:1},
+      {type:'progress',phase:'completed_batch',completed:1,total:2,batch:1},
+      {type:'batch_reply',batch:1,reply:'Found first issue'},
+      {type:'progress',phase:'completed_batch',completed:2,total:2,batch:2},
+      {type:'batch_reply',batch:2,reply:'Found second issue'},
+      {type:'result',result:{status:'completed',completed_batches:2,total_batches:2,
+        coverage:{all_eligible_files_included:true},review:{reply:'Batch 1:\nFound first issue\n\nBatch 2:\nFound second issue'}}}
+    ].map(x=>JSON.stringify(x)).join('\n')+'\n'});
+  });
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await page.getByLabel(/^Local repository/).selectOption('demo');
+  await page.getByRole('textbox',{name:'Message',exact:true}).fill('Review the project');
+  await page.getByRole('button',{name:/Send message/}).click();
+  await expect(page.getByRole('region',{name:'Chat project context approval'})).toBeVisible();
+  await expect(page.getByText('1 source files · 2 potentially billable model calls')).toBeVisible();
+  expect(requests).toEqual(['prepare']);
+  await page.getByRole('checkbox',{name:/I inspected the exact source context/}).check();
+  await page.getByRole('button',{name:'Approve and analyze project'}).click();
+  await expect(page.locator('.bubble.assistant')).toContainText('Found second issue');
+  expect(requests).toEqual(['prepare','execute']);
+});
+
+test('Changing the model invalidates pending in-chat source approval',async({page})=>{
+  let executed=0;
+  await page.route('**/api/copilot/review/prepare',route=>route.fulfill({json:{
+    repository:'demo',model:models[0],agent:null,prompt:'Fixture snapshot',sha256:'a'.repeat(64),
+    files:['App.java'],batch_count:1,warning:'One provider call',approval_required:true,
+    agent_profile:null,agent_profile_sha256:null}}));
+  page.on('request',r=>{if(r.url().endsWith('/api/copilot/review/execute'))executed++;});
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await page.getByLabel(/^Copilot model/).selectOption(models[0]);
+  await page.getByLabel(/^Local repository/).selectOption('demo');
+  await page.getByRole('textbox',{name:'Message',exact:true}).fill('Analyze my project');
+  await page.getByRole('button',{name:/Send message/}).click();
+  await expect(page.getByRole('checkbox',{name:/I inspected the exact source context/})).toBeVisible();
+  await page.getByLabel(/^Copilot model/).selectOption(models[1]);
+  await expect(page.getByRole('region',{name:'Chat project context approval'})).toHaveCount(0);
+  expect(executed).toBe(0);
 });
