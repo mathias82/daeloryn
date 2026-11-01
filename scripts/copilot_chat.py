@@ -32,8 +32,10 @@ def validate(request, *, review_context=False):
         resolve_agent(request["agent"])
     return model, messages
 
-def copilot_chat(request, executable=None, timeout=90, *, expected_agent_sha256=None, review_context=False):
+def copilot_chat(request, executable=None, timeout=90, *, expected_agent_sha256=None, review_context=False, cancel_event=None):
     model, messages = validate(request, review_context=review_context)
+    if cancel_event is not None and cancel_event.is_set():
+        raise RuntimeError('Copilot request cancelled before dispatch')
     profile = resolve_agent(request["agent"]) if "agent" in request else None
     if expected_agent_sha256 is not None and (profile is None or profile["sha256"] != expected_agent_sha256):
         raise PermissionError("agent profile changed; prepare and approve again")
@@ -68,7 +70,27 @@ def copilot_chat(request, executable=None, timeout=90, *, expected_agent_sha256=
                                        stdout=output, stderr=subprocess.STDOUT,
                                        start_new_session=True)
             try:
-                code = process.wait(timeout=timeout)
+                # React to Stop promptly; a process already running can have an
+                # unknown provider-side outcome even when terminated locally.
+                if cancel_event is None:
+                    code = process.wait(timeout=timeout)
+                else:
+                    import time
+                    deadline = time.monotonic() + timeout
+                    while True:
+                        code = process.poll()
+                        if code is not None:
+                            break
+                        if cancel_event.is_set():
+                            try:
+                                os.killpg(process.pid, signal.SIGKILL)
+                            except ProcessLookupError:
+                                pass
+                            process.wait()
+                            raise RuntimeError('Copilot cancelled locally; external provider outcome unknown')
+                        if time.monotonic() >= deadline:
+                            raise subprocess.TimeoutExpired(args, timeout)
+                        cancel_event.wait(min(0.2, max(0.001, deadline - time.monotonic())))
             except subprocess.TimeoutExpired as exc:
                 try:
                     os.killpg(process.pid, signal.SIGKILL)
