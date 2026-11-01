@@ -47,3 +47,22 @@ test('code reviews are focused unless whole-project wording is explicit',()=>{
  assert.equal(routeContext('Perform a full scan of the entire project'),'full');
  assert.equal(routeContext('What is Java?'),'none');
 });
+
+test('Greek full-project bug review enters explicit source approval, not text-only chat',()=>{
+  for(const task of [
+    'Θέλω να διαβάσεις όλο το project, να βρεις bugs και να προτείνεις λύσεις',
+    'Δες όλο το έργο για σφάλματα στον κώδικα',
+    'Θέλω να βρεις όλα τα σφάλματα στον κώδικα σε όλο το έργο',
+    'Σάρωσε όλο το project για bugs'
+  ]) assert.equal(routeContext(task),'full',task);
+});
+test('Greek class bug questions stay focused; approval and docs override still apply',()=>{
+  for(const task of [
+    'Θέλω να βρεις σφάλματα στον κώδικα.',
+    'Βρες bugs στην κλάση MailConfiguration.java',
+    'Έλεγξε την κλάση και εντόπισε σφάλματα.',
+    'Πες μου τα προβλήματα στον κώδικα.'
+  ]) assert.equal(routeContext(task),'focused',task);
+  assert.equal(routeContext('Βρες bugs στον κώδικα','text-only'),'none');
+  assert.equal(routeContext('Σάρωσε όλο το έργο','docs'),'docs');
+});
