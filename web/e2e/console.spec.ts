@@ -61,3 +61,66 @@ test('benchmark row preserves unverified identity and tie outcome',async({page})
   await expect(row).toContainText('Agent: unverified');
   await expect(row).toContainText('Checks: reported executed');
 });
+
+test('project popup registers only explicitly selected paths without AI calls',async({page})=>{
+  const posts:string[]=[];
+  await page.route('**/api/repositories/manage',async route=>{
+    const body=route.request().postDataJSON();posts.push(body.action);
+    if(body.action==='preview'){
+      await route.fulfill({json:{candidates:[{name:'nested',path:'/fixture/group/nested',technologies:[]},{name:'other',path:'/fixture/group/other',technologies:[]}]}});
+    }else if(body.action==='add'){
+      expect(body).toEqual({action:'add',paths:['/fixture/group/nested'],approved:true});
+      await route.fulfill({json:{repositories:[{name:'nested',path:'/fixture/group/nested',technologies:[]}]}});
+    }else await route.fulfill({json:{path:''}});
+  });
+  let aiCalls=0;page.on('request',r=>{if(r.url().includes('/api/copilot/')&&r.method()==='POST')aiCalls++;});
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await page.getByRole('button',{name:'Add project',exact:true}).click();
+  const dialog=page.getByRole('dialog',{name:'Add local projects'});
+  await dialog.getByRole('button',{name:'Browse folders (macOS)'}).click();
+  await expect(dialog.getByLabel('Absolute folder path')).toHaveValue('');
+  await dialog.getByLabel('Absolute folder path').fill('/fixture/group');
+  await dialog.getByLabel('Find projects in subfolders').check();
+  await dialog.getByRole('button',{name:'Find projects',exact:true}).click();
+  await expect(dialog.getByRole('button',{name:'Add selected projects'})).toBeDisabled();
+  await dialog.getByRole('checkbox',{name:'nested /fixture/group/nested',exact:true}).check();
+  await expect(dialog.getByRole('button',{name:'Add selected projects'})).toBeDisabled();
+  await dialog.getByRole('checkbox',{name:/I approve registering/}).check();
+  await dialog.getByRole('button',{name:'Add selected projects'}).click();
+  await expect(dialog).not.toBeVisible();
+  await page.getByLabel(/^Local repository/).selectOption('nested');
+  expect(posts).toEqual(['browse','preview','add']);
+  expect(aiCalls).toBe(0);
+});
+
+test('project popup surfaces disabled API and closes without adding',async({page})=>{
+  await page.route('**/api/repositories/manage',route=>route.fulfill({status:405,json:{error:'Restart the local API with --enable-project-picker'}}));
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await page.getByRole('button',{name:'Add project',exact:true}).click();
+  const dialog=page.getByRole('dialog');
+  await dialog.getByLabel('Absolute folder path').fill('/fixture/demo');
+  await dialog.getByRole('button',{name:'Find projects',exact:true}).click();
+  await expect(dialog.getByRole('alert')).toContainText('--enable-project-picker');
+  await dialog.getByRole('button',{name:'Cancel',exact:true}).click();
+  await expect(dialog).not.toBeVisible();
+});
+
+test('Enter sends once, Shift+Enter adds a newline and composition never sends',async({page})=>{
+  let calls=0;
+  page.on('request',r=>{if(r.url().endsWith('/api/copilot/chat'))calls++;});
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await page.getByLabel(/^Copilot model/).selectOption(models[0]);
+  const input=page.getByRole('textbox',{name:'Message',exact:true});
+  await input.fill('First line');
+  await input.press('Shift+Enter');
+  await expect(input).toHaveValue('First line\n');
+  expect(calls).toBe(0);
+  await input.dispatchEvent('keydown',{key:'Enter',code:'Enter',isComposing:true});
+  expect(calls).toBe(0);
+  await input.press('Enter');
+  await expect(page.getByText(/Fixture reply/)).toBeVisible();
+  expect(calls).toBe(1);
+  await input.press('Enter');
+  expect(calls).toBe(1);
+  await expect(page.getByText(/Copilot enabled locally · plain chat/)).toBeVisible();
+});

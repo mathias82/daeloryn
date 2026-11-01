@@ -1,13 +1,14 @@
 #!/usr/bin/env python3
-"""Loopback-only, read-only JSON API for the Daeloryn console.
+"""Loopback-only JSON API with opt-in local project registration.
 
-Optionally accepts bounded local-only chat prompts; never commands or credentials.
+Optionally accepts bounded chat prompts; never arbitrary commands or credentials.
 """
 import argparse
 from copilot_chat import copilot_chat
 from copilot_auto import available_models, route_chat
 from agent_router import recommend
 from repository_router import discover, suggest
+from local_projects import ProjectRegistry, candidates, choose_directory
 from github_repository_catalog import list_github_repositories
 from project_analysis import analyze_local
 from code_review import review
@@ -20,6 +21,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
 from pathlib import Path
 import sys
+import subprocess
 from urllib.parse import urlsplit
 
 from agents import catalog
@@ -71,7 +73,24 @@ def benchmark_data(records_dir=None):
     return {**report, "trials": trials}
 
 
-def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repository_roots=(), enable_github_repositories=False, workflow_dir=None):
+def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repository_roots=(), enable_github_repositories=False, workflow_dir=None, projects_file=None):
+    registry = ProjectRegistry(projects_file) if projects_file is not None else None
+
+    def repository_catalog():
+        rows = discover(repository_roots)
+        if registry is not None:
+            rows += registry.list()
+        unique = {row["path"]: row for row in rows}
+        if len(unique) > 100:
+            raise ValueError("repository catalog exceeds limit")
+        return list(unique.values())
+
+    def resolve_repository(name):
+        rows = [row for row in repository_catalog() if row["name"] == name]
+        if len(rows) != 1:
+            raise ValueError("repository must resolve uniquely")
+        return [Path(rows[0]["path"]).parent]
+
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             host = self.headers.get("Host", "")
@@ -120,8 +139,8 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     self.reply(405, {"error": "POST required"})
                     return
                 elif path.path == "/api/repositories":
-                    payload = {"repositories": discover(repository_roots), "source": "configured-local-checkouts",
-                               "execution_enabled": False}
+                    payload = {"repositories": repository_catalog(), "source": "configured-local-checkouts",
+                               "execution_enabled": False, "project_management_enabled": registry is not None}
                 elif path.path == "/api/agents":
                     payload = {"agents": agent_data(), "source": "repository"}
                 elif path.path == "/api/agent-routing":
@@ -160,6 +179,44 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                                                   "http://localhost:" + str(self.server.server_port)):
                 self.reply(403, {"error": "untrusted request origin"})
                 return
+            if self.path == "/api/repositories/manage":
+                if registry is None:
+                    self.reply(405, {"error": "Restart the local API with --enable-project-picker"})
+                    return
+                if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                    self.reply(415, {"error": "JSON required"})
+                    return
+                length = self.headers.get("Content-Length", "")
+                if not length.isdigit() or not 0 < int(length) <= 65536:
+                    self.reply(413, {"error": "invalid request size"})
+                    return
+                try:
+                    payload = json.loads(self.rfile.read(int(length)))
+                    if not isinstance(payload, dict):
+                        raise ValueError("Invalid project request")
+                    action = payload.get("action")
+                    if action == "browse" and set(payload) == {"action"}:
+                        if not registry.picker_lock.acquire(blocking=False):
+                            raise ValueError("A folder chooser is already open")
+                        try:
+                            result = {"path": choose_directory()}
+                        finally:
+                            registry.picker_lock.release()
+                    elif action == "preview" and set(payload) == {"action", "path", "recursive"} and isinstance(payload["recursive"], bool):
+                        result = {"candidates": candidates(payload["path"], payload["recursive"])}
+                    elif action == "add" and set(payload) == {"action", "paths", "approved"} and payload["approved"] is True:
+                        registry.add(payload["paths"], repository_catalog())
+                        result = {"repositories": repository_catalog()}
+                    else:
+                        raise ValueError("Select projects and explicitly approve local registration")
+                except (ValueError, OSError, TypeError, KeyError) as exc:
+                    self.reply(400, {"error": str(exc)})
+                    return
+                except (RuntimeError, TimeoutError, subprocess.SubprocessError):
+                    self.reply(503, {"error": "Folder chooser unavailable or timed out; enter the absolute path instead"})
+                    return
+                self.reply(200, result)
+                return
             if self.path in ("/api/copilot/review/prepare", "/api/copilot/review/execute"):
                 if not enable_copilot:
                     self.reply(405, {"error": "Copilot disabled"})
@@ -177,8 +234,7 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     expected = {"repository", "task", "model", "approved_sha256"} if is_execute else {"repository", "task", "model"}
                     if not isinstance(payload, dict) or set(payload) not in (expected, expected | {"agent"}):
                         raise ValueError("invalid review payload")
-                    matches = [root for root in repository_roots
-                               if any(r["name"] == payload["repository"] for r in discover([root]))]
+                    matches = resolve_repository(payload["repository"])
                     if len(matches) != 1:
                         raise ValueError("repository must resolve uniquely")
                     prepared = prepare_ai_review(matches[0], payload["repository"], payload["task"],
@@ -225,8 +281,7 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     payload = json.loads(self.rfile.read(int(length)))
                     if not isinstance(payload, dict) or set(payload) != {"repository", "path", "replacement"}:
                         raise ValueError("invalid patch payload")
-                    matches = [root for root in repository_roots
-                               if any(r["name"] == payload["repository"] for r in discover([root]))]
+                    matches = resolve_repository(payload["repository"])
                     if len(matches) != 1:
                         raise ValueError("repository must resolve uniquely")
                     result = preview_patch(matches[0], payload["repository"], payload["path"], payload["replacement"])
@@ -249,8 +304,7 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                         raise ValueError("repository and task required")
                     if not isinstance(payload["task"], str) or not 0 < len(payload["task"]) <= 3000:
                         raise ValueError("invalid task")
-                    matches = [root for root in repository_roots
-                               if any(r["name"] == payload["repository"] for r in discover([root]))]
+                    matches = resolve_repository(payload["repository"])
                     if len(matches) != 1:
                         raise ValueError("repository must resolve uniquely")
                     result = review(matches[0], payload["repository"], payload["task"])
@@ -271,8 +325,7 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     payload = json.loads(self.rfile.read(int(length)))
                     if not isinstance(payload, dict) or set(payload) != {"repository"}:
                         raise ValueError("repository required")
-                    matches = [root for root in repository_roots
-                               if any(r["name"] == payload["repository"] for r in discover([root]))]
+                    matches = resolve_repository(payload["repository"])
                     if len(matches) != 1:
                         raise ValueError("repository must resolve uniquely under configured roots")
                     result = analyze_local(matches[0], payload["repository"])
@@ -293,7 +346,7 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     payload = json.loads(self.rfile.read(int(length)))
                     if not isinstance(payload, dict) or set(payload) != {"task"}:
                         raise ValueError("task required")
-                    result = suggest(payload["task"], discover(repository_roots))
+                    result = suggest(payload["task"], repository_catalog())
                 except (ValueError, TypeError, KeyError, json.JSONDecodeError):
                     self.reply(400, {"error": "invalid routing request"})
                     return
@@ -401,6 +454,8 @@ def main():
     p.add_argument("--workflow-dir", type=Path, help="opt-in local workflow state directory for read-only inspection")
     p.add_argument("--enable-github-repositories", action="store_true")
     p.add_argument("--repository-root", type=Path, action="append", default=[], help="trusted parent directory of local git checkouts (repeatable)")
+    p.add_argument("--enable-project-picker", action="store_true", help="allow explicit local project registration and native macOS folder chooser")
+    p.add_argument("--projects-file", type=Path, default=Path.home() / ".config" / "daeloryn" / "projects.json", help="local project registry (used only with --enable-project-picker)")
     a = p.parse_args()
     if not 1024 <= a.port <= 65535:
         p.error("port must be 1024..65535")
@@ -412,7 +467,7 @@ def main():
         discover(a.repository_root)
     except (OSError, ValueError) as exc:
         p.error("invalid repository roots: " + str(exc))
-    server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(a.records_dir, a.enable_local_chat, a.enable_copilot_chat, a.repository_root, a.enable_github_repositories, a.workflow_dir))
+    server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(a.records_dir, a.enable_local_chat, a.enable_copilot_chat, a.repository_root, a.enable_github_repositories, a.workflow_dir, a.projects_file if a.enable_project_picker else None))
     print("Daeloryn local console API listening on http://127.0.0.1:" + str(a.port), flush=True)
     try:
         server.serve_forever()
