@@ -27,6 +27,7 @@ class RunStore:
         self.directory = Path(directory) if directory is not None else Path.home() / ".daeloryn" / "benchmark-runs"
         self.guard = threading.RLock()
         self.active = None
+        self.active_record = None
         self.stop_events = {}
 
     def _ensure_dir(self):
@@ -114,9 +115,14 @@ class RunStore:
             # terminated locally, but the provider-side outcome may be unknown.
             event.set()
             record['status'] = 'stopping'
+            if self.active_record is not None and self.active_record.get('run_id') == run_id:
+                self.active_record['status'] = 'stopping'
             record['error'] = ('Stop requested. In-flight Copilot calls are being terminated locally; '
                                'provider-side outcome may be unknown.')
             record['updated_at'] = _utc()
+            if self.active_record is not None and self.active_record.get('run_id') == run_id:
+                self.active_record['error'] = record['error']
+                self.active_record['updated_at'] = record['updated_at']
             self._save(record)
             return {'run_id':run_id,'status':'stopping'}
 
@@ -157,6 +163,7 @@ class RunStore:
             }
             self._save(record)
             self.active = run_id
+            self.active_record = record
             cancel_event = threading.Event()
             self.stop_events[run_id] = cancel_event
 
@@ -183,8 +190,12 @@ class RunStore:
                                             ("\n[Transcript truncated for local storage]" if len(next_reply) > 200000 else ""))
                         elif event_type == "arm_finished":
                             row["status"] = event.get("status", "partial")
-                        record["updated_at"] = _utc()
-                        self._save(record)
+                        # Writing+fsync for every dispatched batch is expensive.
+                        # Persist material progress on completed replies/arm state;
+                        # keep transient in-flight counts in memory.
+                        if event_type in ('arm_started', 'arm_finished', 'batch_reply'):
+                            record["updated_at"] = _utc()
+                            self._save(record)
 
                 result = runner(prepared, approved_digest, progress=progress,
                                 cancel_event=cancel_event, parallelism=2)
@@ -234,6 +245,7 @@ class RunStore:
                 with self.guard:
                     if self.active == run_id:
                         self.active = None
+                        self.active_record = None
                     self.stop_events.pop(run_id, None)
 
         thread = threading.Thread(target=work, daemon=True, name="benchmark-" + run_id[:8])
