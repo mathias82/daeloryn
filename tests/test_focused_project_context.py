@@ -47,7 +47,8 @@ class FocusedContextTests(unittest.TestCase):
         task = "How does observability work in this project?"
         focused = prepare(self.parent, "demo", task, "test", scope="focused")
         full = prepare(self.parent, "demo", task, "test")
-        self.assertLess(len(focused["files"]), len(full["files"]))
+        self.assertNotIn("src/Inventory.java", focused["files"] and [x["path"] for x in focused["files"]])
+        self.assertIn("src/Inventory.java", [x["path"] for x in full["files"]])
         self.assertNotEqual(focused["sha256"], full["sha256"])
         self.assertEqual("focused", focused["scope"])
         self.assertTrue(all("Inventory.java" not in prompt for prompt in focused["prompts"]))
