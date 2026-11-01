@@ -56,6 +56,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_execution_approval_gate.py' -v
           python3 -m unittest discover -s tests -p 'test_durable_approval_gate.py' -v
           python3 -m unittest discover -s tests -p 'test_execution_authorization.py' -v
+          python3 -m unittest discover -s tests -p 'test_approved_execution_dispatch.py' -v
           python3 -m unittest discover -s tests -p 'test_reliable_container_tests.py' -v
           python3 -m unittest discover -s tests -p 'test_approved_pr_pipeline.py' -v
           python3 -m unittest discover -s tests -p 'test_repair_agent.py' -v
