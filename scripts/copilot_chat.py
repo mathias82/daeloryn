@@ -13,7 +13,7 @@ from copilot_agents import resolve_agent
 MODEL = re.compile(r"[A-Za-z0-9][A-Za-z0-9._:/-]{0,127}\Z")
 MAX_OUTPUT = 65536
 
-def validate(request):
+def validate(request, *, review_context=False):
     if not isinstance(request, dict) or set(request) not in ({"model", "messages"}, {"model", "messages", "agent"}):
         raise ValueError("model and messages required")
     model, messages = request["model"], request["messages"]
@@ -24,16 +24,16 @@ def validate(request):
     for item in messages:
         if not isinstance(item, dict) or set(item) != {"role", "content"}:
             raise ValueError("invalid message")
-        if item["role"] not in ("user", "assistant") or not isinstance(item["content"], str) or not 1 <= len(item["content"]) <= 3000:
+        if item["role"] not in ("user", "assistant") or not isinstance(item["content"], str) or not 1 <= len(item["content"]) <= (24000 if review_context else 3000):
             raise ValueError("invalid role or message size")
-    if messages[-1]["role"] != "user" or len(json.dumps(messages).encode()) > 24000:
+    if messages[-1]["role"] != "user" or len(json.dumps(messages).encode()) > (100000 if review_context else 24000):
         raise ValueError("invalid conversation")
     if "agent" in request:
         resolve_agent(request["agent"])
     return model, messages
 
-def copilot_chat(request, executable=None, timeout=90, *, expected_agent_sha256=None):
-    model, messages = validate(request)
+def copilot_chat(request, executable=None, timeout=90, *, expected_agent_sha256=None, review_context=False):
+    model, messages = validate(request, review_context=review_context)
     profile = resolve_agent(request["agent"]) if "agent" in request else None
     if expected_agent_sha256 is not None and (profile is None or profile["sha256"] != expected_agent_sha256):
         raise PermissionError("agent profile changed; prepare and approve again")

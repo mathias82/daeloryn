@@ -37,10 +37,12 @@ be comparable. Freeze any README contract clarification before either arm.
 
 For full local-source review, use fresh CLI/IDE sessions with repository read
 access and equivalent read-only permissions. The console's **plain chat** has no
-repository context. Its **approved AI source review** currently sends at most four
-bounded source excerpts, not all files. If using that console path, compare the
-same approved excerpts in both arms, change the prompt scope accordingly, and
-label the result an excerpt review rather than a complete-project benchmark.
+repository context. Its **approved AI source review** prepares all eligible supported files in bounded
+batches with an explicit coverage manifest. If using that path, compare identical
+approved batches, model, budgets and file snapshots in both arms. Report omissions,
+excluded formats and independent-batch limitations; source inclusion alone does not
+prove complete semantic review. Do not compare a full-context CLI arm against a
+batched console arm as though their source access and budgets were equivalent.
 
 ## What to record and judge
 
