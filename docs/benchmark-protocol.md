@@ -313,3 +313,13 @@ measure the effect of Daeloryn instructions rather than differences between
 models. This validates declared IDs only: operator-supplied CLI argv and actual
 remote model identity remain independently unverified. Existing mixed-model
 trials must not be presented as controlled Daeloryn-versus-baseline comparisons.
+
+
+### Validate both provider commands before starting
+
+Orchestration preflight checks both requested model IDs against the capture
+model syntax and both argv lists for nonempty NUL-free strings and matching
+provider executable names. Invalid second-arm input fails before the first-arm
+provider is called, including during preview. This is structural validation,
+not provider flag/version support, executable availability, actual model identity,
+or sandbox enforcement. Runtime failures still stop without automatic retries.

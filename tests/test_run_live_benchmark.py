@@ -26,6 +26,31 @@ class OrchestratorTests(unittest.TestCase):
                                 capturer=lambda *a: self.fail("provider invoked"),
                                 comparator=lambda *a, **kw: self.fail("evaluator invoked"))
 
+    def test_bad_second_arm_never_starts_first_provider(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for arm in ("baseline", "daeloryn"):
+                (Path(tmp) / arm).mkdir()
+            for argv in ([], ["wrong-provider"], ["copilot", 1], ["copilot", ""], ["copilot", "bad\x00arg"]):
+                for execute in (False, True):
+                    with self.subTest(argv=argv, execute=execute):
+                        spec = plan()
+                        spec["arms"]["daeloryn"]["argv"] = argv
+                        with self.assertRaises(ValueError):
+                            run(spec, tmp, execute=execute,
+                                sandbox_image="fixture@sha256:" + "a" * 64,
+                                capturer=lambda *a: self.fail("provider invoked"),
+                                comparator=lambda *a, **kw: self.fail("evaluator invoked"))
+
+    def test_model_syntax_validated_before_discovery_or_execution(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for arm in ("baseline", "daeloryn"):
+                (Path(tmp) / arm).mkdir()
+            spec = plan()
+            for arm in spec["arms"].values():
+                arm["model"] = "invalid model"
+            with self.assertRaises(ValueError):
+                run(spec, tmp, execute=True, capturer=lambda *a: self.fail("provider invoked"))
+
     def test_preview_does_not_call_provider(self):
         with tempfile.TemporaryDirectory() as tmp:
             for arm in ("baseline", "daeloryn"):
