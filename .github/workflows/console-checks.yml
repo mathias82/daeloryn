@@ -76,7 +76,8 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_approved_repair_proposal.py' -v
           python3 -m unittest discover -s tests -p 'test_approved_repair_validation.py' -v
   frontend:
-    runs-on: ubuntu-latest
+    # Playwright 1.56.1 supports Ubuntu 24.04; avoid ubuntu-latest OS drift.
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     defaults:
       run:
@@ -92,3 +93,14 @@ jobs:
         run: npm test
       - name: Typecheck and production build
         run: npm run build
+      - name: Install headless Chromium
+        run: npx playwright install --with-deps chromium --only-shell
+      - name: Browser integration tests (mock provider; no live inference)
+        run: npm run test:e2e
+      - name: Preserve browser diagnostics
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-browser-report
+          path: web/test-results/
+          retention-days: 7

@@ -57,3 +57,12 @@ Run `npm test` for frontend request and approval identity checks and `npm run bu
 for type checking and production bundling. Python HTTP and fake-CLI process tests
 exercise agent selection and approval invalidation. These do not prove live
 Copilot inference; verify that separately with your authenticated CLI.
+
+## Browser integration checks
+
+Run `npx playwright install chromium --only-shell`, then `npm run test:e2e`
+from `web/`. The suite starts its own loopback Vite server, intercepts every
+`/api/` request with fixtures, and never contacts Copilot or executes repository
+code. It checks model/agent request wiring, stale approval reset and honest
+benchmark evidence labels. CI installs Chromium and retains traces/screenshots
+on failure. These are browser integration tests, not live provider verification.
