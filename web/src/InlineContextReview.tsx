@@ -54,6 +54,7 @@ export function InlineContextReview({selection,onCompleted,onCancelled}:{
     void prepare();
     return()=>controller.abort();
   },[selection.repository,selection.task,selection.model,selection.agent]);
+  useEffect(()=>()=>{active.current?.abort();},[]);
   useEffect(()=>{
     if(!busy)return;
     const timer=window.setInterval(()=>setElapsed(x=>x+1),1000);
@@ -111,6 +112,7 @@ export function InlineContextReview({selection,onCompleted,onCancelled}:{
         (receipt.failure?'\n'+receipt.failure:'')+'\n\n'+(receipt.review?.reply||'(No reply received)');
       onCompleted(summary);
     }catch(e){
+      setApproved(false);setPrepared(null);
       setError('Review interrupted: '+(e instanceof Error?e.message:'network failure')+'. External outcome may be unknown; do not automatically retry.');
     }finally{window.clearTimeout(timer);setBusy(false);setExecuting(false);}
   }
