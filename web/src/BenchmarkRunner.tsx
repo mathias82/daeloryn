@@ -13,7 +13,10 @@ type PreparedPair={
   source_sha256:string;approval_required:boolean;source_transmitted:boolean;
   baseline:PreparedArm;daeloryn:PreparedArm;total_model_calls:number;warning:string;
 };
-type ArmReceipt={status:string;completed_batches:number;total_batches:number;failure?:string|null;review:{reply:string}};
+type ArmReceipt={status:string;completed_batches:number;total_batches:number;failure?:string|null;review?:{reply:string}};
+type SavedArm={status:string;completed_batches:number;total_batches:number;reply:string;failure?:string|null};
+type SavedRun={run_id:string;status:string;repository:string;mode:Mode;model:string;agent:string;created_at:string;updated_at:string;error?:string|null;arms:Record<Arm,SavedArm>;result?:PairResult|null};
+type RunSummary=Pick<SavedRun,'run_id'|'status'|'repository'|'mode'|'model'|'agent'|'created_at'|'updated_at'>;
 type PairResult={kind:string;status:string;model:string;agent:string;source_sha256:string;
   winner:string;arms:Partial<Record<Arm,ArmReceipt>>;warning:string;
   model_identity_verified:boolean;agent_selection_verified:boolean;
@@ -45,6 +48,10 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
   const [approved,setApproved]=useState(false);
   const [busy,setBusy]=useState(false);
   const [running,setRunning]=useState(false);
+  const [savedRuns,setSavedRuns]=useState<RunSummary[]>([]);
+  const [selectedRunId,setSelectedRunId]=useState('');
+  const [runReceipt,setRunReceipt]=useState<SavedRun|null>(null);
+  const [historyError,setHistoryError]=useState('');
   const [progress,setProgress]=useState('');
   const [partial,setPartial]=useState<Record<Arm,string>>({baseline:'',daeloryn:''});
   const [result,setResult]=useState<PairResult|null>(null);
@@ -55,11 +62,63 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
   const inFlight=useRef(false);
   // Deliberately no automatic preparation or execution on model/project changes.
   useEffect(()=>()=>active.current?.abort(),[]);
+  // Navigation only stops GET polling. A previously approved run belongs to
+  // the backend worker, not this React component or an HTTP response stream.
+  useEffect(()=>{
+    let mounted=true;
+    const update=async()=>{
+      try{
+        const res=await fetch('/api/benchmark/runs',{cache:'no-store'});
+        if(!res.ok)throw new Error('Local benchmark history unavailable');
+        const value:unknown=await res.json();
+        if(!value||typeof value!=='object'||!('runs' in value)||!Array.isArray(value.runs))
+          throw new Error('Invalid benchmark run history');
+        if(mounted){
+          const rows=value.runs as RunSummary[];
+          setSavedRuns(rows);
+          setSelectedRunId(previous=>previous||rows[0]?.run_id||'');
+          setHistoryError('');
+        }
+      }catch(e){if(mounted)setHistoryError(e instanceof Error?e.message:'Run history unavailable');}
+    };
+    void update();
+    const timer=window.setInterval(()=>void update(),1800);
+    return()=>{mounted=false;window.clearInterval(timer);};
+  },[]);
+  useEffect(()=>{
+    if(!selectedRunId){setRunReceipt(null);return;}
+    let mounted=true;
+    const update=async()=>{
+      try{
+        const res=await fetch('/api/benchmark/runs/'+encodeURIComponent(selectedRunId),{cache:'no-store'});
+        if(!res.ok)throw new Error('Saved benchmark run unavailable');
+        const value=await res.json() as SavedRun;
+        if(!value||value.run_id!==selectedRunId||!value.arms)
+          throw new Error('Invalid persisted benchmark receipt');
+        if(mounted){
+          setRunReceipt(value);
+          setRunning(value.status==='running');
+          setResult(value.result||null);
+          setPartial({baseline:value.arms.baseline?.reply||'',daeloryn:value.arms.daeloryn?.reply||''});
+          const current=value.arms.daeloryn?.status==='running'?'daeloryn':'baseline';
+          const arm=value.arms[current];
+          setProgress(value.status==='running'?
+            (current==='baseline'?'Plain Copilot':'Copilot + Daeloryn')+
+            ' · '+String(arm?.completed_batches??0)+'/'+String(arm?.total_batches??0)+' batches completed':
+            'Saved run: '+value.status+(value.error?' · '+value.error:''));
+        }
+      }catch(e){if(mounted)setHistoryError(e instanceof Error?e.message:'Run receipt unavailable');}
+    };
+    void update();
+    const timer=window.setInterval(()=>void update(),1200);
+    return()=>{mounted=false;window.clearInterval(timer);};
+  },[selectedRunId]);
   const availableModels=models.filter(m=>m!=='auto');
   const chosenModel=availableModels.includes(model)?model:availableModels[0]||'';
   const selectedAgent=agents.some(a=>a.name===agent)?agent:agents.some(a=>a.name===defaults[mode])?defaults[mode]:agents[0]?.name||'';
   function clear(){
     setManifest(null);setApproved(false);setResult(null);setError('');
+    setSelectedRunId('');setRunReceipt(null);
     setPartial({baseline:'',daeloryn:''});setProgress('');
     setAssessments(emptyAssessment());setHumanChecked(false);
   }
@@ -98,72 +157,30 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
     }finally{setBusy(false);}
   }
   async function execute(){
-    if(!manifest||!approved||busy||inFlight.current)return;
-    inFlight.current=true;setBusy(true);setRunning(true);setError('');
+    if(!manifest||!approved||busy||inFlight.current||savedRuns.some(r=>r.status==='running'))return;
+    inFlight.current=true;setBusy(true);setError('');
     setResult(null);setPartial({baseline:'',daeloryn:''});
     setAssessments(emptyAssessment());setHumanChecked(false);
-    setProgress('Validating approved snapshot before first model call…');
-    const controller=new AbortController();active.current=controller;
-    // Two review arms, each up to 300 seconds between calls plus one active call.
-    const timeout=window.setTimeout(()=>controller.abort(),900000);
+    setProgress('Validating the approved snapshot for a durable local run…');
     try{
-      const response=await fetch('/api/benchmark/execute',{
-        method:'POST',signal:controller.signal,
-        headers:{'Content-Type':'application/json','Accept':'application/x-ndjson'},
+      const response=await fetch('/api/benchmark/start',{
+        method:'POST',headers:{'Content-Type':'application/json'},
         body:JSON.stringify(selectionWithDigest(manifest))
       });
-      if(!response.ok){
-        let detail:unknown=null;
-        try{detail=await response.json();}catch{/* non-JSON failure */}
-        throw new Error(safeError(detail,response.status));
-      }
-      if(!response.body||!response.headers.get('content-type')?.includes('application/x-ndjson'))
-        throw new Error('Expected a streamed benchmark response');
-      const reader=response.body.getReader(),decoder=new TextDecoder();
-      let pending='',complete:unknown=null;
-      function process(line:string){
-        if(!line.trim())return;
-        const event=JSON.parse(line) as Record<string,unknown>;
-        const arm=event.arm==='baseline'||event.arm==='daeloryn'?event.arm:null;
-        if(event.type==='arm_started'&&arm)setProgress((arm==='baseline'?'Plain Copilot':'Copilot + Daeloryn')+' · started');
-        if(event.type==='progress'&&arm)
-          setProgress((arm==='baseline'?'Plain Copilot':'Copilot + Daeloryn')+
-            ' · '+String(event.completed)+'/'+String(event.total)+' batches completed');
-        if(event.type==='batch_reply'&&arm&&typeof event.reply==='string'){
-          const number=typeof event.batch==='number'?event.batch:0;
-          setPartial(previous=>({...previous,[arm]:previous[arm]+
-            (previous[arm]?'\n\n':'')+'Batch '+number+':\n'+event.reply}));
-        }
-        if(event.type==='arm_finished'&&arm)
-          setProgress((arm==='baseline'?'Plain Copilot':'Copilot + Daeloryn')+
-            ' · '+String(event.status));
-        if(event.type==='result'&&event.result&&typeof event.result==='object')
-          complete=event.result as PairResult;
-        if(event.type==='error')throw new Error(typeof event.error==='string'?event.error:'Benchmark interrupted');
-      }
-      while(true){
-        const {value,done}=await reader.read();
-        pending+=decoder.decode(value,{stream:!done});
-        const lines=pending.split('\n');pending=lines.pop()||'';
-        for(const line of lines)process(line);
-        if(done){process(pending);break;}
-      }
-      if(!complete||typeof complete!=='object'||!('kind' in complete)||
-        complete.kind!=='paired-source-review-observation'||!('arms' in complete)||!('warning' in complete))
-        throw new Error('Stream ended without a valid final comparison; outcome may be unknown');
-      const receipt=complete as PairResult;
-      setResult(receipt);
-      setProgress(receipt.status==='completed'?'Both model arms returned. Human review needed.':
-        'Partial run. Do not automatically retry unknown outcomes.');
+      const data:unknown=await response.json();
+      if(!response.ok)throw new Error(safeError(data,response.status));
+      if(!data||typeof data!=='object'||!('run_id' in data)||
+         typeof data.run_id!=='string'||!/^[a-f0-9]{32}$/.test(data.run_id))
+        throw new Error('Invalid persistent benchmark ID');
       setManifest(null);setApproved(false);
+      setSelectedRunId(data.run_id);
+      setRunning(true);
+      setProgress('Approved run '+data.run_id.slice(0,8)+' started; you can leave this page.');
     }catch(e){
-      setError('Benchmark interrupted: '+(e instanceof Error?e.message:'connection failure')+
-        '. External outcome may be unknown; do not retry automatically.');
+      setError('Benchmark start failed: '+(e instanceof Error?e.message:'network failure')+
+        '. If the network failed, inspect saved runs before attempting another call.');
       setManifest(null);setApproved(false);
-    }finally{
-      window.clearTimeout(timeout);inFlight.current=false;
-      setBusy(false);setRunning(false);
-    }
+    }finally{inFlight.current=false;setBusy(false);}
   }
   function assessmentResult():string{
     if(!humanChecked||result?.status!=='completed')return 'No reviewed result yet';
