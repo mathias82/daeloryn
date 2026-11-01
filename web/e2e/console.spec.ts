@@ -412,3 +412,56 @@ test('Progressive answers auto-scroll while near bottom but respect manual scrol
   await scroll.evaluate(el=>{el.scrollTop=el.scrollHeight;el.dispatchEvent(new Event('scroll'));});
   await expect.poll(async()=>scroll.evaluate(el=>el.scrollHeight-el.scrollTop-el.clientHeight)).toBeLessThan(110);
 });
+
+
+test('delete exactly one selected chat with confirmation; preserve other conversations',async({page})=>{
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await page.getByRole('button',{name:/New chat/i}).click();
+  await page.getByRole('button',{name:/New chat/i}).click();
+  const before=await page.locator('.history-row').count();
+  expect(before).toBeGreaterThan(2);
+  await page.locator('.history-row').first().getByRole('button',{name:/Delete chat/}).click();
+  await expect(page.getByText(/Delete this chat permanently/)).toBeVisible();
+  await page.locator('.history-row').first().getByRole('button',{name:'Cancel'}).click();
+  expect(await page.locator('.history-row').count()).toBe(before);
+  await page.locator('.history-row').first().getByRole('button',{name:/Delete chat/}).click();
+  await page.locator('.history-row').first().getByRole('button',{name:'Confirm delete'}).click();
+  expect(await page.locator('.history-row').count()).toBe(before-1);
+  await page.reload();
+  expect(await page.locator('.history-row').count()).toBe(before-1);
+  await expect(page.getByRole('navigation').getByRole('button',{name:/Benchmarks/})).toBeVisible();
+});
+
+test('Overview uses discovered models, never hardcodes connected sessions',async({page})=>{
+  await expect(page.getByText('Discovered models',{exact:true})).toBeVisible();
+  const metric=page.locator('.metric').filter({hasText:'Discovered models'});
+  await expect(metric).toContainText('2');
+  await expect(metric).toContainText('Copilot: 2');
+  await page.getByRole('navigation').getByRole('button',{name:/Models/}).click();
+  await expect(page.getByText('Discovered model catalogs')).toBeVisible();
+  await expect(page.getByText(models.join(', '))).toBeVisible();
+});
+
+test('Workflow shows real recorded batches and never checks off unsupported patch/publish stages',async({page})=>{
+  const run='e'.repeat(32);
+  await page.route('**/api/benchmark/runs',route=>route.fulfill({json:{runs:[{
+    run_id:run,status:'partial',repository:'demo',mode:'review',model:models[0],agent:'java-reviewer',
+    created_at:'2026-11-01T18:00:00+00:00',updated_at:'2026-11-01T18:01:00+00:00'}]}}));
+  await page.route('**/api/benchmark/runs/*',route=>route.fulfill({json:{
+    run_id:run,status:'partial',repository:'demo',mode:'review',model:models[0],agent:'java-reviewer',
+    source_sha256:'a'.repeat(64),approved_sha256:'b'.repeat(64),
+    created_at:'2026-11-01T18:00:00+00:00',updated_at:'2026-11-01T18:01:00+00:00',
+    error:'Partial benchmark, pending manual investigation',
+    arms:{baseline:{status:'completed',completed_batches:2,total_batches:2,reply:'baseline',failure:null},
+      daeloryn:{status:'partial',completed_batches:1,total_batches:2,reply:'partial',
+        failure:'Provider call failed, no retry'}},
+    result:{status:'partial',independent_checks_executed:false}
+  }}));
+  await page.getByRole('navigation').getByRole('button',{name:/Workflows/}).click();
+  const guide=page.getByRole('region',{name:'Engineering workflow',exact:true});
+  await expect(guide.getByText('Completed 2/2 batches')).toBeVisible();
+  await expect(guide.getByText('Partial / failed 1/2 batches')).toBeVisible();
+  await expect(guide.getByText('Not available in read-only pilot')).toBeVisible();
+  await expect(guide.getByText('Not executed by this workflow')).toBeVisible();
+  await expect(guide.getByRole('checkbox')).toHaveCount(0);
+});
