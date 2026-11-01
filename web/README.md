@@ -8,7 +8,7 @@ Responsive React + TypeScript + Vite frontend with a chat-first workspace.
 - **Chat**: multiple locally saved conversations, agent/model selectors, opt-in local providers, and explicit execution status.
 - **Agents**: validated repository specialist catalog when the local API is available; samples otherwise.
 - **Workflows**: approval-gated lifecycle visualization (not an active runner).
-- **Benchmarks**: no fabricated scores; shows an honest empty state until verified data is available.
+- **Benchmarks**: start a real read-only paired Copilot A/B pilot directly from the browser, with explicit approval and progress, alongside the separate independently verified-results dashboard. No fabricated winner.
 - **Models**: illustrative routing tiers, not real model discovery or pricing.
 - **Settings**: explicit connection/security status and local conversation reset.
 
@@ -78,6 +78,43 @@ Nothing in chat edits sources, executes commands or runs tests. CLI deny flags a
 not an OS sandbox; provider model/agent compliance is not independently attested.
 Chat names and messages persist unencrypted in browser localStorage; enabled providers
 receive submitted prompts. Never send secrets or expose these servers publicly.
+
+## Run a paired read-only A/B benchmark from the frontend
+
+1. Launch the loopback console with `--enable-copilot-chat --enable-project-picker`,
+   with Copilot CLI installed/authenticated and the optional SDK available for
+   live model discovery. Register an explicit local checkout using Chat → Add project.
+2. Open **Benchmarks** → **New A/B benchmark**. Select that local project, a real
+   discovered Copilot model, benchmark mode and a trusted Daeloryn specialist.
+   Code review and architecture modes analyze sources; fix-plan mode only proposes
+   changes/tests (it does **not** apply patches or execute checks).
+3. Select **Prepare A/B benchmark**. The API builds a single bounded source snapshot
+   shared by baseline and specialist. Inspect **both exact source prompts**, omissions,
+   selected model, agent, source/approval SHA-256 hashes and combined potentially
+   billable batch-call count. No model call occurs during preparation.
+4. Check the explicit approval box, then choose **Approve & run A/B**. The API
+   re-reads the project and rejects stale source/agent/model changes, starts only
+   one A/B run at a time, invokes Copilot without file/shell/network/memory tools
+   in separate temporary sessions, and streams completed batches and both answers.
+   It never automatically retries unknown outcomes.
+5. Compare side-by-side cited issues and validate genuine defects and false
+   positives independently. The result clearly reads **Winner: Not determined**;
+   no unsupported evaluation metric or independent model identity attestation is
+   invented. This pilot is intentionally **not** counted as a verified trial in
+   the existing Benchmarks coverage matrix. Optional human-entered counts for
+   confirmed unique defects, false positives and file/line references can produce
+   a clearly labeled **human-assessed pilot advantage**, only if one arm dominates
+   both measures. These are not verified benchmark scores. Page refresh does not
+   persist private model transcripts. An interrupted browser stream may leave a provider call
+   with unknown external outcome.
+
+Source inclusion is limited to eligible supported text files under existing
+source/call/time budgets. Batches are independent; this is not a complete
+cross-file reasoning guarantee. The Copilot deny flags are **not an OS sandbox**.
+Do not use confidential customer checkouts, host credentials or an untrusted
+development workstation without external isolation and authorization. For a
+real **Bug Fix + Regression Tests** contest, use the separately documented
+frozen-test/isolated evaluator protocol until the secure runner is integrated.
 
 ## Production integration requirements
 

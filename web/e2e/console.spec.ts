@@ -256,3 +256,80 @@ test('Changing the model invalidates pending in-chat source approval',async({pag
   await expect(page.getByRole('region',{name:'Chat project context approval'})).toHaveCount(0);
   expect(executed).toBe(0);
 });
+
+
+test('Benchmarks runs approved paired read-only Copilot A/B and never invents a winner',async({page})=>{
+  const calls:string[]=[];
+  await page.route('**/api/benchmark/prepare',async route=>{
+    calls.push('prepare');
+    expect(route.request().postDataJSON()).toMatchObject({
+      repository:'demo',mode:'review',model:models[0],agent:'java-reviewer'});
+    await route.fulfill({json:{
+      repository:'demo',mode:'review',model:models[0],agent:'java-reviewer',
+      task:'Read-only code review',sha256:'a'.repeat(64),source_sha256:'b'.repeat(64),
+      approval_required:true,source_transmitted:false,total_model_calls:2,
+      warning:'Fixture; two potentially billable calls',
+      baseline:{sha256:'c'.repeat(64),prompt:'Baseline fixture source',files:['App.java'],
+        batch_count:1,agent:null,agent_profile:null,
+        coverage:{scope:'fixture',all_eligible_files_included:true,omitted:[],excluded:[]}},
+      daeloryn:{sha256:'d'.repeat(64),prompt:'Agent fixture source',files:['App.java'],
+        batch_count:1,agent:'java-reviewer',agent_profile:'trusted fixture agent',
+        coverage:{scope:'fixture',all_eligible_files_included:true,omitted:[],excluded:[]}}
+    }});
+  });
+  await page.route('**/api/benchmark/execute',async route=>{
+    calls.push('execute');
+    expect(route.request().postDataJSON()).toMatchObject({
+      repository:'demo',model:models[0],agent:'java-reviewer',approved_sha256:'a'.repeat(64)});
+    await route.fulfill({contentType:'application/x-ndjson',body:[
+      {type:'arm_started',arm:'baseline',total_batches:1},
+      {type:'progress',arm:'baseline',phase:'completed_batch',completed:1,total:1,batch:1},
+      {type:'batch_reply',arm:'baseline',batch:1,reply:'Baseline found A'},
+      {type:'arm_finished',arm:'baseline',status:'completed'},
+      {type:'arm_started',arm:'daeloryn',total_batches:1},
+      {type:'batch_reply',arm:'daeloryn',batch:1,reply:'Daeloryn found A and B'},
+      {type:'result',result:{kind:'paired-source-review-observation',
+        status:'completed',model:models[0],agent:'java-reviewer',
+        source_sha256:'b'.repeat(64),winner:'not_determined',
+        independent_checks_executed:false,model_identity_verified:false,
+        agent_selection_verified:false,warning:'Requires human review.',
+        arms:{baseline:{status:'completed',completed_batches:1,total_batches:1,
+          review:{reply:'Baseline found A'}},daeloryn:{status:'completed',
+          completed_batches:1,total_batches:1,review:{reply:'Daeloryn found A and B'}}}}}
+    ].map(x=>JSON.stringify(x)).join('\n')+'\n'});
+  });
+  await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
+  const runner=page.getByRole('region',{name:'Paired benchmark runner'});
+  await runner.getByLabel('Benchmark project').selectOption('demo');
+  await runner.getByRole('button',{name:'Prepare A/B benchmark'}).click();
+  await expect(runner.getByText(/2 potentially billable model calls/)).toBeVisible();
+  expect(calls).toEqual(['prepare']);
+  await runner.getByRole('checkbox',{name:/I inspected both exact prompts/}).check();
+  await runner.getByRole('button',{name:'Approve & run A/B'}).click();
+  await expect(runner.getByText('Winner: Not determined')).toBeVisible();
+  await expect(runner.getByText('Daeloryn found A and B')).toBeVisible();
+  await expect(runner.getByText('Baseline found A')).toBeVisible();
+  expect(calls).toEqual(['prepare','execute']);
+  await expect(runner.getByText('No reviewed result yet')).toBeVisible();
+  await runner.getByLabel('baseline confirmed defects').fill('1');
+  await runner.getByLabel('baseline false positives').fill('2');
+  await runner.getByLabel('baseline evidence references').fill('App.java:1 baseline reviewed');
+  await runner.getByLabel('daeloryn confirmed defects').fill('2');
+  await runner.getByLabel('daeloryn false positives').fill('1');
+  await runner.getByLabel('daeloryn evidence references').fill('App.java:1 specialist reviewed');
+  await runner.getByRole('checkbox',{name:/I manually checked source evidence/}).check();
+  await expect(runner.getByText(/Human-assessed pilot advantage: Daeloryn/)).toBeVisible();
+  await expect(runner.getByText('Winner: Not determined')).toBeVisible();
+});
+
+test('Benchmarks cannot call Copilot before explicit approval',async({page})=>{
+  let executions=0;
+  page.on('request',request=>{if(request.url().endsWith('/api/benchmark/execute'))executions++;});
+  await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
+  const runner=page.getByRole('region',{name:'Paired benchmark runner'});
+  await expect(runner.getByRole('button',{name:'Prepare A/B benchmark'})).toBeDisabled();
+  await runner.getByLabel('Benchmark project').selectOption('demo');
+  await runner.getByLabel('Benchmark type').selectOption('fix-plan');
+  await expect(runner.getByText(/Patches, builds and regression tests are not executed/)).toBeVisible();
+  expect(executions).toBe(0);
+});
