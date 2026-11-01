@@ -5,7 +5,7 @@ Responsive React + TypeScript + Vite frontend with a chat-first workspace.
 ## Screens
 
 - **Overview**: status summary, workflow diagram and task shortcuts.
-- **Chat**: multiple in-memory conversations, agent/model selectors, opt-in local providers, and explicit execution status.
+- **Chat**: multiple locally saved conversations, agent/model selectors, opt-in local providers, and explicit execution status.
 - **Agents**: validated repository specialist catalog when the local API is available; samples otherwise.
 - **Workflows**: approval-gated lifecycle visualization (not an active runner).
 - **Benchmarks**: no fabricated scores; shows an honest empty state until verified data is available.
@@ -65,10 +65,10 @@ confirm a local repository and a concrete model, enter the review task, then
 **Prepare AI review context**. Inspect the source excerpts and expandable agent
 profile, approve the selection, and send it. Source, repository, model, agent
 and profile digest are bound together; changing the selection resets approval.
-Only up to four bounded source excerpts are sent, not a complete project review.
+All eligible source/build/README files in the coverage manifest are prepared in bounded batches; inspect omissions and exclusions before approval.
 No source edits or tests are performed by this review path. CLI deny flags are
 not an OS sandbox; provider model/agent compliance is not independently attested.
-Messages remain in React memory and disappear on reload, but enabled providers
+Chat names and messages persist unencrypted in browser localStorage; enabled providers
 receive submitted prompts. Never send secrets or expose these servers publicly.
 
 ## Production integration requirements
@@ -137,3 +137,47 @@ validate normalized path boundaries before filesystem inspection. Prefix lookali
 folders, parent traversal and symlink escapes are rejected. Saved projects outside
 the current allowed roots are not exposed. This does not change the separately
 configured `--repository-root` catalog.
+
+### Saved conversations and progressive display
+
+Chat messages, source-review results, renamed titles and the active conversation
+are saved in browser `localStorage` under `daeloryn.chat-history.v1`. This is local
+unencrypted browser storage, not a backend database or cross-device sync. Limits:
+50 conversations, 200 messages per conversation, 2 MB total. Invalid stored data is
+not executed or silently overwritten; use Settings → Clear local conversation
+history to reset it. Storage errors are visible; in-memory chat continues.
+Rename the active conversation in its toolbar. An explicitly renamed title is not
+replaced by an automatic first-message title. Clearing site data also erases history.
+Multiple tabs use last-write-wins storage; use a single active console tab.
+
+New replies are revealed progressively (line boundaries where available), with a
+Show full reply control. This is explicitly **buffered display after provider
+completion**, not live token streaming. Reduced-motion users and restored messages
+show the full text immediately. Complete text is saved before animation finishes.
+
+### Whole-project source review
+
+Plain chat remains text-only; selecting a folder does not grant plain-chat tools.
+Use Prepare AI review context, inspect the full manifest and approve the exact
+source/model/profile digest. Whole-project preparation inventories supported Java,
+Kotlin, Python, TypeScript, JavaScript, Go, XML, Gradle sources plus README and
+conventional build files. It does not choose the first four files. All characters
+of included files are split into line-numbered batches; the manifest records any
+omissions and exclusions. Eligible unreadable/oversized files produce partial
+coverage, never a full-coverage claim. Hidden, dependency/build, sensitive filenames,
+symlinks, binaries and unsupported formats are excluded. Heuristic redaction is not
+a secret scanner; inspect the exact prompts before sending to a provider.
+
+Limits: 500 files, 256 KiB per file, 1 MiB total source, 10,000 filesystem entries,
+depth 20, 64 model calls. Each approved batch may incur provider usage; the UI shows
+the number before approval. A run stops before starting another call after five
+minutes or its output budget; the in-progress call retains its own timeout.
+Completed batches are preserved on provider failure. Unknown external outcomes are
+reported explicitly, no retry is automatic, and remaining batches are not run.
+Full source inclusion does not prove that the model reasoned over all relationships:
+batches are independent and cross-batch reasoning is not guaranteed. Results still
+require human verification. No edits, builds or tests are performed.
+
+The plain chat request limits remain unchanged. Only server-prepared, digest-approved
+review batches use an internal 24,000-character message allowance; clients cannot
+enable that allowance through arbitrary JSON fields.

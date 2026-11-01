@@ -124,3 +124,55 @@ test('Enter sends once, Shift+Enter adds a newline and composition never sends',
   expect(calls).toBe(1);
   await expect(page.getByText(/Copilot enabled locally · plain chat/)).toBeVisible();
 });
+
+test('rename and messages persist after reload; clear removes saved content',async({page})=>{
+ await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+ await page.getByRole('button',{name:'Rename conversation',exact:true}).click();
+ await page.getByLabel('Conversation name').fill('Spring review pilot');
+ await page.getByRole('button',{name:'Save name',exact:true}).click();
+ await page.getByLabel(/^Copilot model/).selectOption(models[0]);
+ await page.getByRole('textbox',{name:'Message',exact:true}).fill('Review my Spring starter');
+ await page.getByRole('textbox',{name:'Message',exact:true}).press('Enter');
+ await expect(page.getByText(/Fixture reply/)).toBeVisible();
+ await page.reload();
+ await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+ await expect(page.locator('.chat-toolbar strong')).toHaveText('Spring review pilot');
+ await expect(page.getByText(/Fixture reply/)).toBeVisible();
+ await page.getByRole('navigation').getByRole('button',{name:/Settings/}).click();
+ await page.getByRole('button',{name:'Clear local conversation history',exact:true}).click();
+ await expect(page.getByText(/Fixture reply/)).toHaveCount(0);
+ await page.reload();
+ await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+ await expect(page.locator('.chat-toolbar strong')).toHaveText('New conversation');
+});
+
+test('completed long answer is revealed progressively with a show-all option',async({page})=>{
+ await page.route('**/api/copilot/chat',route=>route.fulfill({json:{reply:Array.from({length:100},(_,i)=>'Review line '+i).join('\n')}}));
+ await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+ await page.getByLabel(/^Copilot model/).selectOption(models[0]);
+ await page.getByRole('textbox',{name:'Message',exact:true}).fill('Review');
+ await page.getByRole('textbox',{name:'Message',exact:true}).press('Enter');
+ await expect(page.getByText('Displaying completed provider response…',{exact:true})).toBeVisible();
+ await page.getByRole('button',{name:'Show full reply',exact:true}).click();
+ await expect(page.getByText(/Review line 99/)).toBeVisible();
+});
+
+test('source review shows coverage and call count and saves its result in chat',async({page})=>{
+ await page.route('**/api/copilot/review/prepare',async route=>{
+  const body=route.request().postDataJSON();
+  await route.fulfill({json:{...body,prompt:'All fixture source batches',sha256:'a'.repeat(64),files:['One.java','Two.java'],warning:'Two model calls; fixture only',model:models[0],agent:'java-reviewer',agent_profile:null,agent_profile_sha256:null,batch_count:2,coverage:{all_eligible_files_included:true,omitted:[],excluded:[{path:'node_modules',reason:'dependency directory'}],scope:'Supported source files'}}});
+ });
+ await page.route('**/api/copilot/review/execute',route=>route.fulfill({json:{status:'completed',completed_batches:2,total_batches:2,coverage:{all_eligible_files_included:true},review:{reply:'Project review fixture completed'}}}));
+ await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+ await page.getByLabel(/^Agent/).selectOption('java-reviewer');
+ await page.getByLabel(/^Copilot model/).selectOption(models[0]);
+ await page.getByLabel(/^Local repository/).selectOption('demo');
+ await page.getByRole('button',{name:'Prepare AI review context',exact:true}).click();
+ await expect(page.getByText('2 files · 2 model calls (potentially billable).',{exact:true})).toBeVisible();
+ await page.getByRole('checkbox',{name:/I inspected the context/}).check();
+ await page.getByRole('button',{name:'Send approved context to Copilot',exact:true}).click();
+ await expect(page.locator('.bubble.assistant')).toContainText('Project review fixture completed');
+ await page.reload();
+ await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+ await expect(page.locator('.bubble.assistant')).toContainText('Project review fixture completed');
+});

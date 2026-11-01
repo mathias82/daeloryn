@@ -225,7 +225,7 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     self.reply(415, {"error": "JSON required"})
                     return
                 length = self.headers.get("Content-Length", "")
-                if not length.isdigit() or not 0 < int(length) <= 4096:
+                if not length.isdigit() or not 0 < int(length) <= 16384:
                     self.reply(413, {"error": "invalid request size"})
                     return
                 try:
@@ -243,8 +243,8 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                         result = execute_ai_review(prepared, payload["model"], payload["approved_sha256"])
                     else:
                         result = prepared
-                except (ValueError, TypeError, KeyError, json.JSONDecodeError, PermissionError, OSError):
-                    self.reply(400, {"error": "invalid review or approval; source may have changed"})
+                except (ValueError, TypeError, KeyError, json.JSONDecodeError, PermissionError, OSError) as exc:
+                    self.reply(400, {"error": "Review preparation/approval failed: " + str(exc)})
                     return
                 except (RuntimeError, TimeoutError):
                     self.reply(503, {"error": "Copilot review unavailable"})
