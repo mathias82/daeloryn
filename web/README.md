@@ -392,3 +392,9 @@ The root `./start.sh` launcher enables local patch application by passing
 checking its separate approval box, a clean checkout, and a fresh branch.
 Starting `scripts/console.py` directly keeps patch application disabled unless
 the flag is provided.
+
+Smart Context recognizes code-improvement requests in Greek and English (for
+example, `προτεινε στο κωδικα βελτιωσεις` or `Suggest improvements to this code`)
+and prepares focused source approval when a confirmed local project is enabled.
+These messages no longer fall through to text-only chat. Docs-only/text-only
+overrides remain explicit, and full-project scans still require full-scope wording.
