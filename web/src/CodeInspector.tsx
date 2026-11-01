@@ -17,6 +17,7 @@ export function CodeInspector({snapshot,onClose,target,onDeveloper,proposal}:{
   const [editMode,setEditMode]=useState(false);
   const [draft,setDraft]=useState<SuggestionDraft|null>(null);
   const [draftMessage,setDraftMessage]=useState('');
+  const initialFinding=useRef<string|null>(null);
   const markedRef=useRef<HTMLDivElement|null>(null);
   const selected=files.includes(file)?file:files[0]||'';
   const visibleCount=expanded?180:42;
@@ -43,9 +44,16 @@ export function CodeInspector({snapshot,onClose,target,onDeveloper,proposal}:{
     }catch{setDraftMessage('Clipboard permission unavailable. Select and copy the diff manually.');}
   }
 
-  useEffect(()=>{setFile(files[0]||'');setLine(1);setLineInput('1');setDraft(null);setEditMode(false);setDraftMessage('');},
+  useEffect(()=>{initialFinding.current=null;setFile(files[0]||'');setLine(1);setLineInput('1');setDraft(null);setEditMode(false);setDraftMessage('');},
     [snapshot.sha256,files[0]]);
-  useEffect(()=>{if(target?.verified){setFile(target.file);setLine(target.line);setLineInput(String(target.line));}},[target,snapshot.sha256]);
+  useEffect(()=>{
+    if(initialFinding.current===snapshot.sha256)return;
+    const first=snapshot.references.find(reference=>reference.verified);
+    if(!first)return;
+    initialFinding.current=snapshot.sha256;
+    setFile(first.file);setLine(first.line);setLineInput(String(first.line));
+  },[snapshot.sha256,snapshot.references]);
+  useEffect(()=>{if(target?.verified){initialFinding.current=snapshot.sha256;setFile(target.file);setLine(target.line);setLineInput(String(target.line));}},[target,snapshot.sha256]);
   useEffect(()=>{
     if(!expanded)return;
     const onKey=(event:KeyboardEvent)=>{if(event.key==='Escape')setExpanded(false);};
@@ -56,6 +64,7 @@ export function CodeInspector({snapshot,onClose,target,onDeveloper,proposal}:{
     [line,selected,expanded]);
   function jump(path:string,at:number){
     if(!files.includes(path)||!Number.isSafeInteger(at)||at<1)return;
+    initialFinding.current=snapshot.sha256;
     setFile(path);setLine(at);setLineInput(String(at));
   }
   function moveWindow(offset:number){
@@ -85,7 +94,7 @@ export function CodeInspector({snapshot,onClose,target,onDeveloper,proposal}:{
 
       <strong>Model-highlighted findings and suggested changes</strong>
       <p className="muted">Highlighted lines are cited by the model and located in the approved snapshot. They are not confirmed bugs or approved edits.</p>
-      {valid.length===0&&<p className="muted">No matching file:line references yet. References appear when a batch finishes.</p>}
+      {valid.length===0&&<p className="muted">{snapshot.completed>=snapshot.total?'No navigable findings in this reply. A citation must identify a unique approved file or type and lines present in the snapshot.':'Waiting for model citations from a completed batch.'}</p>}
       {valid.map((r,i)=><button className={'inspector-ref'+(active===r?' inspector-ref-active':'')} type="button"
         key={r.batch+'|'+r.file+'|'+r.line+'|'+i}
         onClick={()=>jump(r.file,r.line)}>

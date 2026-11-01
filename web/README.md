@@ -350,3 +350,13 @@ Developer source proposals now require a JSON replacement envelope. Only its rep
 To view a developer replacement, generate a new handoff: the original and complete proposed source appear in the chat card and in Inspector for the matching selected file. Copy buttons copy source only, without diff markers. Existing saved proposal strings do not acquire source receipts retroactively.
 
 Local application is a separate opt-in: start `python3 scripts/console.py --enable-copilot-chat --enable-project-picker --enable-patch-apply --open`. Inspect the exact diff, choose a fresh `daeloryn/...` branch, check the separate write approval and select Apply approved patch locally. The API rechecks the exact source/diff digest and requires a clean Git checkout before creating the branch and changing one file. No commit, push, build or tests are invoked by this flow. Changes are made with host-user Git/filesystem permissions, not in a sandbox; use trusted checkouts. Application is disabled by default and serialized within the API process. If the request disconnects, inspect Git state before any retry. The original Inspector review snapshot stays unchanged after application and is labelled accordingly. No live user project was modified during implementation tests.
+
+
+Code Inspector opens from a citation or its toolbar button, rather than on source
+preparation or review progress. On first opening it selects the first navigable
+finding. Natural-language citations such as `ControllerAdvisor. Στις γραμμές
+37–45` resolve only when the type/file uniquely identifies one approved snapshot
+file. Additional line ranges in that same unambiguous paragraph are supported;
+context is never inherited across paragraphs. Ambiguous or unavailable lines
+remain non-navigable. The developer handoff includes the bounded finding paragraph
+so the suggested fix is retained alongside the selected file and lines.

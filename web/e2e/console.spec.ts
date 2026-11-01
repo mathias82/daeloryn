@@ -668,10 +668,11 @@ test('Smart code review selects Java Reviewer and Inspector receives safe links 
   await page.getByRole('textbox',{name:'Message',exact:true}).fill('Review Java class for bugs');
   await page.getByRole('button',{name:/Send message/}).click();
   await expect(page.getByRole('region',{name:'Chat project context approval'})).toBeVisible();
-  await expect(page.getByRole('complementary',{name:'Code Inspector'})).toBeVisible();
+  await expect(page.getByRole('complementary',{name:'Code Inspector'})).toHaveCount(0);
   expect(requestedAgent).toBe('java-reviewer');
   await page.getByRole('checkbox',{name:/I inspected the exact source context/}).check();
   await page.getByRole('button',{name:'Approve and analyze project'}).click();
+  await page.getByRole('button',{name:'Code Inspector',exact:true}).click();
   const inspector=page.getByRole('complementary',{name:'Code Inspector'});
   const link=inspector.getByRole('button',{name:/App.java:3/});
   await expect(link).toBeVisible();
@@ -900,7 +901,7 @@ test('Greek citation opens Inspector lines and preselects developer target',asyn
  const inspector=page.getByRole('complementary',{name:'Code Inspector'});
  await expect(inspector.getByLabel('Inspected source file')).toHaveValue(file);
  await expect(inspector.locator('.inspector-code-target')).toContainText('int x;');
- await expect(inspector.locator('.inspector-code-citation')).toHaveCount(2);
+ await expect(inspector.locator('.inspector-code-change')).toHaveCount(2);
  await inspector.getByRole('button',{name:'Propose changes with developer'}).click();
  await expect(page.getByLabel('Reviewed file path')).toHaveValue(file);
  const footer=await inspector.locator('footer').boundingBox(),code=await inspector.locator('.inspector-source').boundingBox();
@@ -954,4 +955,49 @@ test('developer replacement appears in Inspector and requires separate local app
  await card.getByRole('checkbox',{name:/I reviewed this exact diff/}).check();await card.getByRole('button',{name:'Apply approved patch locally'}).click();
  await expect(card).toContainText('Applied locally; tests have not run.');expect(writes).toBe(1);
  await expect(page.getByRole('region',{name:'Developer proposed source'})).toContainText('applied locally');
+});
+
+
+test('natural Greek findings navigate the right file without opening Inspector on send',async({page})=>{
+ const file='src/advice/ControllerAdvisor.java',other='src/service/OtherService.java';
+ const source=Array.from({length:55},(_,i)=>i===36?'body.put(MESSAGE, e.getMessage());':'// approved line '+(i+1)).join('\n');
+ const sources=[{file:'src/PwcNextApplication.java',line:1,column:1,end_line:1,source:'class PwcNextApplication {}'},
+  {file,line:1,column:1,end_line:55,source},{file:other,line:1,column:1,end_line:55,source}];
+ const first='Η κλάση που χρειάζεται προσοχή είναι η ControllerAdvisor. Στις γραμμές 37–45 ο handler επιστρέφει e.getMessage(). Η διόρθωση είναι σταθερό μήνυμα στον client και λεπτομέρειες μόνο στο log.';
+ const second='Στην OtherService. Στις γραμμές 37–45 προτείνω αλλαγή στον χειρισμό exception.';
+ await page.route('**/api/copilot/review/prepare',async route=>{const body=route.request().postDataJSON();await route.fulfill({json:{...body,prompt:sources.map(s=>JSON.stringify(s)).join('\n'),sha256:'a'.repeat(64),files:sources.map(s=>s.file),warning:'Fixture',agent_profile:null,agent_profile_sha256:null,batch_count:1,approval_required:true}});});
+ await page.route('**/api/copilot/review/execute',route=>route.fulfill({json:{status:'completed',completed_batches:1,total_batches:1,review:{reply:first+'\n\n'+second}}}));
+ let preparations=0;
+ await page.route('**/api/copilot/developer/prepare',async route=>{
+  const body=route.request().postDataJSON();expect(body.path).toBe(file);
+  expect(body.findings).toContain('σταθερό μήνυμα');preparations++;
+  await route.fulfill({json:{sha256:'c'.repeat(64),prompt:'Exact source plus finding',agent:'java-developer',agent_profile:'Fixture'}});
+ });
+ await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+ await page.getByLabel(/^Copilot model/).selectOption(models[0]);
+ await page.getByLabel(/^Local repository/).selectOption('demo');
+ await page.getByRole('textbox',{name:'Message',exact:true}).fill('Review Java code for bugs');
+ await page.getByRole('textbox',{name:'Message',exact:true}).press('Enter');
+ const inspector=page.getByRole('complementary',{name:'Code Inspector'});
+ await expect(page.getByRole('region',{name:'Chat project context approval'})).toBeVisible();
+ await expect(inspector).toHaveCount(0);
+ await page.getByRole('checkbox',{name:/I inspected the exact source/}).check();
+ await page.getByRole('button',{name:'Approve and analyze project',exact:true}).click();
+ const links=page.locator('.bubble.assistant').getByRole('button',{name:'γραμμές 37–45',exact:true});
+ await expect(links).toHaveCount(2);await expect(inspector).toHaveCount(0);
+ await page.getByRole('button',{name:'Code Inspector',exact:true}).click();
+ await expect(inspector.getByLabel('Inspected source file')).toHaveValue(file);
+ await expect(inspector.locator('.inspector-code-target')).toContainText('e.getMessage()');
+ await expect(inspector.locator('.inspector-line-marker')).toHaveCount(9);
+ await inspector.getByRole('button',{name:'Close Code Inspector'}).click();
+ await links.nth(1).click();
+ await expect(inspector.getByLabel('Inspected source file')).toHaveValue(other);
+ await links.nth(0).click();
+ await expect(inspector.getByLabel('Inspected source file')).toHaveValue(file);
+ await inspector.getByRole('button',{name:'Propose changes with developer'}).click();
+ const card=page.getByRole('region',{name:'Reviewer to developer proposal'});
+ await expect(card.getByLabel('Reviewed file path')).toHaveValue(file);
+ await card.getByRole('button',{name:'Prepare developer handoff'}).click();
+ await expect(card.getByRole('button',{name:'Generate proposed patch'})).toBeDisabled();
+ expect(preparations).toBe(1);
 });
