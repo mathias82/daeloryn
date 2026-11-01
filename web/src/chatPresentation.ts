@@ -11,9 +11,9 @@ export function readableProse(raw:string):string{
     .replace(/(?<!\w)_([^_\n]+)_(?!\w)/g,'$1')
     .replace(/`([^`\n]+)`/g,'$1')
     .replace(/\[([^\]\n]+)\]\((https?:\/\/[^)\s]+)\)/g,'$1 ($2)')
-    .replace(/^\s*[-*]\s+/gm,'• ')
-    .replace(/^\s*>\s?/gm,'')
-    .replace(/^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/gm,'')
+    .replace(/^[ \t]*[-*][ \t]+/gm,'• ')
+    .replace(/^[ \t]*>[ \t]?/gm,'')
+    .replace(/^[ \t]*(?:-{3,}|\*{3,}|_{3,})[ \t]*$/gm,'')
     .trim();
 }
 /** Partially streamed unfinished fenced blocks stay code, not prose. */
