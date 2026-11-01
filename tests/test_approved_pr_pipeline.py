@@ -14,7 +14,7 @@ class PipelineTests(unittest.TestCase):
   with TemporaryDirectory() as tmp:
    root=Path(tmp);(root/".git").mkdir()
    publisher=Mock()
-   with patch("approved_pr_pipeline._head",return_value="a"*40):
+   with patch("approved_pr_pipeline._head",return_value="a"*40), patch("approved_pr_pipeline._clean"):
     result=execute(root,"python","Title","Body","a"*40,approve_tests=True,approve_publication=True,
       test_runner=lambda *a,**kw:{"verified":False,"containerized":True},publisher=publisher)
    self.assertFalse(result["published"])
