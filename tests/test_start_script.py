@@ -47,7 +47,7 @@ class StartScriptTests(unittest.TestCase):
                                        cwd="/", env=environment, capture_output=True,
                                        text=True, timeout=5, check=True)
             self.assertEqual(completed.stdout.splitlines(), [
-                "ARG=" + str(root / "scripts" / "console.py"),
+                "ARG=" + str((root / "scripts" / "console.py").resolve()),
                 "ARG=--enable-copilot-chat",
                 "ARG=--enable-project-picker",
                 "ARG=--open",
