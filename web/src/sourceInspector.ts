@@ -1,6 +1,6 @@
 /** Only references to lines found in the approved source manifest are navigable. */
 export type SourceBlock={file:string;line:number;column:number;end_line:number;source:string};
-export type SourceReference={file:string;line:number;endLine:number;batch:number;excerpt:string;verified:boolean;kind:'bug'|'change'|'reference'};
+export type SourceReference={file:string;line:number;endLine:number;batch:number;excerpt:string;verified:boolean;kind:'bug'|'change'|'reference';suggestionText?:string};
 export type InspectorSnapshot={repository:string;sha256:string;sources:SourceBlock[];references:SourceReference[];completed:number;total:number;status:string};
 export function manifestSources(prompt:string,files:string[]):SourceBlock[]{
   const allow=new Set(files);
@@ -33,7 +33,22 @@ export function extractSourceReferences(reply:string,batch:number,sources:Source
       const excerpt=reply.slice(Math.max(0,match.index-120),Math.min(reply.length,match.index+170)).replace(/\s+/g,' ');
       const kind=/\b(?:bug|defect|vulnerab|exception|unsafe|leak|race|NPE|null dereference|error|σφάλμ)\w*/i.test(excerpt)?'bug':
         /\b(?:fix|change|modify|replace|refactor|update|should|must|διορθ|αλλαγ)\w*/i.test(excerpt)?'change':'reference';
-      found.push({file:path,line,endLine,batch,verified:present,kind,excerpt});
+      // A fenced suggestion may be displayed as a DRAFT only when it follows
+      // this citation closely and its surrounding prose explicitly suggests
+      // changing the source. Never treat it as an approved patch.
+      let suggestionText:string|undefined;
+      if(present&&/\b(?:fix|replace|change|suggest|proposed|refactor|patch|διορθ|αλλαγ)\w*/iu.test(excerpt)){
+        const fence=reply.indexOf(String.fromCharCode(96).repeat(3),match.index+match[0].length);
+        if(fence>=0&&fence-(match.index+match[0].length)<500){
+          const firstLine=reply.indexOf('\n',fence);
+          const close=firstLine>=0?reply.indexOf(String.fromCharCode(96).repeat(3),firstLine+1):-1;
+          if(firstLine>=0&&firstLine-fence<45&&close>firstLine&&close-firstLine<=8000){
+            const candidate=reply.slice(firstLine+1,close).trimEnd();
+            if(candidate)suggestionText=candidate;
+          }
+        }
+      }
+      found.push({file:path,line,endLine,batch,verified:present,kind,excerpt,suggestionText});
     }
   }
   return found.sort((a,b)=>a.batch-b.batch||a.file.localeCompare(b.file)||a.line-b.line);
