@@ -31,6 +31,7 @@ jobs:
         run: |
           python3 -m unittest discover -s tests -p 'test_console_api.py' -v
           python3 -m unittest discover -s tests -p 'test_copilot_chat.py' -v
+          python3 -m unittest discover -s tests -p 'test_copilot_agent_execution.py' -v
           python3 -m unittest discover -s tests -p 'test_copilot_auto.py' -v
           python3 -m unittest discover -s tests -p 'test_agent_router.py' -v
           python3 -m unittest discover -s tests -p 'test_repository_router.py' -v
@@ -87,5 +88,7 @@ jobs:
           node-version: '20'
       - name: Install dependencies
         run: npm install --no-audit --no-fund
+      - name: Frontend request and approval binding tests
+        run: npm test
       - name: Typecheck and production build
         run: npm run build

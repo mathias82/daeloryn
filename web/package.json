@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
-    "build": "tsc -b && vite build"
+    "build": "tsc -b && vite build",
+    "test": "tsc src/copilotRequests.ts --outDir .test-build --target ES2020 --module ES2020 --skipLibCheck && node --test tests/*.test.mjs"
   },
   "dependencies": {
     "react": "^18.3.1",

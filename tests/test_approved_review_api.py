@@ -33,8 +33,11 @@ class ApprovedReviewApiTests(unittest.TestCase):
   result=response.status,json.loads(response.read())
   conn.close()
   return result
+ def test_prepare_requires_model_to_bind_approval(self):
+  code,_=self.post("/api/copilot/review/prepare",{"repository":"demo","task":"Review"})
+  self.assertEqual(400,code)
  def test_requires_exact_digest_and_rechecks_source(self):
-  request={"repository":"demo","task":"Review"}
+  request={"repository":"demo","task":"Review","model":"test"}
   code,prepared=self.post("/api/copilot/review/prepare",request)
   self.assertEqual(200,code)
   self.assertIn("class App",prepared["prompt"])

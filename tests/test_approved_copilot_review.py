@@ -13,7 +13,7 @@ class ApprovedCopilotReviewTests(unittest.TestCase):
    checkout.mkdir()
    (checkout/".git").mkdir()
    (checkout/"App.java").write_text("class App {}")
-   prepared=prepare(root,"demo","Review Java")
+   prepared=prepare(root,"demo","Review Java","gpt-5")
    calls=[]
    def transport(request):
     calls.append(request)
@@ -33,7 +33,7 @@ class ApprovedCopilotReviewTests(unittest.TestCase):
    checkout.mkdir()
    (checkout/".git").mkdir()
    (checkout/"App.java").write_text("class App {}")
-   prepared=prepare(root,"demo","Review")
+   prepared=prepare(root,"demo","Review","gpt-5")
    prepared["prompt"]+="tampered"
    with self.assertRaises(PermissionError):
     execute(prepared,"gpt-5",prepared["sha256"],transport=lambda _: {})
