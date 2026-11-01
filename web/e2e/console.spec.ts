@@ -21,7 +21,14 @@ test.beforeEach(async({page})=>{
           domain_scenario:'Inspect Java concurrency, null-handling and resource lifecycle.',
           state:'not_started',latest_run_id:null,latest_run_status:null,
           traceability_scores:null,provisional_evidence_lead:'not_determined',
-          verified_winner:null,candidate_rule_improvements:[]}]
+          verified_winner:null,candidate_rule_improvements:[]}],
+        project_campaigns:[{repository:'demo',technologies:['java'],total_agents:1,
+          applicable_agents:1,provisionally_assessed:0,next_agent:'java-reviewer',
+          entries:[{order:1,agent:'java-reviewer',scope:'java',benchmark_mode:'review',
+            domain_scenario:'Inspect Java concurrency, null-handling and resource lifecycle.',
+            state:'not_started',latest_run_id:null,latest_run_status:null,
+            traceability_scores:null,provisional_evidence_lead:'not_determined',
+            verified_winner:null,candidate_rule_improvements:[],applicable:true}]}]
       },
       '/api/models':{models:[],chat_enabled:false},
       '/api/copilot/status':{enabled:true},
