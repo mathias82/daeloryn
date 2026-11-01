@@ -170,7 +170,7 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                                "verified_trial": False}
                 elif path.path == "/api/benchmark/campaign":
                     payload = campaign_report(run_store.list(), run_store.comparison_summaries(),
-                                              agents=agent_data())
+                                              agents=agent_data(), projects=repository_catalog())
                 elif path.path.startswith("/api/benchmark/runs/"):
                     run_id = path.path.removeprefix("/api/benchmark/runs/")
                     try:
