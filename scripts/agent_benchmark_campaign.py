@@ -91,8 +91,17 @@ def campaign_report(runs, comparisons, *, agents=None):
         name = meta["name"]
         latest = by_agent.get(name)
         evaluated = by_comparison.get(name)
-        comparable = (evaluated is not None and evaluated.get("status") == "completed" and
-                      evaluated.get("evaluation_status") not in ("partial_or_incomplete",))
+        # Only the latest run for this agent may advance the sequential queue.
+        # A missing score is NOT 0, and an old comparison cannot certify a new
+        # run whose provider attempt failed or is still in progress.
+        comparable = (evaluated is not None and latest is not None and
+                      evaluated.get("run_id") == latest.get("run_id") and
+                      evaluated.get("status") == "completed" and
+                      evaluated.get("evaluation_status") in
+                          ("provisional_traceability", "no_source_citations",
+                           "no_grounded_code_locations", "small_score_difference") and
+                      isinstance(evaluated.get("baseline_score"), (int, float)) and
+                      isinstance(evaluated.get("daeloryn_score"), (int, float)))
         state = ("assessed_provisionally" if comparable else
                  "incomplete" if latest and latest.get("status") in ("running","stopping","partial","failed","stopped","interrupted") else
                  "needs_evaluation" if latest and latest.get("status") == "completed" else
