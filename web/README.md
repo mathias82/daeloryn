@@ -8,7 +8,7 @@ Responsive React + TypeScript + Vite frontend with a chat-first workspace.
 - **Chat**: multiple locally saved conversations, agent/model selectors, opt-in local providers, and explicit execution status.
 - **Agents**: validated repository specialist catalog when the local API is available; samples otherwise.
 - **Workflows**: approval-gated lifecycle visualization (not an active runner).
-- **Benchmarks**: no fabricated scores; shows an honest empty state until verified data is available.
+- **Benchmarks**: start a real read-only paired Copilot A/B pilot directly from the browser, with explicit approval and progress, alongside the separate independently verified-results dashboard. No fabricated winner.
 - **Models**: illustrative routing tiers, not real model discovery or pricing.
 - **Settings**: explicit connection/security status and local conversation reset.
 
