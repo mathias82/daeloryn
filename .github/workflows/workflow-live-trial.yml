@@ -1,0 +1,162 @@
+name: Approved live workflow trial
+
+on:
+  workflow_dispatch:
+    inputs:
+      phase:
+        description: 'Run tests first; publish requires a separate invocation'
+        type: choice
+        options: [tests, publish]
+        default: tests
+        required: true
+      approve_tests:
+        description: 'Approve disposable probe fixture and Docker tests'
+        type: boolean
+        default: false
+      approve_publication:
+        description: 'Approve one Draft PR for the exact commit and digest below'
+        type: boolean
+        default: false
+      test_run_id:
+        description: 'Successful tests-phase run ID (publish only)'
+        type: string
+      expected_commit:
+        description: 'Exact tested commit from the tests summary (publish only)'
+        type: string
+      approval_digest:
+        description: 'Publication digest from the tests summary (publish only)'
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  tests:
+    if: github.ref == 'refs/heads/main' && inputs.phase == 'tests'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Require test approval
+        env:
+          APPROVED: ${{ inputs.approve_tests }}
+        run: test "$APPROVED" = true
+      - name: Freeze probe image
+        id: image
+        run: |
+          docker pull python:3.11-alpine
+          image="$(docker image inspect python:3.11-alpine --format '{{index .RepoDigests 0}}')"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+      - name: Execute approved offline tests
+        env:
+          IMAGE: ${{ steps.image.outputs.image }}
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          python scripts/workflow_live_trial.py tests \
+            --workspace /tmp/daeloryn-live-trial --repository "$REPOSITORY" \
+            --source-checkout "$GITHUB_WORKSPACE" --image "$IMAGE" \
+            --approve-fixture --approve-tests
+          python - <<'PY'
+          import json, os
+          report=json.load(open('/tmp/daeloryn-live-trial/report.json'))
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as summary:
+              summary.write('Docker tests passed. No push or PR was attempted.\n\n')
+              summary.write('Start a **separate** publish invocation with:\n\n')
+              summary.write('- test_run_id: `'+os.environ['GITHUB_RUN_ID']+'`\n')
+              summary.write('- expected_commit: `'+report['commit']+'`\n')
+              summary.write('- approval_digest: `'+report['publication_digest']+'`\n')
+          PY
+      - name: Package durable state outside the checkout
+        run: tar -cf "$RUNNER_TEMP/trial.tar" -C /tmp daeloryn-live-trial
+      - uses: actions/upload-artifact@v4
+        with:
+          name: workflow-tested-trial
+          path: ${{ runner.temp }}/trial.tar
+          retention-days: 7
+          if-no-files-found: error
+
+  publish:
+    if: github.ref == 'refs/heads/main' && inputs.phase == 'publish'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Verify explicit approval and trusted successful source run
+        env:
+          GH_TOKEN: ${{ github.token }}
+          APPROVED: ${{ inputs.approve_publication }}
+          SOURCE_RUN: ${{ inputs.test_run_id }}
+          COMMIT: ${{ inputs.expected_commit }}
+          DIGEST: ${{ inputs.approval_digest }}
+        run: |
+          python - <<'PY'
+          import json, os, re, subprocess
+          if os.environ['APPROVED']!='true':raise SystemExit('Publication approval required')
+          source=os.environ['SOURCE_RUN']
+          if not re.fullmatch(r'[0-9]{1,20}',source):raise SystemExit('Invalid tests run ID')
+          if not re.fullmatch(r'[0-9a-f]{40}',os.environ['COMMIT']):raise SystemExit('Invalid tested commit')
+          if not re.fullmatch(r'[0-9a-f]{64}',os.environ['DIGEST']):raise SystemExit('Invalid publication digest')
+          result=subprocess.run(['gh','api','repos/'+os.environ['GITHUB_REPOSITORY']+'/actions/runs/'+source],
+                                capture_output=True,text=True,check=True,timeout=30)
+          run=json.loads(result.stdout)
+          if (run['event']!='workflow_dispatch' or run['head_branch']!='main'
+              or run['head_sha']!=os.environ['GITHUB_SHA'] or run['conclusion']!='success'
+              or run['path']!='.github/workflows/workflow-live-trial.yml'):
+              raise SystemExit('Require a successful tests run from this exact trusted workflow revision')
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: workflow-tested-trial
+          run-id: ${{ inputs.test_run_id }}
+          github-token: ${{ github.token }}
+          path: ${{ runner.temp }}/trial-artifact
+      - name: Restore trusted state for the separate publication process
+        id: restore
+        run: |
+          python - <<'PY'
+          import json, os, pathlib, tarfile
+          if pathlib.Path('/tmp/daeloryn-live-trial').exists():raise SystemExit('Trial path already exists')
+          archive=pathlib.Path(os.environ['RUNNER_TEMP'])/'trial-artifact'/'trial.tar'
+          with tarfile.open(archive) as bundle:
+              if any(not (m.name=='daeloryn-live-trial' or m.name.startswith('daeloryn-live-trial/')) for m in bundle.getmembers()):
+                  raise SystemExit('Unexpected trial archive paths')
+              bundle.extractall('/tmp',filter='data')
+          report=json.load(open('/tmp/daeloryn-live-trial/report.json'))
+          if report['source_revision']!=os.environ['GITHUB_SHA'] or report['repository']!=os.environ['GITHUB_REPOSITORY']:
+              raise SystemExit('Trial source revision or repository mismatch')
+          PY
+      - name: Publish the separately approved commit as a Draft PR
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPOSITORY: ${{ github.repository }}
+          COMMIT: ${{ inputs.expected_commit }}
+          DIGEST: ${{ inputs.approval_digest }}
+        run: |
+          gh auth setup-git
+          python scripts/workflow_live_trial.py publish \
+            --workspace /tmp/daeloryn-live-trial --repository "$REPOSITORY" \
+            --expected-commit "$COMMIT" --approval-digest "$DIGEST" --approve-publication
+      - name: Preserve publication state even on an uncertain result
+        if: always() && steps.restore.outcome == 'success'
+        run: tar -cf "$RUNNER_TEMP/publication.tar" -C /tmp daeloryn-live-trial
+      - uses: actions/upload-artifact@v4
+        if: always() && steps.restore.outcome == 'success'
+        with:
+          name: workflow-publication-state
+          path: ${{ runner.temp }}/publication.tar
+          retention-days: 7
+          if-no-files-found: error

@@ -67,6 +67,28 @@ jobs:
       - name: Run Java-related regression tests
         run: python -m unittest discover -s tests -p "test_*.py" -v
 
+  docker-workflow-integration:
+    name: Real Docker workflow / Ubuntu
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Pull and freeze the probe image before offline execution
+        id: image
+        run: |
+          docker pull python:3.11-alpine
+          image="$(docker image inspect python:3.11-alpine --format '{{index .RepoDigests 0}}')"
+          echo "image=$image" >> "$GITHUB_OUTPUT"
+      - name: Exercise real containers and process restarts without GitHub writes
+        env:
+          DAELORYN_E2E_IMAGE: ${{ steps.image.outputs.image }}
+        run: python -m unittest discover -s integration_tests -p 'test_workflow_docker.py' -v
+
 # Live provider E2E and the frozen checkout benchmark require separate
 # authorized runners, pinned inputs, and credentials. This CI does not
 # represent those checks as passed or publish a release automatically.
