@@ -218,3 +218,17 @@
   text-decoration-thickness:2px;text-underline-offset:4px}
 .inspector-source-error{font-size:11px;color:#f5bdca;border:1px solid #704259;border-radius:8px;padding:10px}
 .inspector-source-loading{font-size:11px;color:#d2bcf5}
+
+/* Approved developer patch and host-test execution are explicit opt-in actions. */
+.inspector-apply-panel{display:grid;gap:10px;align-items:start;min-width:0;padding:12px;
+  background:#162738;border:1px solid #4f738c;border-radius:9px}
+.inspector-apply-panel strong{font-size:12px;color:#cde9f9}
+.inspector-apply-panel>label{display:grid;gap:6px;font-size:11px;color:#b6c7d9}
+.inspector-apply-panel input:not([type=checkbox]),.inspector-apply-panel select{width:100%;max-width:100%;
+  border:1px solid #536987;border-radius:7px;background:#102034;color:#e7eefb;padding:8px}
+.inspector-apply-panel .benchmark-approval{display:flex;align-items:start;gap:8px;line-height:1.55}
+.inspector-apply-panel button{justify-self:start;border-radius:8px;padding:9px 13px}
+.inspector-apply-panel button:disabled{opacity:.5;cursor:not-allowed}
+.inspector-apply-panel pre{white-space:pre-wrap;overflow:auto;max-height:260px;border:1px solid #3b506d;
+  border-radius:7px;padding:10px;color:#dce4f0;font:11px/1.5 ui-monospace,monospace}
+.inspector-apply-panel details{min-width:0}
