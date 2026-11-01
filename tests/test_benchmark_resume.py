@@ -44,6 +44,7 @@ class ResumeJournalTests(unittest.TestCase):
         first=self.store.start(self.prepared,"b"*64,self.partial_worker)
         id=first["run_id"]
         old=self.await_state(id,"partial")
+        self.wait_for_worker()
         self.assertEqual({"1":"completed","2":"unknown"},
             {k:v["status"] for k,v in old["arms"]["baseline"]["batches"].items()})
         with self.assertRaises(PermissionError):
@@ -85,6 +86,7 @@ class ResumeJournalTests(unittest.TestCase):
         run=self.store.start(self.prepared,"b"*64,self.partial_worker)
         id=run["run_id"]
         self.await_state(id,"partial")
+        self.wait_for_worker()
         with self.store.guard:
             value=self.store.get(id)
             value["arms"]["baseline"].pop("batches")
