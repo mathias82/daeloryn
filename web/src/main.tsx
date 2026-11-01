@@ -375,6 +375,7 @@ function App() {
   },[]);
   const displayedAgents = remoteAgents ?? AGENTS;
   const [menuOpen,setMenuOpen] = useState(false);
+  const [deletingChatId,setDeletingChatId] = useState<number|null>(null);
   const [showDetails,setShowDetails] = useState(true);
   const session = sessions.find(s=>s.id===sessionId) ?? sessions[0];
   useEffect(()=>{
@@ -393,7 +394,29 @@ function App() {
     followChatRef.current=true;
     const id = Math.max(Date.now(),...sessions.map(s=>s.id+1));
     setSessions(previous=>[{id,name:'New conversation',messages:[{id,role:'status',text:'New local conversation. When a local project is selected, code requests prepare context directly in chat.',createdAt:new Date().toISOString()}]},...previous]);
-    setPendingReview(null);setSessionId(id);setDraft('');setView('Chat');setMenuOpen(false);
+    setPendingReview(null);setSessionId(id);setDraft('');setView('Chat');setMenuOpen(false);setDeletingChatId(null);
+  }
+  function deleteChat(chatId:number){
+    // Never lose the outcome of an in-flight request or a source approval.
+    if(sending||pendingReview)return;
+    if(!sessions.some(s=>s.id===chatId))return;
+    const remaining=sessions.filter(s=>s.id!==chatId);
+    const next=remaining.length?remaining:[{
+      id:Math.max(Date.now(),...sessions.map(s=>s.id+1)),
+      name:'New conversation',
+      messages:[{id:Date.now(),role:'status' as const,
+        text:'New local conversation. Messages are stored in this browser.',
+        createdAt:new Date().toISOString()}]
+    }];
+    setSessions(next);
+    if(sessionId===chatId){
+      setSessionId(next[0].id);
+      setDraft('');
+      setRevealingId(null);
+      setRenaming(false);
+    }
+    setDeletingChatId(null);
+    setPendingReview(null);
   }
   async function send(event: React.FormEvent) {
     event.preventDefault();
@@ -508,7 +531,15 @@ function App() {
       <div className="nav-label">WORKSPACE</div>
       <nav aria-label="Main navigation">{NAV.map(item=><button key={item.label} className={'nav-item '+(view===item.label?'selected':'')} onClick={()=>{setView(item.label);setMenuOpen(false)}}><span className="nav-icon">{item.icon}</span>{item.label}{item.label==='Chat'&&<span className="nav-count">{sessions.length}</span>}</button>)}</nav>
       <div className="nav-label history-label">RECENT CHATS</div>
-      <div className="history">{sessions.map(s=><button key={s.id} className={'history-item '+(view==='Chat'&&sessionId===s.id?'current':'')} onClick={()=>{setSessionId(s.id);setView('Chat');setMenuOpen(false)}} title={s.name}>◌ <span>{s.name}</span></button>)}</div>
+      <div className="history">{sessions.map(s=><div key={s.id} className="history-row">
+        <button className={'history-item '+(view==='Chat'&&sessionId===s.id?'current':'')} onClick={()=>{setSessionId(s.id);setView('Chat');setMenuOpen(false);setDeletingChatId(null)}} title={s.name}>◌ <span>{s.name}</span></button>
+        <button type="button" className="history-delete" title={'Delete '+s.name} aria-label={'Delete chat '+s.name} disabled={sending||Boolean(pendingReview)} onClick={()=>setDeletingChatId(s.id)}>×</button>
+        {deletingChatId===s.id&&<div className="history-confirm" role="group" aria-label={'Confirm delete '+s.name}>
+          <span>Delete this chat permanently from this browser?</span>
+          <div><button type="button" disabled={sending||Boolean(pendingReview)} onClick={()=>deleteChat(s.id)}>Confirm delete</button>
+          <button type="button" onClick={()=>setDeletingChatId(null)}>Cancel</button></div>
+        </div>}
+      </div>)}</div>
       <div className="side-bottom"><div className="side-status"><span className="status-dot"/> Local preview <small>Read-only API: {apiStatus}</small></div><div className="avatar-row"><span className="avatar">D</span><div><strong>Local workspace</strong><small>Developer mode</small></div><span>⌄</span></div></div>
     </aside>
     <div className="workspace">
