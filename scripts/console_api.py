@@ -175,7 +175,8 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                         self.reply(404, {"error": "benchmark run unavailable"})
                         return
                 elif path.path == "/api/benchmarks":
-                    payload = benchmark_data(records_dir)
+                    payload = {**benchmark_data(records_dir),
+                               "paired_comparisons": run_store.comparison_summaries()}
 
                 else:
                     self.reply(404, {"error": "unknown endpoint"})
@@ -258,6 +259,31 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                 except (ValueError, OSError, TypeError, json.JSONDecodeError) as exc:
                     self.reply(400, {"error": "Run action rejected: " + str(exc)})
                     return
+                self.reply(200, result)
+                return
+            if self.path.startswith("/api/benchmark/runs/") and self.path.endswith("/evaluate"):
+                if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                    self.reply(415, {"error": "JSON required"});return
+                length = self.headers.get("Content-Length", "")
+                if not length.isdigit() or not 0 < int(length) <= 64:
+                    self.reply(413, {"error": "invalid evaluation request size"});return
+                try:
+                    if json.loads(self.rfile.read(int(length))) != {}:
+                        raise ValueError("empty JSON object required (no model calls)")
+                    run_id = self.path.removeprefix("/api/benchmark/runs/").removesuffix("/evaluate")
+                    previous = run_store.get(run_id)
+                    roots = resolve_repository(previous["repository"])
+                    from project_review_context import snapshot
+                    context = snapshot(roots[0], previous["repository"])
+                    result = run_store.evaluate_saved(run_id, context)
+                except PermissionError as exc:
+                    self.reply(409, {"error": str(exc)});return
+                except RuntimeError as exc:
+                    self.reply(409, {"error": str(exc)});return
+                except FileNotFoundError:
+                    self.reply(404, {"error": "benchmark run unavailable"});return
+                except (ValueError, TypeError, KeyError, OSError, json.JSONDecodeError) as exc:
+                    self.reply(400, {"error": "Evaluation unavailable: " + str(exc)});return
                 self.reply(200, result)
                 return
             if self.path.startswith("/api/benchmark/runs/") and self.path.endswith("/resume"):
