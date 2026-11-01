@@ -133,7 +133,7 @@ test('rename and messages persist after reload; clear removes saved content',asy
  await page.getByLabel('Conversation name').fill('Spring review pilot');
  await page.getByRole('button',{name:'Save name',exact:true}).click();
  await page.getByLabel(/^Copilot model/).selectOption(models[0]);
- await page.getByRole('textbox',{name:'Message',exact:true}).fill('Review my Spring starter');
+ await page.getByRole('textbox',{name:'Message',exact:true}).fill('Explain Spring dependency injection');
  await page.getByRole('textbox',{name:'Message',exact:true}).press('Enter');
  await expect(page.getByText(/Fixture reply/)).toBeVisible();
  await page.reload();
@@ -207,7 +207,7 @@ test('Send prepares project context in chat, waits for approval, then runs batch
     requests.push('prepare');
     const body=route.request().postDataJSON();
     expect(body).toMatchObject({repository:'demo',task:'Review the entire project',model:'auto',scope:'full'});
-    await route.fulfill({json:{repository:'demo',model:models[0],agent:null,scope:'full',
+    await route.fulfill({json:{repository:'demo',model:models[0],agent:body.agent||null,scope:'full',
       prompt:'Fixture source snapshot',sha256:'a'.repeat(64),files:['App.java'],
       batch_count:2,warning:'Fixture review has 2 potentially billable calls',
       approval_required:true,agent_profile:null,agent_profile_sha256:null,
@@ -243,7 +243,7 @@ test('Send prepares project context in chat, waits for approval, then runs batch
 test('Changing the model invalidates pending in-chat source approval',async({page})=>{
   let executed=0;
   await page.route('**/api/copilot/review/prepare',route=>route.fulfill({json:{
-    repository:'demo',model:models[0],agent:null,scope:'focused',prompt:'Fixture snapshot',sha256:'a'.repeat(64),
+    repository:'demo',model:models[0],agent:route.request().postDataJSON().agent||null,scope:'focused',prompt:'Fixture snapshot',sha256:'a'.repeat(64),
     files:['App.java'],batch_count:1,warning:'One provider call',approval_required:true,
     agent_profile:null,agent_profile_sha256:null}}));
   page.on('request',r=>{if(r.url().endsWith('/api/copilot/review/execute'))executed++;});
@@ -379,7 +379,7 @@ test('Smart Context prepares focused project excerpts for scoped questions',asyn
     expect(selection).toMatchObject({repository:'demo',scope:'focused',task:'What observability does this project have?'});
     return route.fulfill({json:{...selection,model:models[0],
       prompt:'Only README + TelemetryService',sha256:'a'.repeat(64),
-      agent:null,agent_profile:null,agent_profile_sha256:null,
+      agent:selection.agent||null,agent_profile:null,agent_profile_sha256:null,
       files:['README.md','TelemetryService.java'],batch_count:1,
       approval_required:true,warning:'One model call',
       verified_usage_credits:null,coverage:{scope:'Focused context only',all_eligible_files_included:false,omitted:[],excluded:[]}}});
