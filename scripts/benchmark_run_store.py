@@ -27,6 +27,8 @@ class RunStore:
         self.directory = Path(directory) if directory is not None else Path.home() / ".daeloryn" / "benchmark-runs"
         self.guard = threading.RLock()
         self.active = None
+        self.active_record = None
+        self.stop_events = {}
 
     def _ensure_dir(self):
         parent = self.directory.parent
@@ -68,7 +70,7 @@ class RunStore:
         result = json.loads(path.read_text(encoding="utf-8"))
         if not isinstance(result, dict) or result.get("run_id") != run_id:
             raise ValueError("invalid persisted benchmark receipt")
-        if result.get("status") == "running" and self.active != run_id:
+        if result.get("status") in ("running", "stopping") and self.active != run_id:
             result["status"] = "interrupted"
             result["error"] = ("The local benchmark service restarted during this run. "
                                "Remote provider outcome is unknown; never auto-retry.")
@@ -99,6 +101,42 @@ class RunStore:
                              "created_at", "updated_at", "error")})
             return rows
 
+    def stop(self, run_id):
+        with self.guard:
+            record = self._read(run_id)
+            if record['status'] in ('stopped', 'stopping'):
+                return {'run_id':run_id,'status':record['status']}
+            if record['status'] != 'running' or self.active != run_id:
+                raise ValueError('only an active benchmark can be stopped')
+            event = self.stop_events.get(run_id)
+            if event is None:
+                raise ValueError('run is no longer active')
+            # Cooperative stop; up to two in-flight Copilot processes can be
+            # terminated locally, but the provider-side outcome may be unknown.
+            event.set()
+            record['status'] = 'stopping'
+            if self.active_record is not None and self.active_record.get('run_id') == run_id:
+                self.active_record['status'] = 'stopping'
+            record['error'] = ('Stop requested. In-flight Copilot calls are being terminated locally; '
+                               'provider-side outcome may be unknown.')
+            record['updated_at'] = _utc()
+            if self.active_record is not None and self.active_record.get('run_id') == run_id:
+                self.active_record['error'] = record['error']
+                self.active_record['updated_at'] = record['updated_at']
+            self._save(record)
+            return {'run_id':run_id,'status':'stopping'}
+
+    def delete(self, run_id):
+        with self.guard:
+            record = self._read(run_id)
+            if run_id == self.active or record['status'] in ('running', 'stopping'):
+                raise RuntimeError('Stop the running benchmark and wait for it to finish before deleting')
+            target = self._path(run_id)
+            if target.is_symlink():
+                raise ValueError('unsafe run record path')
+            target.unlink()
+            return {'run_id':run_id,'deleted':True}
+
     def start(self, prepared, approved_digest, runner):
         if prepared.get("sha256") != approved_digest:
             raise PermissionError("benchmark approval changed; prepare again")
@@ -125,6 +163,9 @@ class RunStore:
             }
             self._save(record)
             self.active = run_id
+            self.active_record = record
+            cancel_event = threading.Event()
+            self.stop_events[run_id] = cancel_event
 
         def work():
             try:
@@ -149,10 +190,15 @@ class RunStore:
                                             ("\n[Transcript truncated for local storage]" if len(next_reply) > 200000 else ""))
                         elif event_type == "arm_finished":
                             row["status"] = event.get("status", "partial")
-                        record["updated_at"] = _utc()
-                        self._save(record)
+                        # Writing+fsync for every dispatched batch is expensive.
+                        # Persist material progress on completed replies/arm state;
+                        # keep transient in-flight counts in memory.
+                        if event_type in ('arm_started', 'arm_finished', 'batch_reply'):
+                            record["updated_at"] = _utc()
+                            self._save(record)
 
-                result = runner(prepared, approved_digest, progress=progress)
+                result = runner(prepared, approved_digest, progress=progress,
+                                cancel_event=cancel_event, parallelism=2)
                 with self.guard:
                     # Avoid duplicating large model transcripts in the receipt.
                     record["result"] = {
@@ -163,7 +209,7 @@ class RunStore:
                             }
                         } for key, value in result.get("arms", {}).items()}
                     }
-                    record["status"] = result["status"]
+                    record["status"] = "stopped" if cancel_event.is_set() else result["status"]
                     for arm, outcome in result.get("arms", {}).items():
                         if arm in record["arms"]:
                             record["arms"][arm].update({
@@ -174,16 +220,21 @@ class RunStore:
                                 "reply": (outcome.get("review", {}).get("reply", "") or
                                           record["arms"][arm]["reply"])[:200000]
                             })
-                    if result["status"] != "completed":
+                    if cancel_event.is_set():
+                        record["error"] = ("Stopped by user. Pending batches were not invoked. "
+                                           "In-flight provider outcomes may be unknown; no auto-retry.")
+                    elif result["status"] != "completed":
                         record["error"] = ("Partial benchmark: a provider batch failed, timed out "
                                            "or reached a review budget. See per-arm failure; do not auto-retry.")
                     record["updated_at"] = _utc()
                     self._save(record)
             except Exception as exc:
                 with self.guard:
-                    record["status"] = "failed"
+                    record["status"] = "stopped" if cancel_event.is_set() else "failed"
                     # Avoid serializing arbitrary provider exception text / secrets.
-                    record["error"] = ("Benchmark worker failed (" + type(exc).__name__ +
+                    record["error"] = ("Stop requested; provider outcome may be unknown."
+                                       if cancel_event.is_set() else
+                                       "Benchmark worker failed (" + type(exc).__name__ +
                                        "). External provider outcome may be unknown; do not auto-retry.")
                     record["updated_at"] = _utc()
                     try:
@@ -194,6 +245,8 @@ class RunStore:
                 with self.guard:
                     if self.active == run_id:
                         self.active = None
+                        self.active_record = None
+                    self.stop_events.pop(run_id, None)
 
         thread = threading.Thread(target=work, daemon=True, name="benchmark-" + run_id[:8])
         thread.start()

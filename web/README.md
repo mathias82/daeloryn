@@ -131,13 +131,29 @@ frozen-test/isolated evaluator protocol until the secure runner is integrated.
   `~/.daeloryn/benchmark-runs/*.json` with restricted file permissions.
   Model responses may contain confidential content. The source snapshot and
   exact user approval prompts are **not** written to run receipts. Back up or
-  protect the directory accordingly. The UI provides no deletion of benchmark
-  receipts yet; chat deletion does not delete them.
+  protect the directory accordingly. The Benchmarks page can delete one
+  completed/partial/stopped receipt after confirmation; chat deletion does not delete them.
 - If the server crashes/restarts mid-run, the saved status is marked
   **interrupted**, not successful. A partially completed baseline or specialist
   is preserved without automatic retry. Source approval, model and batch limits
   are still validated before the run starts. History storage is bounded to 30
   runs (new attempts are rejected when full rather than silently deleting data).
+- **Stop run** requests cooperative cancellation from the local API, kills up to
+  two in-flight Copilot CLI process groups, prevents new model batches and
+  preserves completed replies. Provider-side charges or outcomes cannot be
+  guaranteed after a dispatched request; no retry occurs. Stop is available
+  only while running. A run in **stopping** state cannot be deleted until its
+  worker finishes.
+- **Delete run** is available only for terminal runs; after confirmation it
+  removes that run's local JSON receipt, without affecting other runs or chat.
+  Deleting a receipt does **not** refund Copilot usage or securely erase disk
+  storage sectors.
+- **Faster batches** uses bounded two-way concurrency **within each review arm**,
+  while baseline and Daeloryn arms remain sequential. It improves wall-clock
+  latency when provider capacity allows, but never increases the approved
+  number of potentially billable requests. In-flight completion order may
+  differ from batch order; final answers are ordered by original batch index.
+  Local progress disk writes are coalesced to completed replies/state changes.
 - **Workflows** is now an evidence-based view of these recorded A/B runs:
   source approval, baseline and specialist progress and failure receipts. Steps
   requiring independent defect review, patch writes, tests and GitHub publication
