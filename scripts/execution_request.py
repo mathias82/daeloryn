@@ -8,11 +8,19 @@ from registered_container_tests import run_registered_tests
 FIELDS=frozenset(("repository","suite","digest","approval_token"))
 SUITES=frozenset(("python","maven","gradle","npm"))
 
+def _unique_object(pairs):
+ result={}
+ for key,value in pairs:
+  if key in result:
+   raise ValueError("duplicate JSON field")
+  result[key]=value
+ return result
+
 def parse_request(payload):
  if not isinstance(payload,(bytes,bytearray)) or len(payload)>4096:
   raise ValueError("invalid request size")
  try:
-  data=json.loads(payload.decode("utf-8"))
+  data=json.loads(payload.decode("utf-8"),object_pairs_hook=_unique_object)
  except (UnicodeError,ValueError) as exc:
   raise ValueError("invalid JSON") from exc
  if not isinstance(data,dict) or set(data)!=FIELDS:
@@ -22,7 +30,7 @@ def parse_request(payload):
  token=data["approval_token"]
  if not isinstance(repository,str) or not 1<=len(repository)<=256:
   raise ValueError("invalid repository")
- if data["suite"] not in SUITES or not isinstance(data["suite"],str):
+ if not isinstance(data["suite"],str) or data["suite"] not in SUITES:
   raise ValueError("unsupported suite")
  if not isinstance(digest,str) or len(digest)!=64 or any(c not in "0123456789abcdef" for c in digest):
   raise ValueError("invalid digest")
