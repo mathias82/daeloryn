@@ -11,8 +11,8 @@ export function chatRequest(model:string,messages:ChatMessage[],agent?:string) {
 }
 
 export function reviewRequest(selection:ReviewSelection,approvedDigest?:string) {
-  if (!selection.model || selection.model==='auto')
-    throw new Error('Choose a concrete Copilot model before preparing source review.');
+  if (!selection.model)
+    throw new Error('Choose a Copilot model before preparing source review.');
   return {...selection,...(approvedDigest?{approved_sha256:approvedDigest}:{})};
 }
 
