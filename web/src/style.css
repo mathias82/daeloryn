@@ -207,3 +207,14 @@
 .code-inspector-fullscreen .inspector-suggestion-panel{max-height:40vh}
 @media(max-width:760px){.inspector-suggestion-grid{grid-template-columns:1fr}
   .inspector-suggestion-panel{max-height:38vh}}
+
+/* Approved source mentions behave as inline links, not Markdown text. */
+.chat-source-link{display:inline;border:0;border-bottom:1px solid currentColor;background:transparent;color:#b8aaff;
+  padding:0 2px;margin:0 1px;font-size:inherit;font-weight:600;line-height:inherit;vertical-align:baseline;
+  text-decoration:underline;text-underline-offset:3px;overflow-wrap:anywhere;white-space:inherit}
+.chat-source-link:hover,.chat-source-link:focus-visible{color:#e2d8ff;background:#4a417c66;border-radius:3px}
+.inspector-code-focused{background:#61502850;box-shadow:inset 4px 0 #f2c66a}
+.inspector-code-focused code{text-decoration:underline;text-decoration-color:#f2c66a;
+  text-decoration-thickness:2px;text-underline-offset:4px}
+.inspector-source-error{font-size:11px;color:#f5bdca;border:1px solid #704259;border-radius:8px;padding:10px}
+.inspector-source-loading{font-size:11px;color:#d2bcf5}
