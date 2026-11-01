@@ -1,6 +1,5 @@
 """Bounded failure-analysis repair suggestions; no automatic writes or AI uploads."""
 import re
-from review_action_plan import plan as review_plan
 
 MAX_LOG=6000
 PATTERNS=(
