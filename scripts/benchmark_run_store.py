@@ -103,15 +103,29 @@ class RunStore:
             return rows
 
     def comparison_summaries(self):
-        """Sanitized local A/B observations for the Benchmarks comparison table."""
+        """Expose every persisted run, including pending/partial comparisons.
+
+        Never synthesize missing scores or call a provider. A legacy or
+        interrupted run remains visible with explicit unavailable evidence.
+        """
         with self.guard:
             results = []
             for row in self.list():
                 detail = self._read(row["run_id"])
                 comparison = detail.get("comparison")
-                if not isinstance(comparison, dict):
-                    continue
-                scores = comparison.get("arms", {})
+                if isinstance(comparison, dict):
+                    scores = comparison.get("arms", {})
+                    baseline = scores.get("baseline", {})
+                    challenger = scores.get("daeloryn", {})
+                    status = comparison.get("status", "unavailable")
+                    lead = comparison.get("provisional_evidence_lead", "not_determined")
+                    b_score = baseline.get("evidence_traceability_score")
+                    d_score = challenger.get("evidence_traceability_score")
+                else:
+                    # Explicitly show that the run exists, not a fabricated 0.
+                    status = ("pending" if row["status"] in ("running", "stopping") else
+                              "source_evidence_unavailable")
+                    lead, b_score, d_score = "not_determined", None, None
                 results.append({
                     "run_id": row["run_id"],
                     "repository": row["repository"],
@@ -119,10 +133,10 @@ class RunStore:
                     "model": row["model"],
                     "agent": row["agent"],
                     "status": row["status"],
-                    "evaluation_status": comparison["status"],
-                    "provisional_evidence_lead": comparison["provisional_evidence_lead"],
-                    "baseline_score": scores["baseline"]["evidence_traceability_score"],
-                    "daeloryn_score": scores["daeloryn"]["evidence_traceability_score"],
+                    "evaluation_status": status,
+                    "provisional_evidence_lead": lead,
+                    "baseline_score": b_score,
+                    "daeloryn_score": d_score,
                     "verified_winner": None,
                 })
             return results
