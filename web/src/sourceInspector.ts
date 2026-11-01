@@ -50,3 +50,17 @@ export function sourcePreview(sources:SourceBlock[],file:string,target:number){
   const index=list.findIndex(l=>l.line>=target);
   return list.slice(Math.max(0,(index<0?0:index)-8),Math.max(0,(index<0?0:index)-8)+42);
 }
+
+
+/** Method/class context is a lexical hint only, never verified semantic parsing. */
+export function nearbyDeclaration(sources:SourceBlock[],file:string,target:number):string|null {
+  const before=sourcePreview(sources,file,Math.max(1,target-12)).filter(l=>l.line<=target);
+  for(let i=before.length-1;i>=0;i--){
+    const line=before[i].text.trim();
+    const klass=line.match(/\b(?:class|interface|enum|record)\s+([A-Za-z_$][\w$]*)/);
+    const method=line.match(/\b([A-Za-z_$][\w$]*)\s*\([^;{}]*\)\s*(?:throws\b[^{}]*)?\{?\s*$/);
+    if(method&&!/^(if|while|for|switch|catch|return|new|try|synchronized)$/.test(method[1]))return method[1]+'(…) · approximate declaration';
+    if(klass)return klass[1]+' · approximate type declaration';
+  }
+  return null;
+}
