@@ -57,6 +57,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_durable_approval_gate.py' -v
           python3 -m unittest discover -s tests -p 'test_execution_authorization.py' -v
           python3 -m unittest discover -s tests -p 'test_local_bearer_auth.py' -v
+          python3 -m unittest discover -s tests -p 'test_authenticated_execution.py' -v
           python3 -m unittest discover -s tests -p 'test_approved_execution_dispatch.py' -v
           python3 -m unittest discover -s tests -p 'test_execution_receipts.py' -v
           python3 -m unittest discover -s tests -p 'test_dispatch_receipts.py' -v
