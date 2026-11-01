@@ -10,6 +10,7 @@ test.beforeEach(async({page})=>{
       '/api/health':{execution_enabled:false},
       '/api/agents':{agents:[{name:'java-reviewer',scope:'java',description:'Fixture reviewer'}]},
       '/api/benchmarks':{agent_count:1,expected_cells:8,observed_cells:1,verified_trial_count:0,coverage_percent:12.5,warning:'Fixture data; identities unverified',trials},
+      '/api/benchmark/runs':{runs:[],persistence:'local-private-disk',verified_trial:false},
       '/api/models':{models:[],chat_enabled:false},
       '/api/copilot/status':{enabled:true},
       '/api/copilot/models':{models},
@@ -277,27 +278,34 @@ test('Benchmarks runs approved paired read-only Copilot A/B and never invents a 
         coverage:{scope:'fixture',all_eligible_files_included:true,omitted:[],excluded:[]}}
     }});
   });
-  await page.route('**/api/benchmark/execute',async route=>{
-    calls.push('execute');
+  await page.route('**/api/benchmark/start',async route=>{
+    calls.push('start');
     expect(route.request().postDataJSON()).toMatchObject({
       repository:'demo',model:models[0],agent:'java-reviewer',approved_sha256:'a'.repeat(64)});
-    await route.fulfill({contentType:'application/x-ndjson',body:[
-      {type:'arm_started',arm:'baseline',total_batches:1},
-      {type:'progress',arm:'baseline',phase:'completed_batch',completed:1,total:1,batch:1},
-      {type:'batch_reply',arm:'baseline',batch:1,reply:'Baseline found A'},
-      {type:'arm_finished',arm:'baseline',status:'completed'},
-      {type:'arm_started',arm:'daeloryn',total_batches:1},
-      {type:'batch_reply',arm:'daeloryn',batch:1,reply:'Daeloryn found A and B'},
-      {type:'result',result:{kind:'paired-source-review-observation',
-        status:'completed',model:models[0],agent:'java-reviewer',
-        source_sha256:'b'.repeat(64),winner:'not_determined',
-        independent_checks_executed:false,model_identity_verified:false,
-        agent_selection_verified:false,warning:'Requires human review.',
-        arms:{baseline:{status:'completed',completed_batches:1,total_batches:1,
-          review:{reply:'Baseline found A'}},daeloryn:{status:'completed',
-          completed_batches:1,total_batches:1,review:{reply:'Daeloryn found A and B'}}}}}
-    ].map(x=>JSON.stringify(x)).join('\n')+'\n'});
+    await route.fulfill({status:202,json:{
+      run_id:'f'.repeat(32),status:'running',created_at:'2026-11-01T18:00:00+00:00'}});
   });
+  await page.route('**/api/benchmark/runs',route=>route.fulfill({json:{runs:[{
+    run_id:'f'.repeat(32),status:'completed',repository:'demo',mode:'review',
+    model:models[0],agent:'java-reviewer',created_at:'2026-11-01T18:00:00+00:00',
+    updated_at:'2026-11-01T18:01:00+00:00'}]}}));
+  await page.route('**/api/benchmark/runs/*',route=>route.fulfill({json:{
+    run_id:'f'.repeat(32),status:'completed',repository:'demo',mode:'review',
+    model:models[0],agent:'java-reviewer',created_at:'2026-11-01T18:00:00+00:00',
+    updated_at:'2026-11-01T18:01:00+00:00',
+    arms:{
+      baseline:{status:'completed',completed_batches:1,total_batches:1,reply:'Baseline found A',failure:null},
+      daeloryn:{status:'completed',completed_batches:1,total_batches:1,reply:'Daeloryn found A and B',failure:null}
+    },
+    result:{kind:'paired-source-review-observation',status:'completed',
+      model:models[0],agent:'java-reviewer',source_sha256:'b'.repeat(64),
+      winner:'not_determined',independent_checks_executed:false,
+      model_identity_verified:false,agent_selection_verified:false,
+      warning:'Requires human review.',
+      arms:{baseline:{status:'completed',completed_batches:1,total_batches:1,review:{reply:''}},
+        daeloryn:{status:'completed',completed_batches:1,total_batches:1,review:{reply:''}}}}
+  }}));
+
   await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
   const runner=page.getByRole('region',{name:'Paired benchmark runner'});
   await runner.getByLabel('Benchmark project').selectOption('demo');
@@ -308,8 +316,12 @@ test('Benchmarks runs approved paired read-only Copilot A/B and never invents a 
   await runner.getByRole('button',{name:'Approve & run A/B'}).click();
   await expect(runner.getByText('Winner: Not determined')).toBeVisible();
   await expect(runner.getByText('Daeloryn found A and B')).toBeVisible();
+  await page.getByRole('navigation').getByRole('button',{name:/Overview/}).click();
+  await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
+  await expect(page.getByRole('region',{name:'Saved benchmark runs'}).getByLabel('Saved benchmark run')).toHaveValue('f'.repeat(32));
+  await expect(page.getByText('Daeloryn found A and B')).toBeVisible();
   await expect(runner.getByText('Baseline found A')).toBeVisible();
-  expect(calls).toEqual(['prepare','execute']);
+  expect(calls).toEqual(['prepare','start']);
   await expect(runner.getByText('No reviewed result yet')).toBeVisible();
   await runner.getByLabel('baseline confirmed defects').fill('1');
   await runner.getByLabel('baseline false positives').fill('2');
