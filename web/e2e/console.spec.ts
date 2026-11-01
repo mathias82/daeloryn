@@ -336,7 +336,7 @@ test('Benchmarks runs approved paired read-only Copilot A/B and never invents a 
 
 test('Benchmarks cannot call Copilot before explicit approval',async({page})=>{
   let executions=0;
-  page.on('request',request=>{if(request.url().endsWith('/api/benchmark/execute'))executions++;});
+  page.on('request',request=>{if(request.url().endsWith('/api/benchmark/start'))executions++;});
   await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
   const runner=page.getByRole('region',{name:'Paired benchmark runner'});
   await expect(runner.getByRole('button',{name:'Prepare A/B benchmark'})).toBeDisabled();
