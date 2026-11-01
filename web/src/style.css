@@ -47,3 +47,13 @@
 .bubble-time{display:block;color:#8d9ab2;font-size:10px;margin:-2px 0 9px;font-variant-numeric:tabular-nums}
 .bubble.user .bubble-time{text-align:right;color:#c6bef0}
 .chat-messages{overflow-anchor:none;overscroll-behavior:contain}
+
+.history-row{display:grid;grid-template-columns:minmax(0,1fr) 28px;align-items:center;gap:2px;min-width:0}
+.history-row .history-item{min-width:0;width:100%}
+.history-delete{border:0;background:transparent;color:#9aa5bf;border-radius:7px;font-size:18px;line-height:1;padding:4px 6px}
+.history-delete:hover,.history-delete:focus-visible{background:#422b3b;color:#ffb3bd}
+.history-delete:disabled{opacity:.3;cursor:not-allowed}
+.history-confirm{grid-column:1/-1;border:1px solid #79576c;border-radius:9px;margin:3px 4px 9px;padding:10px;background:#211c2b;color:#f4d3dc;font-size:11px;line-height:1.5}
+.history-confirm>div{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+.history-confirm button{background:#36243b;border:1px solid #8a5d78;color:#f3d9e3;border-radius:7px;font-size:11px;padding:5px 8px}
+.history-confirm button:disabled{opacity:.4}
