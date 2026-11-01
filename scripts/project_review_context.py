@@ -2,7 +2,7 @@
 import os
 from pathlib import Path
 from code_context import EXCLUDE_DIRS, EXCLUDE_NAMES, SENSITIVE
-from project_analysis import analyze_local
+from project_analysis import NAME, analyze_local
 
 MAX_FILES = 500
 MAX_FILE_BYTES = 256 * 1024
@@ -13,8 +13,14 @@ BUILD_NAMES = {'README.md', 'package.json', 'pyproject.toml', 'requirements.txt'
 
 
 def snapshot(root, name):
+    if not isinstance(name, str) or not NAME.fullmatch(name):
+        raise ValueError('Invalid repository name')
+    trusted = os.path.realpath(os.fspath(root))
+    normalized = os.path.abspath(os.path.join(trusted, name))
+    if not normalized.startswith(trusted.rstrip(os.sep) + os.sep):
+        raise ValueError('Repository must remain inside its trusted parent')
     analyze_local(root, name)
-    base = Path(root).resolve(strict=True) / name
+    base = Path(normalized)
     files, omitted, excluded = [], [], []
     total, entries = 0, 0
 

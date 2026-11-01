@@ -48,7 +48,8 @@ def prepare(root, repository, task, model, agent=None):
             for offset in range(0, max(1, len(line)), 512):
                 segment = line[offset:offset + 512]
                 piece = json.dumps({'file': item['path'], 'line': number, 'column': offset + 1, 'source': segment}, ensure_ascii=False) + '\n'
-                if len(current) + len(piece) > MAX_PROMPT_CHARS:
+                encoded_size = len(json.dumps([{'role': 'user', 'content': current + piece}]).encode('utf-8'))
+                if len(current) + len(piece) > MAX_PROMPT_CHARS or encoded_size > 96000:
                     prompts.append(current)
                     current = prefix
                 current += piece
@@ -115,7 +116,10 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat):
     if not failure and not prepared.get('coverage', {}).get('all_eligible_files_included', False):
         failure = 'Some eligible sources were omitted; see coverage. This is not a complete project review.'
     answer = '\n\n'.join(('Batch %d:\n' % (i + 1) if len(prompts) > 1 else '') + row['reply'] for i, row in enumerate(replies))
-    return {'review': {**(replies[0] if len(replies) == 1 else {}), 'reply': answer},
+    return {'review': {'provider': 'github-copilot-cli', 'requested_model': model,
+                        'model_identity_verified': False, 'agent_selected': agent,
+                        'agent_profile_sha256': selection['agent_profile_sha256'],
+                        'agent_identity_verified': False, 'reply': answer},
             'status': 'partial' if failure else 'completed', 'failure': failure,
             'source_transmitted': attempted > 0, 'approved_sha256': digest,
             'completed_batches': len(replies), 'total_batches': len(prompts),

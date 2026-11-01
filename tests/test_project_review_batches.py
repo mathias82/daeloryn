@@ -83,6 +83,21 @@ class ProjectReviewBatchTests(unittest.TestCase):
         self.assertNotIn('not-real', data['files'][0]['source'])
         self.assertTrue(any(row['path'] == 'node_modules' for row in data['excluded']))
 
+    def test_snapshot_rejects_traversal_before_walking(self):
+        for name in ['../elsewhere', '/etc', 'demo/../elsewhere']:
+            with patch('project_review_context.os.scandir') as walk:
+                with self.assertRaises(ValueError):
+                    snapshot(self.root, name)
+                walk.assert_not_called()
+
+    def test_unicode_sources_respect_encoded_request_limits_without_losing_tail(self):
+        (self.project / 'App.java').write_text('/* ' + 'α中🙂' * 12000 + ' END */')
+        prepared = prepare(self.root, 'demo', 'Review', 'sonnet')
+        self.assertIn('END', prepared['prompt'])
+        self.assertTrue(prepared['coverage']['all_eligible_files_included'])
+        for prompt in prepared['prompts']:
+            validate({'model': 'sonnet', 'messages': [{'role': 'user', 'content': prompt}]}, review_context=True)
+
     def test_local_budget_before_first_batch_has_known_no_provider_outcome(self):
         (self.project / 'App.java').write_text('class App {}')
         prepared = prepare(self.root, 'demo', 'Review', 'sonnet')
