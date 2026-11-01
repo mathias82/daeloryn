@@ -135,7 +135,7 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
             not isinstance(reply, str) or not reply
             for i, reply in resume_batches.items()):
         raise ValueError('invalid confirmed resume batch receipts')
-    replies, failure, attempted = [], None, 0
+    replies, failure, attempted, newly_started = [], None, 0, 0
     started = time.monotonic()
     if parallelism == 2:
         results, pending, attempted = {i-1: {'reply': reply} for i, reply in resume_batches.items()}, {}, 0
@@ -154,7 +154,7 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
             return response
         with ThreadPoolExecutor(max_workers=2, thread_name_prefix='daeloryn-batch') as executor:
             def dispatch():
-                nonlocal attempted
+                nonlocal attempted, newly_started
                 while (len(pending) < 2 and attempted < len(requests) and failure is None and
                        (cancel_event is None or not cancel_event.is_set()) and
                        time.monotonic()-started < MAX_SECONDS and total_output < MAX_REVIEW_OUTPUT):
@@ -167,6 +167,7 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
                     if progress:
                         progress({'type':'batch_started','batch':index+1})
                     pending[executor.submit(run_one, index)] = index
+                    newly_started += 1
                     if progress:
                         progress({'type':'progress','phase':'running','completed':len(results),
                                   'total':len(requests),'batch':index+1})
@@ -200,6 +201,8 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
                 if failure is None and attempted < len(requests) and total_output >= MAX_REVIEW_OUTPUT:
                     failure = 'Output budget reached; remaining batches not invoked.'
                 dispatch()
+        if failure is None and len(results) != len(requests):
+            failure = 'Local time/output budget reached; remaining batches were not invoked.'
         replies = [results[i] for i in sorted(results)]
     else:
         for index, request in enumerate(requests):
@@ -222,6 +225,7 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
                 progress({'type': 'progress', 'phase': 'running', 'completed': len(replies),
                           'total': len(prompts), 'batch': attempted + 1})
             attempted += 1
+            newly_started += 1
             if progress:
                 progress({'type':'batch_started','batch':index+1})
             try:
@@ -258,8 +262,8 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
                         'agent_identity_verified': False, 'reply': answer},
             'status': ('stopped' if cancel_event is not None and cancel_event.is_set() else
                        'partial' if failure else 'completed'), 'failure': failure,
-            'source_transmitted': attempted > 0, 'approved_sha256': digest,
+            'source_transmitted': newly_started > 0, 'approved_sha256': digest,
             'completed_batches': complete_count, 'total_batches': len(prompts),
-            'remaining_not_run': max(0, len(prompts) - (attempted if parallelism==2 else len(resume_batches)+attempted)), 'coverage': prepared.get('coverage'),
+            'remaining_not_run': max(0, len(prompts) - len(resume_batches) - newly_started), 'coverage': prepared.get('coverage'),
             'patch_applied': False, 'tests_executed': False, 'pull_request_created': False,
             'verified_usage_credits': None, 'usage_note': 'Provider does not supply structured, verified credit usage through this CLI interface.'}
