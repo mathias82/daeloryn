@@ -11,7 +11,7 @@ const OTHER_RANGE=/(?:\s*(?:,|and|or|\(imports?\)))+\s*(\d{1,6})(?:\s*[-–]\s*(
 function resolvedFilename(name:string,files:string[]):string|null{
  const exact=files.filter(file=>file===name);
  if(exact.length===1)return exact[0];
- const candidates=files.filter(file=>file.split('/').at(-1)===name);
+ const candidates=files.filter(file=>file.split('/').slice(-1)[0]===name);
  return candidates.length===1?candidates[0]:null;
 }
 function uniqueRanges(ranges:SourceRange[]):SourceRange[]{
