@@ -84,7 +84,7 @@ class RunStore:
         with self.guard:
             if not self.directory.is_dir():
                 return []
-            paths = sorted(self.directory.glob("*.json"), key=lambda p: p.name, reverse=True)
+            paths = sorted(self.directory.glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True)
             if len(paths) > MAX_RECORDS:
                 # Bounded, predictable storage; do not silently discard runs.
                 paths = paths[:MAX_RECORDS]
@@ -143,8 +143,10 @@ class RunStore:
                         elif event_type == "batch_reply" and isinstance(event.get("reply"), str):
                             # Preserve completed batches independently of final provider result.
                             piece = event["reply"][:65536]
-                            row["reply"] += ("\n\n" if row["reply"] else "") + \
+                            next_reply = row["reply"] + ("\n\n" if row["reply"] else "") + \
                                 ("Batch %s:\n" % event.get("batch", "?")) + piece
+                            row["reply"] = (next_reply[:200000] +
+                                            ("\n[Transcript truncated for local storage]" if len(next_reply) > 200000 else ""))
                         elif event_type == "arm_finished":
                             row["status"] = event.get("status", "partial")
                         record["updated_at"] = _utc()
@@ -152,7 +154,15 @@ class RunStore:
 
                 result = runner(prepared, approved_digest, progress=progress)
                 with self.guard:
-                    record["result"] = result
+                    # Avoid duplicating large model transcripts in the receipt.
+                    record["result"] = {
+                        **result,
+                        "arms": {key: {
+                            **value, "review": {
+                                **value.get("review", {}), "reply": ""
+                            }
+                        } for key, value in result.get("arms", {}).items()}
+                    }
                     record["status"] = result["status"]
                     for arm, outcome in result.get("arms", {}).items():
                         if arm in record["arms"]:
@@ -161,8 +171,8 @@ class RunStore:
                                 "completed_batches": outcome.get("completed_batches", 0),
                                 "total_batches": outcome.get("total_batches", 0),
                                 "failure": outcome.get("failure"),
-                                "reply": outcome.get("review", {}).get("reply", "") or
-                                         record["arms"][arm]["reply"]
+                                "reply": (outcome.get("review", {}).get("reply", "") or
+                                          record["arms"][arm]["reply"])[:200000]
                             })
                     if result["status"] != "completed":
                         record["error"] = ("Partial benchmark: a provider batch failed, timed out "
