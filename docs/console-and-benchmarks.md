@@ -8,10 +8,10 @@ Requires Python 3.11+, Node.js/npm and, for Copilot requests, an installed/authe
 
 ```bash
 cd web && npm ci && cd ..
-python3 scripts/console.py --enable-copilot-chat --enable-project-picker --open
+./start.sh
 ```
 
-Use `--help` for local configuration. Both servers bind to loopback; the console does not silently reclaim occupied ports.
+`./start.sh` starts the API and Vite together with explicit Copilot chat and project-picker opt-ins, then opens the browser. You can forward launcher flags like `./start.sh --repository-root /path/to/projects`. Press **Ctrl+C** to stop both owned services. Existing processes on occupied ports are never killed; missing dependencies produce actionable errors. For custom/manual startup, the equivalent is `python3 scripts/console.py --enable-copilot-chat --enable-project-picker --open`. Use `python3 scripts/console.py --help` for all flags. Both servers bind to loopback; the console does not silently reclaim occupied ports.
 
 For agent-only installation without a web console:
 
