@@ -62,7 +62,37 @@ def candidate_rules(agent, comparison):
     ]
 
 
-def campaign_report(runs, comparisons, *, agents=None):
+def applicable_to_project(agent, scope, technologies):
+    """Conservative domain match; unknown metadata never implies React/Spring."""
+    tags = set(technologies)
+    java = "java" in tags or any(v.startswith("java-") for v in tags)
+    spring = "spring" in tags
+    react = "react" in tags
+    runtime = java or react or "node" in tags or "python" in tags or "go" in tags
+    if scope == "java":
+        return java
+    if scope == "spring":
+        return spring
+    if scope == "react":
+        return react
+    if scope == "shared":
+        return runtime
+    if scope != "platform":
+        return False
+    if agent == "docker-engineer":
+        return "docker" in tags
+    if agent in ("kubernetes-engineer", "gitops-engineer"):
+        return "kubernetes" in tags
+    if agent == "cicd-engineer":
+        return "ci" in tags
+    if agent == "platform-security-engineer":
+        return bool(tags & {"docker", "kubernetes", "ci"})
+    if agent == "reliability-engineer":
+        return runtime
+    return False
+
+
+def campaign_report(runs, comparisons, *, agents=None, projects=None):
     """One step per catalogued specialist, in deterministic catalog order.
 
     No code paths or provider answers are exported; only sanitized observation
@@ -125,7 +155,54 @@ def campaign_report(runs, comparisons, *, agents=None):
         })
     completed = sum(row["state"] == "assessed_provisionally" for row in entries)
     weaker = sum(bool(row["candidate_rule_improvements"]) for row in entries)
+    # Runs and evaluations are strictly scoped to the selected project.
+    # Never advance the Java scenario for project B because project A passed.
+    project_campaigns = []
+    if projects is not None:
+        if not isinstance(projects, list) or len(projects) > 100:
+            raise ValueError("invalid project catalog")
+        seen_projects = set()
+        for project in projects:
+            name = project.get("name")
+            technologies = project.get("technologies")
+            if (not isinstance(name, str) or name in seen_projects or
+                    not isinstance(technologies, list) or
+                    not all(isinstance(tag, str) for tag in technologies)):
+                raise ValueError("invalid project metadata")
+            seen_projects.add(name)
+            scoped = campaign_report(
+                [run for run in runs if run.get("repository") == name],
+                [row for row in comparisons if row.get("repository") == name],
+                agents=agents,
+            )
+            scoped_entries = []
+            next_for_project = None
+            for entry in scoped["entries"]:
+                applicable = applicable_to_project(entry["agent"], entry["scope"], technologies)
+                updated = {**entry, "applicable": applicable}
+                if not applicable:
+                    updated.update({
+                        "state": "not_applicable",
+                        "inapplicable_reason": "No matching stack signal in bounded project manifests",
+                        "candidate_rule_improvements": [],
+                        "traceability_scores": None,
+                        "provisional_evidence_lead": "not_determined",
+                    })
+                if applicable and next_for_project is None and updated["state"] != "assessed_provisionally":
+                    next_for_project = entry["agent"]
+                scoped_entries.append(updated)
+            applicable_count = sum(item["applicable"] for item in scoped_entries)
+            assessed = sum(item["state"] == "assessed_provisionally" for item in scoped_entries)
+            project_campaigns.append({
+                "repository": name, "technologies": technologies,
+                "total_agents": len(scoped_entries),
+                "applicable_agents": applicable_count,
+                "provisionally_assessed": assessed,
+                "next_agent": next_for_project,
+                "entries": scoped_entries,
+            })
     return {
+        "project_campaigns": project_campaigns,
         "schema_version": 1,
         "kind": "daeloryn-sequential-agent-campaign",
         "generated_at": datetime.now(timezone.utc).isoformat(),
