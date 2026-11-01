@@ -18,14 +18,14 @@ python3 scripts/agents.py validate
 python3 scripts/agents.py install --target /path/to/project --module java --tool copilot
 ```
 
-For the optional **local web console**:
+For the optional **local web console** (frontend + backend together):
 
 ```bash
 cd web && npm ci && cd ..
-python3 scripts/console.py --enable-copilot-chat --enable-project-picker --open
+./start.sh
 ```
 
-The console binds to localhost. Agent installation and the console are independent; use only what you need. Other modules, tools, dry-run options and platform setup: [Getting started](docs/getting-started.md).
+Run `./start.sh --repository-root /path/to/projects` to add a checkout root. `start.sh` enables Copilot chat and the local project picker, and opens the browser at `http://127.0.0.1:5173/`. `Ctrl+C` stops both services; startup fails safely when ports 5173/8765 are occupied or dependencies are missing. The script does not automatically install packages or kill other processes. The console binds to localhost. Agent installation and the console are independent; use only what you need. Other modules, tools, dry-run options and platform setup: [Getting started](docs/getting-started.md).
 
 ## What it does
 
