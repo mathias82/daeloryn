@@ -16,7 +16,7 @@ class PublishTests(unittest.TestCase):
     with patch("approved_pr_publish.subprocess.run",return_value=SimpleNamespace(returncode=0,stdout="https://github.com/org/repo/pull/1")) as gh:
      publish(root,"Title","Body","a"*40,approved=True,
              expected_repository="org/repo",expected_push_url=url)
-   git.assert_any_call(root,"push",url,"a"*40+":refs/heads/daeloryn/fix")
+   git.assert_any_call(root.resolve(),"push",url,"a"*40+":refs/heads/daeloryn/fix")
    self.assertEqual(["gh","pr","create","--draft","--head","daeloryn/fix",
                      "--title","Title","--body","Body","--repo","org/repo"],gh.call_args.args[0])
  def test_changed_push_url_is_denied_before_network(self):
