@@ -38,7 +38,7 @@ class BenchmarkRunStoreTests(unittest.TestCase):
     def test_persists_across_new_instances_and_preserves_partial_results(self):
         released=threading.Event()
         started=threading.Event()
-        def worker(_prepared,_digest,*,progress):
+        def worker(_prepared,_digest,*,progress,cancel_event,parallelism):
             progress({"type":"arm_started","arm":"baseline","total_batches":1})
             progress({"type":"batch_reply","arm":"baseline","batch":1,"reply":"A source finding"})
             started.set()
@@ -82,6 +82,44 @@ class BenchmarkRunStoreTests(unittest.TestCase):
         with self.assertRaises(PermissionError):
             self.store.start(self.prepared,"c"*64,lambda *_args: self.fail("provider started"))
         self.assertEqual([],self.store.list())
+
+
+    def test_stop_preserves_completed_batches_and_requires_terminal_state_for_deletion(self):
+        started=threading.Event()
+        def worker(_prepared,_digest,*,progress,cancel_event,parallelism):
+            self.assertEqual(2,parallelism)
+            progress({"type":"arm_started","arm":"baseline","total_batches":4})
+            progress({"type":"progress","arm":"baseline","completed":1,"total":4})
+            progress({"type":"batch_reply","arm":"baseline","batch":1,"reply":"Verified partial reply"})
+            started.set()
+            cancel_event.wait(2)
+            return {"status":"stopped","arms":{"baseline":{
+                "status":"stopped","completed_batches":1,"total_batches":4,
+                "failure":"Cancelled","review":{"reply":"Verified partial reply"}}}}
+        run=self.store.start(self.prepared,"b"*64,worker)
+        self.assertTrue(started.wait(3))
+        with self.assertRaises(RuntimeError):
+            self.store.delete(run["run_id"])
+        response=self.store.stop(run["run_id"])
+        self.assertEqual("stopping",response["status"])
+        self.assertEqual("stopping",self.store.get(run["run_id"])["status"])
+        for _ in range(100):
+            if self.store.get(run["run_id"])["status"]=="stopped":break
+            time.sleep(0.02)
+        receipt=self.store.get(run["run_id"])
+        self.assertEqual("stopped",receipt["status"])
+        self.assertIn("Verified partial reply",receipt["arms"]["baseline"]["reply"])
+        self.assertEqual(1,receipt["arms"]["baseline"]["completed_batches"])
+        self.assertEqual(True,self.store.delete(run["run_id"])["deleted"])
+        self.assertEqual([],self.store.list())
+        with self.assertRaises(FileNotFoundError):
+            self.store.get(run["run_id"])
+
+    def test_stopping_wont_launch_more_workers_or_allow_wrong_id(self):
+        with self.assertRaises(ValueError):
+            self.store.stop("../wrong")
+        with self.assertRaises(ValueError):
+            self.store.delete("../wrong")
 
 
 class BenchmarkRunApiTests(unittest.TestCase):
@@ -137,6 +175,39 @@ class BenchmarkRunApiTests(unittest.TestCase):
         code,rows=self.request("GET","/api/benchmark/runs")
         self.assertEqual(200,code)
         self.assertEqual(run["run_id"],rows["runs"][0]["run_id"])
+
+    def test_stop_and_delete_run_from_loopback_api(self):
+        selection={"repository":"demo","mode":"review","model":"test","agent":"java-reviewer"}
+        _,manifest=self.request("POST","/api/benchmark/prepare",selection)
+        started=threading.Event()
+        def worker(prepared,digest,*,progress,cancel_event,parallelism):
+            progress({"type":"arm_started","arm":"baseline","total_batches":1})
+            started.set()
+            cancel_event.wait(4)
+            return {"status":"stopped","arms":{}}
+        with patch("console_api.execute_pair",side_effect=worker):
+            code,run=self.request("POST","/api/benchmark/start",
+                 {**selection,"approved_sha256":manifest["sha256"]})
+            self.assertEqual(202,code)
+            self.assertTrue(started.wait(2))
+            rid=run["run_id"]
+            code,error=self.request("POST","/api/benchmark/runs/"+rid+"/delete",{})
+            self.assertEqual(409,code)
+            code,stop=self.request("POST","/api/benchmark/runs/"+rid+"/stop",{})
+            self.assertEqual(200,code)
+            self.assertEqual("stopping",stop["status"])
+            for _ in range(80):
+                code,detail=self.request("GET","/api/benchmark/runs/"+rid)
+                if detail["status"]=="stopped":break
+                time.sleep(0.025)
+            self.assertEqual("stopped",detail["status"])
+            code,deleted=self.request("POST","/api/benchmark/runs/"+rid+"/delete",{})
+            self.assertEqual(200,code)
+            self.assertTrue(deleted["deleted"])
+            code,_=self.request("GET","/api/benchmark/runs/"+rid)
+            self.assertEqual(404,code)
+            self.assertEqual([],(self.request("GET","/api/benchmark/runs"))[1]["runs"])
+
     def test_unapproved_or_changed_source_cannot_start_run(self):
         selection={"repository":"demo","mode":"review","model":"test","agent":"java-reviewer"}
         _,manifest=self.request("POST","/api/benchmark/prepare",selection)
