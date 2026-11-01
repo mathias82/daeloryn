@@ -35,11 +35,11 @@ class CopilotProviderError(RuntimeError):
 def classify_cli_failure(output):
     """Closed vocabulary only. The caller must never expose raw CLI output."""
     data = output[-4096:].decode("utf-8", errors="replace").casefold()
-    if re.search(r"(?<!\\d)429(?!\\d)|too many requests|rate.limit|throttl", data):
+    if re.search(r"(?<!\d)429(?!\d)|too many requests|rate.limit|throttl", data):
         return "rate_limit"
-    if re.search(r"(?<!\\d)413(?!\\d)|context.window|context.length|prompt.too.long|too many tokens|request too large|token limit exceeded", data):
+    if re.search(r"(?<!\d)413(?!\d)|context.window|context.length|prompt.too.long|too many tokens|request too large|token limit exceeded", data):
         return "context_limit"
-    if re.search(r"(?<!\\d)401(?!\\d)|(?<!\\d)403(?!\\d)|unauthori[sz]ed|not authenticated|login required|access denied", data):
+    if re.search(r"(?<!\d)401(?!\d)|(?<!\d)403(?!\d)|unauthori[sz]ed|not authenticated|login required|access denied", data):
         return "authentication"
     if re.search(r"insufficient.credits|quota.exceeded|usage limit|credit limit|out of credits", data):
         return "credits"
