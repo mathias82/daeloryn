@@ -668,6 +668,17 @@ test('Smart code review selects Java Reviewer and Inspector receives safe links 
   await inspector.getByRole('button',{name:'Full screen Code Inspector'}).click();
   await inspector.getByRole('button',{name:'Exit full screen Code Inspector'}).click();
   await expect(page.locator('.code-inspector-fullscreen')).toHaveCount(0);
+  await inspector.getByRole('button',{name:'Edit suggestion mode'}).click();
+  const suggestions=inspector.getByRole('region',{name:'Edit suggestion draft'});
+  await expect(suggestions.getByText(/This is a proposed replacement/)).toBeVisible();
+  await expect(suggestions.getByLabel('Original source lines')).toContainText('x.toString()');
+  const input=suggestions.getByRole('textbox',{name:'Suggested replacement'});
+  await input.fill('  String read(){ return x == null ? "" : x.toString(); }');
+  await expect(suggestions.getByLabel('Suggested diff preview')).toContainText('-  String read(){ return x.toString(); }');
+  await expect(suggestions.getByLabel('Suggested diff preview')).toContainText('+  String read(){ return x == null');
+  await expect(suggestions.getByRole('button',{name:'Copy proposed patch'})).toBeEnabled();
+  await inspector.getByRole('button',{name:'Inspect mode'}).click();
+  await expect(suggestions).toHaveCount(0);
   await page.getByRole('button',{name:'Toggle session details'}).click();
   await expect(page.getByLabel(/^Agent/)).toHaveValue('java-reviewer');
 });
