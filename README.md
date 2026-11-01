@@ -57,6 +57,14 @@ When a local project is selected, Chat's **Send** automatically prepares its
 read-only code context; one explicit manifest approval starts the bounded
 review batches and their progress is shown directly in the conversation.
 
+## Frontend A/B benchmark pilot
+
+The local console **Benchmarks** page now offers an approved, read-only paired
+Copilot vs Copilot+Daeloryn review for a selected local checkout. It shares an
+identical source snapshot and requested model, streams each arm's results, and
+requires external defect adjudication before claiming a winner. No patches or
+regression tests run in this pilot. See [the setup and evidence boundary](web/README.md).
+
 ## Why use it?
 
 **Pros:** reusable specialists, modular installation, common definitions for four tools, testable installer and evaluations.
