@@ -247,6 +247,16 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     expected = {"repository", "task", "model", "approved_sha256"} if is_execute else {"repository", "task", "model"}
                     if not isinstance(payload, dict) or set(payload) not in (expected, expected | {"agent"}):
                         raise ValueError("invalid review payload")
+                    # Resolve automatic routing only at preparation time. The UI
+                    # submits the resulting concrete model with the approved digest
+                    # at execution; no silent re-routing after consent.
+                    if not is_execute and payload["model"] == "auto":
+                        routed, _ = route_chat({
+                            "model": "auto",
+                            "messages": [{"role": "user", "content": payload["task"]}],
+                            **({"agent": payload["agent"]} if "agent" in payload else {})
+                        })
+                        payload["model"] = routed["model"]
                     matches = resolve_repository(payload["repository"])
                     if len(matches) != 1:
                         raise ValueError("repository must resolve uniquely")
@@ -254,7 +264,8 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                                                  payload["model"], payload.get("agent"))
                     if is_execute:
                         if self.headers.get("Accept") == "application/x-ndjson":
-                            result = execute_ai_review(prepared, payload["model"], payload["approved_sha256"], progress=emit)
+                            result = execute_ai_review(prepared, payload["model"], payload["approved_sha256"],
+                                                        progress=emit, stream_replies=True)
                             emit({"type": "result", "result": result})
                             return
                         result = execute_ai_review(prepared, payload["model"], payload["approved_sha256"])
