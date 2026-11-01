@@ -386,3 +386,9 @@ The expandable External trial evidence section uses a different data source:
 is the agent catalog × four providers × two arms, not local campaign completion.
 With no external JSON trial records it stays at zero. Local runs never fabricate
 independent model identity, agent identity, test execution, or comparability flags.
+
+The root `./start.sh` launcher enables local patch application by passing
+`--enable-patch-apply`. Each write still requires reviewing the exact diff and
+checking its separate approval box, a clean checkout, and a fresh branch.
+Starting `scripts/console.py` directly keeps patch application disabled unless
+the flag is provided.

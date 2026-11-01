@@ -20,5 +20,6 @@ fi
 exec python3 "$ROOT/scripts/console.py" \
   --enable-copilot-chat \
   --enable-project-picker \
+  --enable-patch-apply \
   --open \
   "$@"

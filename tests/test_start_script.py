@@ -50,6 +50,7 @@ class StartScriptTests(unittest.TestCase):
                 "ARG=" + str((root / "scripts" / "console.py").resolve()),
                 "ARG=--enable-copilot-chat",
                 "ARG=--enable-project-picker",
+                "ARG=--enable-patch-apply",
                 "ARG=--open",
                 "ARG=--repository-root",
                 "ARG=/tmp/fixture",
