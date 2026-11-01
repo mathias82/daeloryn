@@ -11,6 +11,41 @@ class DeveloperTests(unittest.TestCase):
   self.tmp=tempfile.TemporaryDirectory();self.addCleanup(self.tmp.cleanup)
   self.root=Path(self.tmp.name);self.repo=self.root/'demo';(self.repo/'.git').mkdir(parents=True)
   self.file=self.repo/'App.java';self.file.write_text('class App { int x = 0; }\n')
+ def test_target_read_does_not_depend_on_whole_project_source_budget(self):
+  from unittest.mock import patch
+  with patch('project_review_context.MAX_TOTAL_BYTES',1):
+   prepared=prepare(self.root,'demo','App.java','Review','sonnet')
+  self.assertEqual(self.file.read_text(),prepared['source'])
+ def test_specific_source_rejections_and_exact_size_boundary(self):
+  with self.assertRaisesRegex(ValueError,'not found'):
+   prepare(self.root,'demo','Missing.java','Review','sonnet')
+  self.file.write_bytes(b'/'*12001)
+  with self.assertRaisesRegex(ValueError,'exceeds 12000'):
+   prepare(self.root,'demo','App.java','Review','sonnet')
+  # An exact-boundary file previously failed because preparation added a newline.
+  self.file.write_bytes(b'/'*12000)
+  self.assertEqual(12000,len(prepare(self.root,'demo','App.java','Review','sonnet')['source'].encode()))
+  self.file.write_bytes(b'class App {}\n// password placeholder\n')
+  with self.assertRaisesRegex(ValueError,'redaction on lines 2'):
+   prepare(self.root,'demo','App.java','Review','sonnet')
+  self.file.write_bytes(b'\xff')
+  with self.assertRaisesRegex(ValueError,'UTF-8'):
+   prepare(self.root,'demo','App.java','Review','sonnet')
+  self.file.write_bytes(b'abc\0def')
+  with self.assertRaisesRegex(ValueError,'nonempty text'):
+   prepare(self.root,'demo','App.java','Review','sonnet')
+ def test_dependency_and_symbolic_link_paths_are_not_read(self):
+  from unittest.mock import patch
+  with patch('review_developer.read_source') as reader:
+   with self.assertRaisesRegex(ValueError,'excluded'):
+    prepare(self.root,'demo','node_modules/App.java','Review','sonnet')
+   reader.assert_not_called()
+  try:
+   (self.repo/'alias').symlink_to(self.repo,target_is_directory=True)
+  except (OSError,NotImplementedError):
+   self.skipTest('symlinks unavailable')
+  with self.assertRaisesRegex(ValueError,'symbolic links'):
+   prepare(self.root,'demo','alias/App.java','Review','sonnet')
  def test_handoff_returns_diff_without_modification(self):
   original=self.file.read_text();p=prepare(self.root,'demo','App.java','App.java:1 initialize x to 1','sonnet')
   calls=[]
