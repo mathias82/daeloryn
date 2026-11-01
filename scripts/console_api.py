@@ -14,6 +14,7 @@ from code_review import review
 from approved_copilot_review import prepare as prepare_ai_review, execute as execute_ai_review
 from patch_workspace import preview as preview_patch
 from repair_agent import suggest as diagnose_failure
+from workflow_recovery import inspect_interrupted
 from local_chat import installed_models, chat, MAX_REQUEST
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 import json
@@ -50,7 +51,7 @@ def benchmark_data(records_dir=None):
     return matrix(records)
 
 
-def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repository_roots=(), enable_github_repositories=False):
+def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repository_roots=(), enable_github_repositories=False, workflow_dir=None):
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):
             host = self.headers.get("Host", "")
@@ -113,6 +114,12 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     except (OSError, ValueError, KeyError, TypeError):
                         names, available = [], False
                     payload = {"models": names, "provider": "ollama-local", "chat_enabled": available}
+                elif path.path == "/api/workflows/interrupted":
+                    if workflow_dir is None:
+                        self.reply(405, {"error": "workflow inspection disabled"})
+                        return
+                    payload = {"interrupted": inspect_interrupted(workflow_dir),
+                               "read_only": True, "execution_enabled": False}
                 elif path.path == "/api/benchmarks":
                     payload = benchmark_data(records_dir)
                 else:
@@ -370,6 +377,7 @@ def main():
     p.add_argument("--enable-copilot-chat", action="store_true", help="opt in to Copilot CLI inference")
     p.add_argument("--enable-local-chat", action="store_true", help="opt in to local Ollama inference")
     p.add_argument("--records-dir", type=Path)
+    p.add_argument("--workflow-dir", type=Path, help="opt-in local workflow state directory for read-only inspection")
     p.add_argument("--enable-github-repositories", action="store_true")
     p.add_argument("--repository-root", type=Path, action="append", default=[], help="trusted parent directory of local git checkouts (repeatable)")
     a = p.parse_args()
@@ -377,11 +385,13 @@ def main():
         p.error("port must be 1024..65535")
     if a.records_dir is not None and (a.records_dir.is_symlink() or not a.records_dir.is_dir()):
         p.error("records-dir must be an existing real directory")
+    if a.workflow_dir is not None and (a.workflow_dir.is_symlink() or not a.workflow_dir.is_dir()):
+        p.error("workflow-dir must be an existing real directory")
     try:
         discover(a.repository_root)
     except (OSError, ValueError) as exc:
         p.error("invalid repository roots: " + str(exc))
-    server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(a.records_dir, a.enable_local_chat, a.enable_copilot_chat, a.repository_root, a.enable_github_repositories))
+    server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(a.records_dir, a.enable_local_chat, a.enable_copilot_chat, a.repository_root, a.enable_github_repositories, a.workflow_dir))
     print("Daeloryn local console API listening on http://127.0.0.1:" + str(a.port), flush=True)
     try:
         server.serve_forever()
