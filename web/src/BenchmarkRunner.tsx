@@ -114,7 +114,7 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
       if(!response.body||!response.headers.get('content-type')?.includes('application/x-ndjson'))
         throw new Error('Expected a streamed benchmark response');
       const reader=response.body.getReader(),decoder=new TextDecoder();
-      let pending='',complete:PairResult|null=null;
+      let pending='',complete:unknown=null;
       function process(line:string){
         if(!line.trim())return;
         const event=JSON.parse(line) as Record<string,unknown>;
@@ -142,11 +142,12 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
         for(const line of lines)process(line);
         if(done){process(pending);break;}
       }
-      if(!complete||complete.kind!=='paired-source-review-observation'||
-        !complete.arms||!complete.warning)
+      if(!complete||typeof complete!=='object'||!('kind' in complete)||
+        complete.kind!=='paired-source-review-observation'||!('arms' in complete)||!('warning' in complete))
         throw new Error('Stream ended without a valid final comparison; outcome may be unknown');
-      setResult(complete);
-      setProgress(complete.status==='completed'?'Both model arms returned. Human review needed.':
+      const receipt=complete as PairResult;
+      setResult(receipt);
+      setProgress(receipt.status==='completed'?'Both model arms returned. Human review needed.':
         'Partial run. Do not automatically retry unknown outcomes.');
       setManifest(null);setApproved(false);
     }catch(e){
