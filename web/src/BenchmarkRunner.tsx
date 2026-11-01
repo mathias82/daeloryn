@@ -4,6 +4,8 @@ type Agent={name:string;scope:string;description:string};
 type Project={name:string;path:string;technologies:string[]};
 type Mode='review'|'architecture'|'fix-plan';
 type Arm='baseline'|'daeloryn';
+type Assessment={confirmed:string;falsePositives:string;references:string};
+const emptyAssessment=():Record<Arm,Assessment>=>({baseline:{confirmed:'',falsePositives:'',references:''},daeloryn:{confirmed:'',falsePositives:'',references:''}});
 type Coverage={scope:string;all_eligible_files_included:boolean;omitted:{path:string;reason:string}[];excluded:{path:string;reason:string}[]};
 type PreparedArm={sha256:string;prompt:string;files:string[];batch_count:number;agent:string|null;agent_profile:string|null;coverage:Coverage};
 type PreparedPair={
@@ -46,6 +48,8 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
   const [progress,setProgress]=useState('');
   const [partial,setPartial]=useState<Record<Arm,string>>({baseline:'',daeloryn:''});
   const [result,setResult]=useState<PairResult|null>(null);
+  const [assessments,setAssessments]=useState<Record<Arm,Assessment>>(emptyAssessment);
+  const [humanChecked,setHumanChecked]=useState(false);
   const [error,setError]=useState('');
   const active=useRef<AbortController|null>(null);
   const inFlight=useRef(false);
@@ -57,6 +61,7 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
   function clear(){
     setManifest(null);setApproved(false);setResult(null);setError('');
     setPartial({baseline:'',daeloryn:''});setProgress('');
+    setAssessments(emptyAssessment());setHumanChecked(false);
   }
   function chooseMode(next:Mode){setMode(next);setAgent(defaults[next]);clear();}
   const selection={repository,mode,model:chosenModel,agent:selectedAgent};
@@ -96,6 +101,7 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
     if(!manifest||!approved||busy||inFlight.current)return;
     inFlight.current=true;setBusy(true);setRunning(true);setError('');
     setResult(null);setPartial({baseline:'',daeloryn:''});
+    setAssessments(emptyAssessment());setHumanChecked(false);
     setProgress('Validating approved snapshot before first model call…');
     const controller=new AbortController();active.current=controller;
     // Two review arms, each up to 300 seconds between calls plus one active call.
@@ -158,6 +164,19 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
       window.clearTimeout(timeout);inFlight.current=false;
       setBusy(false);setRunning(false);
     }
+  }
+  function assessmentResult():string{
+    if(!humanChecked||result?.status!=='completed')return 'No reviewed result yet';
+    const a=assessments.baseline,b=assessments.daeloryn;
+    const valid=(value:Assessment)=>/^(0|[1-9]\d*)$/.test(value.confirmed)&&
+      /^(0|[1-9]\d*)$/.test(value.falsePositives)&&Boolean(value.references.trim());
+    if(!valid(a)||!valid(b))return 'Enter nonnegative whole counts and supporting file/line references for both arms';
+    const bc=Number(a.confirmed),dc=Number(b.confirmed);
+    const bf=Number(a.falsePositives),df=Number(b.falsePositives);
+    if(dc===bc&&df===bf)return 'Human-assessed tie on entered criteria';
+    if(dc>=bc&&df<=bf)return 'Human-assessed pilot advantage: Daeloryn (not independent certification)';
+    if(bc>=dc&&bf<=df)return 'Human-assessed pilot advantage: Plain Copilot (not independent certification)';
+    return 'Inconclusive: trade-off between confirmed findings and false positives';
   }
   function selectionWithDigest(p:PreparedPair){
     return {repository:p.repository,mode:p.mode,model:p.model,agent:p.agent,approved_sha256:p.sha256};
@@ -236,6 +255,28 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
         <p>Model identity independently verified: No · Agent activation independently verified: No · Regression checks executed: No.</p>
         <p>Compare confirmed unique findings, false positives, fix usefulness and source coverage manually before drawing a conclusion.</p>
       </div>}
+      {result&&result.status==='completed'&&mode==='review'&&<section className="benchmark-adjudication" aria-label="Human review of benchmark findings">
+        <h3>Optional manual evidence assessment</h3>
+        <p className="muted">Check actual file/line evidence and deduplicate root causes first. Enter counts for each arm; this assessment is user-supplied and is not an independently verified trial.</p>
+        <div className="benchmark-columns">
+          {(['baseline','daeloryn'] as const).map(arm=><div className="benchmark-arm" key={arm}>
+            <h3>{arm==='baseline'?'Plain Copilot':'Copilot + Daeloryn'}</h3>
+            <label>Confirmed unique defects
+              <input aria-label={arm+' confirmed defects'} inputMode="numeric" value={assessments[arm].confirmed} onChange={e=>{setHumanChecked(false);setAssessments(old=>({...old,[arm]:{...old[arm],confirmed:e.target.value}}));}}/>
+            </label>
+            <label>False positives
+              <input aria-label={arm+' false positives'} inputMode="numeric" value={assessments[arm].falsePositives} onChange={e=>{setHumanChecked(false);setAssessments(old=>({...old,[arm]:{...old[arm],falsePositives:e.target.value}}));}}/>
+            </label>
+            <label>Verified issue IDs and file:line references
+              <textarea aria-label={arm+' evidence references'} value={assessments[arm].references} onChange={e=>{setHumanChecked(false);setAssessments(old=>({...old,[arm]:{...old[arm],references:e.target.value}}));}} rows={3}/>
+            </label>
+          </div>)}
+        </div>
+        <label className="benchmark-approval"><input type="checkbox" checked={humanChecked} onChange={e=>setHumanChecked(e.target.checked)}/>
+          I manually checked source evidence for both arms and the entered counts are my own assessment, not automated verification.
+        </label>
+        <p role="status"><strong>{assessmentResult()}</strong></p>
+      </section>}
     </div>}
     {running&&<button className="outline-button" type="button" onClick={()=>{active.current?.abort();setProgress('Stopping observation; an in-flight remote call may have unknown outcome.');}}>Stop observing (no auto retry)</button>}
   </section>;
