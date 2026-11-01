@@ -275,11 +275,52 @@ export function CodeInspector({snapshot,onClose}:{
               <strong>Diff preview · source unchanged</strong>
               <pre role="region" aria-label="Suggested diff preview content">{patch||'No changes proposed yet. Edit the replacement code to preview a patch.'}</pre>
             </div>
+            {patch&&snapshot.sourceAccess&&!applied&&<>
+              <div className="inspector-apply-panel" role="group" aria-label="Approve developer patch">
+                <strong>Apply this patch · explicit local write approval</strong>
+                <p className="muted">The exact line replacement will be written to a newly created Git branch in your selected checkout. The tree must be clean, source unchanged and local writes explicitly enabled via <code>./start.sh --enable-code-writes</code>. No model calls, commits, pushes or tests occur automatically.</p>
+                <label>New fix branch
+                  <input aria-label="New fix branch" value={branch} maxLength={59}
+                    onChange={e=>{setBranch(e.target.value);setApplyConfirmed(false);}}/>
+                </label>
+                <label className="benchmark-approval"><input type="checkbox"
+                  aria-label="I approve writing this exact diff to a new local Git branch"
+                  checked={applyConfirmed} onChange={e=>setApplyConfirmed(e.target.checked)}/>
+                  I reviewed the exact diff and approve writing this file on a clean, new local Git branch.
+                </label>
+                <button type="button" disabled={!applyConfirmed||applyBusy||sourceLoading||
+                  !fullSource||fullSource.file!==draft.file||
+                  !/^daeloryn\/[a-z0-9][a-z0-9-]{0,50}$/.test(branch)}
+                  onClick={()=>void applyApprovedPatch()}>
+                  {applyBusy?'Applying reviewed patch…':'Apply approved fix to local branch'}
+                </button>
+              </div>
+            </>}
+            {applied&&<div className="inspector-apply-panel" role="group" aria-label="Approved developer patch applied">
+              <strong>Fix applied on {applied.branch}</strong>
+              <p>Changed: {applied.file}. The old review snapshot is stale. Run tests, inspect Git diff and review before committing.</p>
+              <label>Test suite (executes project code on this Mac)
+                <select aria-label="Approved test suite" value={suite} onChange={e=>{setSuite(e.target.value);setTestsApproved(false);}}>
+                  <option value="maven">Maven: mvn -B test</option>
+                  <option value="npm">npm: npm test -- --runInBand</option>
+                  <option value="python">Python: python3 -m unittest discover -s tests</option>
+                </select>
+              </label>
+              <label className="benchmark-approval"><input type="checkbox"
+                aria-label="Approve executing selected tests with host permissions"
+                checked={testsApproved} onChange={e=>setTestsApproved(e.target.checked)}/>
+                I approve running this selected test command with my local user privileges (not sandboxed).
+              </label>
+              <button type="button" disabled={!testsApproved||testsBusy}
+                onClick={()=>void runApprovedTests()}>{testsBusy?'Running approved tests…':'Run approved tests'}</button>
+              {testOutcome&&<details open><summary>{testOutcome.verified?'Tests passed':'Tests failed'} · {testOutcome.suite} · exit {testOutcome.returncode}</summary>
+                <pre role="region" aria-label="Local test output">{testOutcome.output}</pre></details>}
+            </div>}
           </>}
           {draftMessage&&<p role="status">{draftMessage}</p>}
         </section>}
       </>}
     </div>
-    <footer>Read-only workspace · suggestions are local drafts · Esc closes full screen · no source modification</footer>
+    <footer>Read-only review by default · code is modified only by explicit approved local patch · Esc closes full screen</footer>
   </aside>;
 }
