@@ -37,8 +37,9 @@ class ProjectStackTests(unittest.TestCase):
             '{"dependencies":{"react":"^19.0.0","react-dom":"^19.0.0"},'
             '"devDependencies":{"typescript":"^5.0.0"}}')
         (self.project/'Dockerfile').write_text('FROM scratch')
+        (self.project/'Chart.yaml').write_text('apiVersion: v2\nname: project\n')
         tags=detect_technologies(self.project)
-        for key in ('java','spring','node','react','typescript','docker'):
+        for key in ('java','spring','node','react','typescript','docker','kubernetes'):
             self.assertIn(key,tags)
 
     def test_node_without_react_never_selects_react_agents(self):
