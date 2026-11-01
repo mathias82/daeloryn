@@ -1,6 +1,6 @@
 /** Only references to lines found in the approved source manifest are navigable. */
 export type SourceBlock={file:string;line:number;column:number;end_line:number;source:string};
-export type SourceReference={file:string;line:number;batch:number;excerpt:string;verified:boolean};
+export type SourceReference={file:string;line:number;endLine:number;batch:number;excerpt:string;verified:boolean;kind:'bug'|'change'|'reference'};
 export type InspectorSnapshot={repository:string;sha256:string;sources:SourceBlock[];references:SourceReference[];completed:number;total:number;status:string};
 export function manifestSources(prompt:string,files:string[]):SourceBlock[]{
   const allow=new Set(files);
@@ -24,17 +24,21 @@ export function extractSourceReferences(reply:string,batch:number,sources:Source
   const paths=[...new Set(sources.map(s=>s.file))].sort((a,b)=>b.length-a.length);
   for(const path of paths){
     const escaped=path.replace(/[.*+?^$()|[\]\\{}]/g,'\\$&');
-    const expression=new RegExp(escaped+'(?:[:#]L?|\\s+[Ll]ines?\\s+)(\\d{1,6})','g');
+    const expression=new RegExp(escaped+'(?:[:#]L?|\\s+[Ll]ines?\\s+)(\\d{1,6})(?:\\s*[-–]\\s*(\\d{1,6}))?','g');
     let match:RegExpExecArray|null;
     while((match=expression.exec(reply))!==null&&found.length<max){
       const line=Number(match[1]);
-      const present=sources.some(s=>s.file===path&&line>=s.line&&line<=s.end_line);
-      found.push({file:path,line,batch,verified:present,excerpt:reply.slice(Math.max(0,match.index-75),Math.min(reply.length,match.index+135)).replace(/\s+/g,' ')});
+      const endLine=match[2]?Number(match[2]):line;
+      const present=endLine>=line&&endLine-line<=80&&sources.some(s=>s.file===path&&line>=s.line&&endLine<=s.end_line);
+      const excerpt=reply.slice(Math.max(0,match.index-120),Math.min(reply.length,match.index+170)).replace(/\s+/g,' ');
+      const kind=/\b(?:bug|defect|vulnerab|exception|unsafe|leak|race|NPE|null dereference|error|σφάλμ)\w*/i.test(excerpt)?'bug':
+        /\b(?:fix|change|modify|replace|refactor|update|should|must|διορθ|αλλαγ)\w*/i.test(excerpt)?'change':'reference';
+      found.push({file:path,line,endLine,batch,verified:present,kind,excerpt});
     }
   }
   return found.sort((a,b)=>a.batch-b.batch||a.file.localeCompare(b.file)||a.line-b.line);
 }
-export function sourcePreview(sources:SourceBlock[],file:string,target:number){
+export function sourcePreview(sources:SourceBlock[],file:string,target:number,windowSize=42){
   const blocks=sources.filter(s=>s.file===file).sort((a,b)=>a.line-b.line||a.column-b.column);
   const list:{line:number;text:string}[]=[];
   for(const block of blocks){
@@ -48,7 +52,8 @@ export function sourcePreview(sources:SourceBlock[],file:string,target:number){
     }
   }
   const index=list.findIndex(l=>l.line>=target);
-  return list.slice(Math.max(0,(index<0?0:index)-8),Math.max(0,(index<0?0:index)-8)+42);
+  const start=Math.max(0,(index<0?0:index)-Math.min(12,Math.floor(windowSize/3)));
+  return list.slice(start,start+windowSize);
 }
 
 
