@@ -6,6 +6,7 @@ No repository tools, modifications, test execution or automatic provider retries
 import hashlib
 import json
 import time
+from concurrent.futures import ThreadPoolExecutor, wait, FIRST_COMPLETED
 from project_review_context import snapshot
 from focused_project_context import snapshot_focused
 from copilot_chat import copilot_chat, validate
@@ -97,7 +98,7 @@ def prepare(root, repository, task, model, agent=None, *, _context=None, scope='
             'warning': 'Inspect all source before approval. Heuristic redaction is not a secret scanner. Each batch is a separate potentially billable model call. Review stops after 5 minutes or output budget; partial outcomes are reported. Cross-batch reasoning is not guaranteed.'}
 
 
-def execute(prepared, model, approved_digest, *, transport=copilot_chat, progress=None, stream_replies=False):
+def execute(prepared, model, approved_digest, *, transport=copilot_chat, progress=None, stream_replies=False, cancel_event=None, parallelism=1):
     if not isinstance(prepared, dict) or not isinstance(prepared.get('prompt'), str):
         raise ValueError('invalid prepared context')
     prompt = prepared['prompt']
@@ -123,44 +124,118 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat, progres
             request['agent'] = agent
         validate(request, review_context=True)
         requests.append(request)
+    if not isinstance(parallelism, int) or not 1 <= parallelism <= 2:
+        raise ValueError('unsupported batch concurrency: maximum 2')
     replies, failure, attempted = [], None, 0
     started = time.monotonic()
-    for request in requests:
-        batch = request['messages'][0]['content']
-        if time.monotonic() - started >= MAX_SECONDS or sum(len(r['reply']) for r in replies) >= MAX_REVIEW_OUTPUT:
-            failure = 'Local time/output budget reached; remaining batches were not invoked.'
-            break
-        kwargs = {'expected_agent_sha256': profile['sha256']} if profile else {}
-        if len(batch) > 3000:
-            kwargs['review_context'] = True
-        if progress:
-            progress({'type': 'progress', 'phase': 'running', 'completed': len(replies),
-                      'total': len(prompts), 'batch': attempted + 1})
-        attempted += 1
-        try:
+    if parallelism == 2:
+        results, pending, attempted = {}, {}, 0
+        total_output = 0
+        def run_one(index):
+            request = requests[index]
+            batch = request['messages'][0]['content']
+            kwargs = {'expected_agent_sha256': profile['sha256']} if profile else {}
+            if len(batch) > 3000:
+                kwargs['review_context'] = True
+            if cancel_event is not None:
+                kwargs['cancel_event'] = cancel_event
             response = transport(request, **kwargs)
             if not isinstance(response, dict) or not isinstance(response.get('reply'), str):
                 raise RuntimeError('invalid provider response')
-            replies.append(response)
-        except (RuntimeError, TimeoutError, OSError, PermissionError):
-            failure = 'Provider call failed; external outcome may be unknown. Remaining batches not invoked; no retry performed.'
-            break
-        if progress:
-            progress({'type': 'progress', 'phase': 'completed_batch', 'completed': len(replies),
-                      'total': len(prompts), 'batch': attempted})
-            if stream_replies:
-                # Completed model replies are streamed per batch, not per token.
-                progress({'type': 'batch_reply', 'batch': attempted, 'reply': response['reply']})
+            return response
+        with ThreadPoolExecutor(max_workers=2, thread_name_prefix='daeloryn-batch') as executor:
+            def dispatch():
+                nonlocal attempted
+                while (len(pending) < 2 and attempted < len(requests) and failure is None and
+                       (cancel_event is None or not cancel_event.is_set()) and
+                       time.monotonic()-started < MAX_SECONDS and total_output < MAX_REVIEW_OUTPUT):
+                    index = attempted
+                    pending[executor.submit(run_one, index)] = index
+                    attempted += 1
+                    if progress:
+                        progress({'type':'progress','phase':'running','completed':len(results),
+                                  'total':len(requests),'batch':index+1})
+            dispatch()
+            while pending:
+                done, _ = wait(tuple(pending), timeout=0.2, return_when=FIRST_COMPLETED)
+                if not done:
+                    # An active provider call may still be in flight during stop;
+                    # the CLI transport kills its local process when cancellation is set.
+                    continue
+                for future in done:
+                    index = pending.pop(future)
+                    try:
+                        response = future.result()
+                        results[index] = response
+                        total_output += len(response['reply'])
+                        if progress:
+                            progress({'type':'progress','phase':'completed_batch',
+                                      'completed':len(results),'total':len(requests),'batch':index+1})
+                            if stream_replies:
+                                progress({'type':'batch_reply','batch':index+1,'reply':response['reply']})
+                    except (RuntimeError, TimeoutError, OSError, PermissionError, ValueError):
+                        failure = ('Provider call failed or stopped; external outcome may be unknown. '
+                                   'Remaining batches not invoked; no retry performed.')
+                if cancel_event is not None and cancel_event.is_set():
+                    failure = 'Stop requested; pending batches not invoked. Provider outcomes may be unknown.'
+                if failure is None and time.monotonic()-started >= MAX_SECONDS:
+                    failure = 'Local time budget reached; remaining batches not invoked.'
+                if failure is None and total_output >= MAX_REVIEW_OUTPUT:
+                    failure = 'Output budget reached; remaining batches not invoked.'
+                dispatch()
+        replies = [results[i] for i in sorted(results)]
+    else:
+        for request in requests:
+            batch = request['messages'][0]['content']
+            if cancel_event is not None and cancel_event.is_set():
+                failure = 'Stop requested; no more batches started. Provider outcome may be unknown.'
+                break
+            if time.monotonic() - started >= MAX_SECONDS or sum(len(r['reply']) for r in replies) >= MAX_REVIEW_OUTPUT:
+                failure = 'Local time/output budget reached; remaining batches were not invoked.'
+                break
+            kwargs = {'expected_agent_sha256': profile['sha256']} if profile else {}
+            if len(batch) > 3000:
+                kwargs['review_context'] = True
+            if cancel_event is not None:
+                kwargs['cancel_event'] = cancel_event
+            if progress:
+                progress({'type': 'progress', 'phase': 'running', 'completed': len(replies),
+                          'total': len(prompts), 'batch': attempted + 1})
+            attempted += 1
+            try:
+                response = transport(request, **kwargs)
+                if not isinstance(response, dict) or not isinstance(response.get('reply'), str):
+                    raise RuntimeError('invalid provider response')
+                replies.append(response)
+            except (RuntimeError, TimeoutError, OSError, PermissionError):
+                failure = 'Provider call failed; external outcome may be unknown. Remaining batches not invoked; no retry performed.'
+                break
+            if progress:
+                progress({'type': 'progress', 'phase': 'completed_batch', 'completed': len(replies),
+                          'total': len(prompts), 'batch': attempted})
+                if stream_replies:
+                    # Completed model replies are streamed per batch, not per token.
+                    progress({'type': 'batch_reply', 'batch': attempted, 'reply': response['reply']})
     if not failure and prepared.get('scope', 'full') == 'full' and not prepared.get('coverage', {}).get('all_eligible_files_included', False):
         failure = 'Some eligible sources were omitted; see coverage. This is not a complete project review.'
-    answer = '\n\n'.join(('Batch %d:\n' % (i + 1) if len(prompts) > 1 else '') + row['reply'] for i, row in enumerate(replies))
+    if cancel_event is not None and cancel_event.is_set():
+        failure = 'Stop requested; no more batches started. In-flight provider outcome may be unknown.'
+    if parallelism == 2:
+        answer = '\n\n'.join(('Batch %d:\n' % (i + 1) if len(prompts) > 1 else '') +
+                              results[i]['reply'] for i in sorted(results))
+        complete_count = len(results)
+    else:
+        answer = '\n\n'.join(('Batch %d:\n' % (i + 1) if len(prompts) > 1 else '') +
+                              row['reply'] for i, row in enumerate(replies))
+        complete_count = len(replies)
     return {'review': {'provider': 'github-copilot-cli', 'requested_model': model,
                         'model_identity_verified': False, 'agent_selected': agent,
                         'agent_profile_sha256': selection['agent_profile_sha256'],
                         'agent_identity_verified': False, 'reply': answer},
-            'status': 'partial' if failure else 'completed', 'failure': failure,
+            'status': ('stopped' if cancel_event is not None and cancel_event.is_set() else
+                       'partial' if failure else 'completed'), 'failure': failure,
             'source_transmitted': attempted > 0, 'approved_sha256': digest,
-            'completed_batches': len(replies), 'total_batches': len(prompts),
+            'completed_batches': complete_count, 'total_batches': len(prompts),
             'remaining_not_run': len(prompts) - attempted, 'coverage': prepared.get('coverage'),
             'patch_applied': False, 'tests_executed': False, 'pull_request_created': False,
             'verified_usage_credits': None, 'usage_note': 'Provider does not supply structured, verified credit usage through this CLI interface.'}
