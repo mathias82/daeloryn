@@ -682,3 +682,45 @@ test('Docs only prepares only docs and never requests a full source scan',async(
   expect(requests).toEqual(['docs']);
   await expect(page.getByText(/No source code inspected/)).toBeVisible();
 });
+
+
+test('Benchmarks resume same partial run ID and require explicit approval of unknown batch',async({page})=>{
+  const runId='d'.repeat(32);
+  let resumes=0;
+  await page.route('**/api/benchmark/runs',route=>route.fulfill({json:{runs:[{
+    run_id:runId,status:'partial',repository:'demo',mode:'review',model:models[0],agent:'java-reviewer',
+    created_at:'2026-11-01T18:00:00+00:00',updated_at:'2026-11-01T18:01:00+00:00'}]}}));
+  await page.route('**/api/benchmark/runs/*',route=>{
+    if(route.request().method()!=='GET')return route.fallback();
+    return route.fulfill({json:{
+      run_id:runId,status:'partial',repository:'demo',mode:'review',model:models[0],agent:'java-reviewer',
+      source_sha256:'a'.repeat(64),approved_sha256:'b'.repeat(64),
+      created_at:'2026-11-01T18:00:00+00:00',updated_at:'2026-11-01T18:01:00+00:00',
+      error:'Partial. Unknown batch 2.',
+      arms:{
+        baseline:{status:'partial',completed_batches:1,total_batches:3,reply:'Completed first result',
+          failure:'Unknown batch 2',batches:{'1':{status:'completed',reply:'Completed first result'},
+            '2':{status:'unknown',reply:''}}},
+        daeloryn:{status:'pending',completed_batches:0,total_batches:3,reply:'',
+          failure:null,batches:{}}
+      },result:null
+    }});
+  });
+  await page.route('**/api/benchmark/runs/*/resume',route=>{
+    resumes++;
+    expect(route.request().postDataJSON()).toEqual({
+      approved_sha256:'b'.repeat(64),acknowledge_unknown:true
+    });
+    return route.fulfill({status:202,json:{run_id:runId,status:'running'}});
+  });
+  await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
+  const runner=page.getByRole('region',{name:'Paired benchmark runner'});
+  await expect(runner.getByRole('button',{name:'Resume remaining batches'})).toBeVisible();
+  await runner.getByRole('button',{name:'Resume remaining batches'}).click();
+  await expect(runner.getByRole('group',{name:'Confirm resume benchmark run'})).toBeVisible();
+  await expect(runner.getByRole('button',{name:'Approve & resume saved run'})).toBeDisabled();
+  await runner.getByRole('checkbox',{name:/UNKNOWN attempts/}).check();
+  await runner.getByRole('button',{name:'Approve & resume saved run'}).click();
+  await expect.poll(()=>resumes).toBe(1);
+  await expect(runner.getByText(/Resuming dddddddd/)).toBeVisible();
+});
