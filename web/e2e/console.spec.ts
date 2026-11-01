@@ -11,6 +11,18 @@ test.beforeEach(async({page})=>{
       '/api/agents':{agents:[{name:'java-reviewer',scope:'java',description:'Fixture reviewer'}]},
       '/api/benchmarks':{agent_count:1,expected_cells:8,observed_cells:1,verified_trial_count:0,coverage_percent:12.5,warning:'Fixture data; identities unverified',trials},
       '/api/benchmark/runs':{runs:[],persistence:'local-private-disk',verified_trial:false},
+      '/api/benchmark/campaign':{
+        kind:'daeloryn-sequential-agent-campaign',schema_version:1,
+        total_agents:1,provisionally_assessed:0,next_agent:'java-reviewer',
+        generated_at:'2026-11-01T21:00:00Z',weaker_traceability_agents:0,
+        warning:'Read-only queued pilot; no provider calls or verified winners.',
+        provider_calls_started:false,rules_modified:false,independently_verified_winners:0,
+        entries:[{order:1,agent:'java-reviewer',scope:'java',benchmark_mode:'review',
+          domain_scenario:'Inspect Java concurrency, null-handling and resource lifecycle.',
+          state:'not_started',latest_run_id:null,latest_run_status:null,
+          traceability_scores:null,provisional_evidence_lead:'not_determined',
+          verified_winner:null,candidate_rule_improvements:[]}]
+      },
       '/api/models':{models:[],chat_enabled:false},
       '/api/copilot/status':{enabled:true},
       '/api/copilot/models':{models},
@@ -762,4 +774,25 @@ test('Comparison results shows persisted evidence scores and no fabricated verif
   await expect(table.getByText('0/100')).toBeVisible();
   await expect(table.getByText(/Not verified · no independent defect/)).toBeVisible();
   await expect(table.getByRole('cell',{name:/daeloryn provisional/})).toBeVisible();
+});
+
+test('agent campaign chooses next role-specific benchmark without launching a model',async({page})=>{
+  let providerCalls=0;
+  page.on('request',request=>{
+    if(request.method()==='POST'&&/\/api\/benchmark\/(?:start|execute)/.test(request.url()))providerCalls++;
+  });
+  await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
+  const campaign=page.getByRole('region',{name:'22-agent evaluation campaign'});
+  await expect(campaign.getByText(/Next: 1\/1 · java-reviewer/)).toBeVisible();
+  await expect(campaign.getByLabel('Campaign project')).toHaveValue('demo');
+  await campaign.getByRole('button',{name:/Set up next A\/B benchmark/}).click();
+  const runner=page.getByRole('region',{name:'Paired benchmark runner'});
+  await expect(runner.getByLabel('Benchmark project')).toHaveValue('demo');
+  await expect(runner.getByLabel('Benchmark agent')).toHaveValue('java-reviewer');
+  await expect(runner.getByLabel('Benchmark type')).toHaveValue('review');
+  expect(providerCalls).toBe(0);
+  const downloadPromise=page.waitForEvent('download');
+  await campaign.getByRole('button',{name:'Export evaluation report (Markdown)'}).click();
+  const download=await downloadPromise;
+  expect(download.suggestedFilename()).toBe('daeloryn-agent-evaluation-report.md');
 });
