@@ -24,6 +24,12 @@ class AssemblerTests(unittest.TestCase):
         self.assertFalse(result["agent_selection_verified"])
         self.assertEqual("daeloryn_passed_baseline_failed", result["outcome"])
 
+    def test_rejects_different_requested_models(self):
+        different = {**capture(), "requested_model": "other-model"}
+        with self.assertRaises(ValueError):
+            assemble("java-reviewer", "copilot", "run-1", comparison(),
+                     {"baseline": capture(), "daeloryn": different})
+
     def test_rejects_incomplete_provider_run(self):
         with self.assertRaises(ValueError):
             assemble("java-reviewer", "copilot", "run-1", comparison(),

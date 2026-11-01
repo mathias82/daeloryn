@@ -302,3 +302,14 @@ produced by the requested model or specialist. Repeat the same blinded prompts
 for both baseline and Daeloryn, independently verify provider identity,
 agent activation and cited evidence, then compare the scores. Keep raw
 transcripts private.
+
+
+### Paired-model comparability guard
+
+`run_live_benchmark.py` requires identical, nonblank requested model IDs in both
+arms before preview or execution. `assemble_benchmark_trial.py` rejects captures
+with different requested models as well. Use the same model and task budget to
+measure the effect of Daeloryn instructions rather than differences between
+models. This validates declared IDs only: operator-supplied CLI argv and actual
+remote model identity remain independently unverified. Existing mixed-model
+trials must not be presented as controlled Daeloryn-versus-baseline comparisons.

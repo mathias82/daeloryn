@@ -41,6 +41,8 @@ def assemble(agent, provider, run_id, comparison, captures, capture_hashes=None)
             raise ValueError("requested model required")
         if comparison["arms"][arm].get("status") not in ("passed", "failed"):
             raise ValueError("evaluator arm not completed")
+    if captures["baseline"]["requested_model"] != captures["daeloryn"]["requested_model"]:
+        raise ValueError("paired benchmark requires matching requested models")
     return {"schema_version": 1, "kind": "benchmark-trial", "agent": agent,
             "provider": provider, "run_id": run_id, "arm": "daeloryn",
             "outcome": comparison["outcome"],

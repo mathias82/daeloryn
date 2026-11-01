@@ -12,6 +12,20 @@ def plan():
                 "daeloryn": {"model": "sonnet", "argv": ["copilot", "--prompt=test"]}}}
 
 class OrchestratorTests(unittest.TestCase):
+    def test_model_mismatch_stops_before_provider_or_evaluator(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for arm in ("baseline", "daeloryn"):
+                (Path(tmp) / arm).mkdir()
+            for model in ("different-model", "", " "):
+                for execute in (False, True):
+                    with self.subTest(model=model, execute=execute):
+                        spec = plan()
+                        spec["arms"]["daeloryn"]["model"] = model
+                        with self.assertRaises(ValueError):
+                            run(spec, tmp, execute=execute,
+                                capturer=lambda *a: self.fail("provider invoked"),
+                                comparator=lambda *a, **kw: self.fail("evaluator invoked"))
+
     def test_preview_does_not_call_provider(self):
         with tempfile.TemporaryDirectory() as tmp:
             for arm in ("baseline", "daeloryn"):
