@@ -14,16 +14,24 @@ const BUILD_FILE=/\b(?:pom(?:\.xml)?|build\.gradle(?:\.kts)?|gradle\.properties|
 const BUILD_ACTION=/\b(?:check|review|inspect|analy[sz]e|find|deprecated|dependencies|dependency|bugs?|versions?|plugins?|upgrade|outdated)\b/iu;
 const GENERIC_HOWTO=/^(?:how\s+(?:do|can|should)\s+(?:i|we)|how\s+to|what\s+is|explain\s+how\s+to|πώς\s+μπορώ\s+να|πώς\s+να)\b/iu;
 
+
+// Greek imperatives and natural code-review requests; words such as "βρεις"
+// must not silently fall through to text-only chat merely because they are
+// conjugated differently from "βρες".
+const GREEK_SOURCE_TASK=/(?:βρ(?:ες|εις|[εέ]στε)|εντ[όο]πισ[εη]|ψ[άα]ξ[εω]|σ[άα]ρωσ[εω]|σκ[άα]ναρ[εω]|[έε]λεγξ[εω]|εξ[έε]τασ[εω]|αναλ[υύ]σ[εη]|επιθε[ώω]ρησ[εη]|δ[εέ]ς|κ[άα]νε.{0,30}(?:[έε]λεγχο|review|αν[άα]λυση)|θ[έε]λω.{0,40}(?:σφ[άα]λμα|κ[ώω]δικ|bug))|(?:σφ[άα]λμα|σφ[άα]λματα|προβλ[ήη]ματα|bugs?|κ[ώω]δικ[αο]|κλ[άα]σ[ηεις]).{0,65}(?:έργ[οου]|project|κ[ώω]δικ))/iu;
+const GREEK_SOURCE_OBJECT=/(?:κ[ώω]δικ[αο]|κλ[άα]σ[ηεις]|αρχε[ίι][οα]|σφ[άα]λμα|σφ[άα]λματα|bugs?|project|έργο|repository|πακ[έε]τ[οου]|μ[έε]θοδ[οου])/iu;
+const GREEK_EXPLICIT_ALL=/(?:σ[ετ]s+)?(?:[όο]λ[οαη]|ολ[όο]κληρ[οη])s+τ[οα]s+(?:έργο|project|repository|κ[ώω]δικα|αρχε[ίι]α)|(?:σ[άα]ρωσε|scan|review)s+.{0,30}(?:[όο]λαs+ταs+αρχε[ίι]α|[όο]λοs+τοs+έργο)/iu;
+
 /** Only explicit whole-project language produces full source coverage. */
 export function routeContext(task:string,preference:ContextPreference='smart'):ContextScope{
   if(preference==='text-only')return 'none';
   const query=task.trim().slice(0,3000);
   if(!query||SMALL_TALK.test(query))return 'none';
   if(preference==='docs')return 'docs';
-  if(FULL.test(query))return 'full';
+  if(FULL.test(query)||GREEK_EXPLICIT_ALL.test(query))return 'full';
   if(BUILD_FILE.test(query)&&BUILD_ACTION.test(query))return 'focused';
   if(GENERIC_HOWTO.test(query)&&!EXPLICIT_PROJECT.test(query))return 'none';
   if(EXPLICIT_PROJECT.test(query)&&PROJECT_QUESTION.test(query))return 'focused';
-  if(CODE_INTENT.test(query))return 'focused';
+  if(CODE_INTENT.test(query)||(GREEK_SOURCE_TASK.test(query)&&GREEK_SOURCE_OBJECT.test(query)))return 'focused';
   return 'none';
 }
