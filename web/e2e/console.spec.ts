@@ -547,3 +547,56 @@ test('Delete benchmark requires confirmation and removes only selected completed
   await expect(runner.getByText(/No saved runs yet/)).toBeVisible();
   expect(posts).toEqual(['delete']);
 });
+
+
+test('follow-up after large full review is bounded below HTTP 413 and keeps local history',async({page})=>{
+  let count=0;
+  const bodies:any[]=[];
+  const huge='Batch 1: source finding\n'+('Source reference and rationale. '.repeat(2000));
+  await page.route('**/api/copilot/chat',async route=>{
+    bodies.push(route.request().postDataJSON());
+    count++;
+    await route.fulfill({json:{reply:count===1?huge:'Focused follow-up answer'}});
+  });
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await page.getByRole('textbox',{name:'Message',exact:true}).fill('Explain a Java collection');
+  await page.getByRole('button',{name:/Send message/}).click();
+  await expect.poll(()=>page.locator('.bubble.assistant').count()).toBeGreaterThan(0);
+  const input=page.getByRole('textbox',{name:'Message',exact:true});
+  await input.fill('Explain Java Optional');
+  await page.getByRole('button',{name:/Send message/}).click();
+  await expect(page.getByText('Focused follow-up answer')).toBeVisible();
+  expect(bodies).toHaveLength(2);
+  expect(bodies[1].messages).toEqual([
+    {role:'user',content:'Explain a Java collection'},
+    {role:'user',content:'Explain Java Optional'}
+  ]);
+  expect(new TextEncoder().encode(JSON.stringify(bodies[1])).byteLength).toBeLessThan(24576);
+  await expect(page.getByText(/older\/oversized messages omitted from Copilot request/)).toBeVisible();
+  await expect(page.locator('.bubble.assistant')).toHaveCount(2);
+});
+
+test('pom version question with selected checkout requires focused source approval',async({page})=>{
+  let plainChatRequests=0;
+  page.on('request',request=>{if(request.url().endsWith('/api/copilot/chat'))plainChatRequests++;});
+  let scope='';
+  await page.route('**/api/copilot/review/prepare',route=>{
+    scope=route.request().postDataJSON().scope;
+    expect(route.request().postDataJSON()).toMatchObject({
+      repository:'demo',scope:'focused',task:'check pom does it has bugs or deprecated libraries?'});
+    return route.fulfill({json:{...route.request().postDataJSON(),model:models[0],
+      prompt:'pom.xml only',sha256:'a'.repeat(64),
+      files:['pom.xml'],batch_count:1,approval_required:true,
+      agent_profile:null,agent_profile_sha256:null,source_transmitted:false,
+      coverage:{scope:'focused file selection',all_eligible_files_included:false,omitted:[],excluded:[]}}});
+  });
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await page.getByLabel(/^Local repository/).selectOption('demo');
+  await page.getByLabel('Context behavior').selectOption('smart');
+  await page.getByRole('textbox',{name:'Message',exact:true}).fill('check pom does it has bugs or deprecated libraries?');
+  await page.getByRole('button',{name:/Send message/}).click();
+  await expect(page.getByRole('region',{name:'Chat project context approval'})).toBeVisible();
+  await expect(page.getByRole('heading',{name:/Focused project context/})).toBeVisible();
+  expect(scope).toBe('focused');
+  expect(plainChatRequests).toBe(0);
+});
