@@ -205,8 +205,8 @@ test('Send prepares project context in chat, waits for approval, then runs batch
   await page.route('**/api/copilot/review/prepare',async route=>{
     requests.push('prepare');
     const body=route.request().postDataJSON();
-    expect(body).toMatchObject({repository:'demo',task:'Review the project',model:'auto'});
-    await route.fulfill({json:{repository:'demo',model:models[0],agent:null,
+    expect(body).toMatchObject({repository:'demo',task:'Review the entire project',model:'auto',scope:'full'});
+    await route.fulfill({json:{repository:'demo',model:models[0],agent:null,scope:'full',
       prompt:'Fixture source snapshot',sha256:'a'.repeat(64),files:['App.java'],
       batch_count:2,warning:'Fixture review has 2 potentially billable calls',
       approval_required:true,agent_profile:null,agent_profile_sha256:null,
@@ -215,7 +215,7 @@ test('Send prepares project context in chat, waits for approval, then runs batch
   await page.route('**/api/copilot/review/execute',async route=>{
     requests.push('execute');
     expect(route.request().postDataJSON()).toMatchObject({
-      repository:'demo',task:'Review the project',model:models[0],approved_sha256:'a'.repeat(64)});
+      repository:'demo',task:'Review the entire project',model:models[0],scope:'full',approved_sha256:'a'.repeat(64)});
     await route.fulfill({contentType:'application/x-ndjson',body:[
       {type:'progress',phase:'running',completed:0,total:2,batch:1},
       {type:'progress',phase:'completed_batch',completed:1,total:2,batch:1},
@@ -228,7 +228,7 @@ test('Send prepares project context in chat, waits for approval, then runs batch
   });
   await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
   await page.getByLabel(/^Local repository/).selectOption('demo');
-  await page.getByRole('textbox',{name:'Message',exact:true}).fill('Review the project');
+  await page.getByRole('textbox',{name:'Message',exact:true}).fill('Review the entire project');
   await page.getByRole('button',{name:/Send message/}).click();
   await expect(page.getByRole('region',{name:'Chat project context approval'})).toBeVisible();
   await expect(page.getByText('1 source files · 2 potentially billable model calls')).toBeVisible();
@@ -242,7 +242,7 @@ test('Send prepares project context in chat, waits for approval, then runs batch
 test('Changing the model invalidates pending in-chat source approval',async({page})=>{
   let executed=0;
   await page.route('**/api/copilot/review/prepare',route=>route.fulfill({json:{
-    repository:'demo',model:models[0],agent:null,prompt:'Fixture snapshot',sha256:'a'.repeat(64),
+    repository:'demo',model:models[0],agent:null,scope:'focused',prompt:'Fixture snapshot',sha256:'a'.repeat(64),
     files:['App.java'],batch_count:1,warning:'One provider call',approval_required:true,
     agent_profile:null,agent_profile_sha256:null}}));
   page.on('request',r=>{if(r.url().endsWith('/api/copilot/review/execute'))executed++;});
@@ -332,4 +332,71 @@ test('Benchmarks cannot call Copilot before explicit approval',async({page})=>{
   await runner.getByLabel('Benchmark type').selectOption('fix-plan');
   await expect(runner.getByText(/Patches, builds and regression tests are not executed/)).toBeVisible();
   expect(executions).toBe(0);
+});
+
+
+test('Smart Context keeps greetings text-only with local per-message timestamps',async({page})=>{
+  let prepared=0,chats=0;
+  page.on('request',r=>{
+    if(r.url().endsWith('/api/copilot/review/prepare'))prepared++;
+    if(r.url().endsWith('/api/copilot/chat'))chats++;
+  });
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await page.getByLabel(/^Local repository/).selectOption('demo');
+  await page.getByLabel(/^Context behavior/).selectOption('smart');
+  await page.getByRole('textbox',{name:'Message',exact:true}).fill('Hello');
+  await page.getByRole('button',{name:/Send message/}).click();
+  await expect(page.locator('.bubble.assistant')).toContainText('Fixture reply');
+  expect(chats).toBe(1);
+  expect(prepared).toBe(0);
+  const userTime=page.locator('.bubble.user time').last();
+  const assistantTime=page.locator('.bubble.assistant time').last();
+  await expect(userTime).toHaveAttribute('datetime',/^\d{4}-\d{2}-\d{2}T/);
+  await expect(assistantTime).toHaveAttribute('datetime',/^\d{4}-\d{2}-\d{2}T/);
+  const timestamp=await assistantTime.getAttribute('datetime');
+  await page.reload();
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await expect(page.locator('.bubble.assistant time').last()).toHaveAttribute('datetime',timestamp!);
+});
+
+test('Smart Context prepares focused project excerpts for scoped questions',async({page})=>{
+  const requests:string[]=[];
+  await page.route('**/api/copilot/review/prepare',route=>{
+    const selection=route.request().postDataJSON();
+    requests.push(selection.scope);
+    expect(selection).toMatchObject({repository:'demo',scope:'focused',task:'What observability does this project have?'});
+    return route.fulfill({json:{...selection,model:models[0],
+      prompt:'Only README + TelemetryService',sha256:'a'.repeat(64),
+      agent:null,agent_profile:null,agent_profile_sha256:null,
+      files:['README.md','TelemetryService.java'],batch_count:1,
+      approval_required:true,warning:'One model call',
+      verified_usage_credits:null,coverage:{scope:'Focused context only',all_eligible_files_included:false,omitted:[],excluded:[]}}});
+  });
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await page.getByLabel(/^Local repository/).selectOption('demo');
+  await page.getByRole('textbox',{name:'Message',exact:true}).fill('What observability does this project have?');
+  await page.getByRole('button',{name:/Send message/}).click();
+  await expect(page.getByRole('heading',{name:/Focused project context/})).toBeVisible();
+  await expect(page.getByText('Estimated AI Credit charge: unavailable', {exact:false})).toBeVisible();
+  expect(requests).toEqual(['focused']);
+});
+
+test('Progressive answers auto-scroll while near bottom but respect manual scroll up',async({page})=>{
+  await page.route('**/api/copilot/chat',route=>route.fulfill({json:{
+    reply:Array.from({length:230},(_,i)=>'Long response line '+i+' · testing line by line scrolling').join('\n')
+  }}));
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await page.getByLabel(/^Copilot model/).selectOption(models[0]);
+  await page.getByRole('textbox',{name:'Message',exact:true}).fill('Explain the Java collections API');
+  await page.getByRole('button',{name:/Send message/}).click();
+  const scroll=page.locator('.chat-messages');
+  await expect(page.getByText('Displaying completed provider response…')).toBeVisible();
+  await expect.poll(async()=>scroll.evaluate(el=>el.scrollHeight-el.clientHeight)).toBeGreaterThan(100);
+  await expect.poll(async()=>scroll.evaluate(el=>el.scrollHeight-el.scrollTop-el.clientHeight)).toBeLessThan(110);
+  await scroll.evaluate(el=>{el.scrollTop=0;el.dispatchEvent(new Event('scroll'));});
+  await page.waitForTimeout(250);
+  const afterManual=await scroll.evaluate(el=>el.scrollTop);
+  expect(afterManual).toBeLessThan(30);
+  await scroll.evaluate(el=>{el.scrollTop=el.scrollHeight;el.dispatchEvent(new Event('scroll'));});
+  await expect.poll(async()=>scroll.evaluate(el=>el.scrollHeight-el.scrollTop-el.clientHeight)).toBeLessThan(110);
 });
