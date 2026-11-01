@@ -4,7 +4,7 @@ import tempfile
 import unittest
 from unittest.mock import patch
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / 'scripts'))
-from approved_copilot_review import prepare, execute
+from approved_copilot_review import prepare, execute, source_blocks
 from copilot_chat import validate
 from project_review_context import snapshot
 
@@ -28,7 +28,7 @@ class ProjectReviewBatchTests(unittest.TestCase):
         self.assertEqual(10, len(prepared['files']))
         self.assertGreater(prepared['batch_count'], 1)
         self.assertIn('value1499', prepared['prompt'])
-        self.assertIn('"line": 1500', prepared['prompt'])
+        self.assertIn('"end_line": 1500', prepared['prompt'])
         self.assertTrue(prepared['coverage']['all_eligible_files_included'])
         calls = []
         def transport(request, **kwargs):
@@ -40,6 +40,37 @@ class ProjectReviewBatchTests(unittest.TestCase):
         self.assertEqual(0, result['remaining_not_run'])
         self.assertFalse(result['tests_executed'])
         self.assertFalse(result['patch_applied'])
+
+    def test_near_budget_project_short_lines_and_long_paths_fit_without_losing_sources(self):
+        package = self.project / 'src/main/java/example/engineering/application/review'
+        package.mkdir(parents=True)
+        body = 'int a;\n' * 16000
+        for index in range(8):
+            (package / ('ExampleSourceClass%d.java' % index)).write_text(body)
+        prepared = prepare(self.root, 'demo', 'Review Java', 'sonnet')
+        self.assertEqual(8, len(prepared['files']))
+        self.assertTrue(prepared['coverage']['all_eligible_files_included'])
+        self.assertLessEqual(prepared['batch_count'], 64)
+        import json
+        rebuilt = {}
+        for prompt in prepared['prompts']:
+            for line in prompt.splitlines():
+                if line.startswith('{"file":'):
+                    block = json.loads(line)
+                    rebuilt.setdefault(block['file'], '')
+                    rebuilt[block['file']] += block['source']
+        self.assertEqual(set(prepared['files']), set(rebuilt))
+        self.assertTrue(all(source == body for source in rebuilt.values()))
+
+    def test_source_block_positions_and_long_line_splits_are_exact(self):
+        source = 'first\r\n' + 'x' * 7000 + '\nlast'
+        blocks = list(source_blocks({'path': 'App.java', 'source': source}))
+        self.assertEqual(source, ''.join(block['source'] for block in blocks))
+        for block in blocks:
+            lines = source.splitlines(keepends=True)
+            position = sum(len(line) for line in lines[:block['line'] - 1]) + block['column'] - 1
+            self.assertEqual(block['source'], source[position:position + len(block['source'])])
+        self.assertEqual(3, blocks[-1]['end_line'])
 
     def test_manifest_change_invalidates_approval_and_no_provider_is_called(self):
         path = self.project / 'App.java'
@@ -115,3 +146,21 @@ class ProjectReviewBatchTests(unittest.TestCase):
         validate(request, review_context=True)
         with self.assertRaises(ValueError):
             validate({**request, 'review_context': True})
+
+    def test_progress_precedes_each_call_and_disconnect_stops_future_calls(self):
+        (self.project / 'App.java').write_text('int a;\n' * 8000)
+        prepared = prepare(self.root, 'demo', 'Review', 'sonnet')
+        events = []
+        def transport(request, **kwargs):
+            self.assertEqual('running', events[-1]['phase'])
+            return {'reply': 'Completed finding'}
+        result = execute(prepared, 'sonnet', prepared['sha256'], transport=transport, progress=events.append)
+        self.assertEqual(prepared['batch_count'] * 2, len(events))
+        self.assertEqual(result['completed_batches'], events[-1]['completed'])
+        calls = []
+        def disconnected(event):
+            raise BrokenPipeError('observer disconnected')
+        with self.assertRaises(BrokenPipeError):
+            execute(prepared, 'sonnet', prepared['sha256'],
+                    transport=lambda *a, **kw: calls.append(a), progress=disconnected)
+        self.assertEqual([], calls)

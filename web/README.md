@@ -181,3 +181,12 @@ require human verification. No edits, builds or tests are performed.
 The plain chat request limits remain unchanged. Only server-prepared, digest-approved
 review batches use an internal 24,000-character message allowance; clients cannot
 enable that allowance through arbitrary JSON fields.
+
+Review batching groups contiguous source into compact blocks carrying the file,
+original starting line/column and ending line. File paths are not repeated for
+every individual line. This preserves every character of included source and
+original evidence coordinates while reducing unnecessary context expansion. The
+64-call approval limit and source/request budgets remain unchanged. If genuinely
+over budget, preparation reports the required call count before any provider call.
+
+Source reviews stream NDJSON batch status to the browser: completed/total calls, the active batch and elapsed seconds. Replies still arrive once each model call completes, rather than token by token. The 300-second coordinator budget is checked between calls; the active call may take up to 90 additional seconds. The browser stops waiting at 420 seconds and reports an unknown outcome without retrying. Disconnecting does not cancel a provider call already in flight; subsequent stream writes stop further calls when the disconnect is detected. Do not resubmit while the outcome is unknown. JSON API callers remain supported without the NDJSON Accept header.

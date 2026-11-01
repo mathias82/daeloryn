@@ -176,3 +176,22 @@ test('source review shows coverage and call count and saves its result in chat',
  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
  await expect(page.locator('.bubble.assistant')).toContainText('Project review fixture completed');
 });
+
+
+test('streamed source review reports batch progress before final result',async({page})=>{
+ await page.route('**/api/copilot/review/execute',route=>route.fulfill({contentType:'application/x-ndjson',body:[
+  {type:'progress',phase:'running',completed:0,total:2,batch:1},
+  {type:'progress',phase:'completed_batch',completed:1,total:2,batch:1},
+  {type:'result',result:{status:'partial',completed_batches:1,total_batches:2,failure:'Fixture budget exhausted',review:{reply:'Streamed finding'}}}
+ ].map(x=>JSON.stringify(x)).join('\n')+'\n'}));
+ await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+ await page.getByLabel(/^Agent/).selectOption('java-reviewer');
+ await page.getByLabel(/^Copilot model/).selectOption(models[0]);
+ await page.getByLabel(/^Local repository/).selectOption('demo');
+ await page.getByRole('button',{name:'Prepare AI review context',exact:true}).click();
+ await page.getByRole('checkbox',{name:/I inspected the context/}).check();
+ await page.getByRole('button',{name:'Send approved context to Copilot',exact:true}).click();
+ await expect(page.locator('.bubble.assistant')).toContainText('Streamed finding');
+ await expect(page.locator('.bubble.assistant')).toContainText('1/2 batches');
+ await expect(page.getByRole('button',{name:'Prepare AI review context',exact:true})).toBeEnabled();
+});

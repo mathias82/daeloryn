@@ -228,6 +228,19 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                 if not length.isdigit() or not 0 < int(length) <= 16384:
                     self.reply(413, {"error": "invalid request size"})
                     return
+                streaming = False
+                def emit(event):
+                    nonlocal streaming
+                    if not streaming:
+                        self.send_response(200)
+                        self.send_header("Content-Type", "application/x-ndjson; charset=utf-8")
+                        self.send_header("Cache-Control", "no-store")
+                        self.send_header("Connection", "close")
+                        self.end_headers()
+                        self.close_connection = True
+                        streaming = True
+                    self.wfile.write((json.dumps(event) + "\n").encode("utf-8"))
+                    self.wfile.flush()
                 try:
                     payload = json.loads(self.rfile.read(int(length)))
                     is_execute = self.path.endswith("/execute")
@@ -240,13 +253,23 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     prepared = prepare_ai_review(matches[0], payload["repository"], payload["task"],
                                                  payload["model"], payload.get("agent"))
                     if is_execute:
+                        if self.headers.get("Accept") == "application/x-ndjson":
+                            result = execute_ai_review(prepared, payload["model"], payload["approved_sha256"], progress=emit)
+                            emit({"type": "result", "result": result})
+                            return
                         result = execute_ai_review(prepared, payload["model"], payload["approved_sha256"])
                     else:
                         result = prepared
                 except (ValueError, TypeError, KeyError, json.JSONDecodeError, PermissionError, OSError) as exc:
+                    if streaming:
+                        # A disconnected observer must not trigger more provider calls.
+                        return
                     self.reply(400, {"error": "Review preparation/approval failed: " + str(exc)})
                     return
                 except (RuntimeError, TimeoutError):
+                    if streaming:
+                        emit({"type": "error", "error": "Review interrupted; external outcome may be unknown. Do not automatically retry."})
+                        return
                     self.reply(503, {"error": "Copilot review unavailable"})
                     return
                 self.reply(200, result)
