@@ -3,7 +3,7 @@ import {useEffect,useState} from 'react';
 type PairedRow={
   run_id:string;repository:string;mode:string;model:string;agent:string;
   status:string;evaluation_status:string;provisional_evidence_lead:string;
-  baseline_score:number;daeloryn_score:number;verified_winner:null;
+  baseline_score:number|null;daeloryn_score:number|null;verified_winner:null;
 };
 
 export function LocalComparisons(){
@@ -20,7 +20,8 @@ export function LocalComparisons(){
           !Array.isArray(data.paired_comparisons))throw new Error('Invalid comparison response');
         const list=data.paired_comparisons as PairedRow[];
         if(!list.every(row=>row&&typeof row.run_id==='string'&&
-          typeof row.baseline_score==='number'&&typeof row.daeloryn_score==='number'))
+          (row.baseline_score===null||typeof row.baseline_score==='number')&&
+          (row.daeloryn_score===null||typeof row.daeloryn_score==='number')))
           throw new Error('Malformed local comparison');
         if(active){setRows(list);setError('');}
       }catch(e){if(active)setError(e instanceof Error?e.message:'No comparisons');}
@@ -40,8 +41,8 @@ export function LocalComparisons(){
         <thead><tr><th>Run / source</th><th>Plain Copilot</th><th>Copilot + Daeloryn</th><th>Provisional citation lead</th><th>Verified winner</th></tr></thead>
         <tbody>{rows.length?rows.map(row=><tr key={row.run_id}>
           <td>{row.repository}<br/><small>{row.run_id.slice(0,8)} · {row.status}</small></td>
-          <td>{row.baseline_score}/100</td><td>{row.daeloryn_score}/100</td>
-          <td>{row.provisional_evidence_lead.replace(/_/g,' ')}<br/><small>{row.evaluation_status.replace(/_/g,' ')}</small></td>
+          <td>{row.baseline_score===null?'Not evaluated':row.baseline_score+'/100'}</td><td>{row.daeloryn_score===null?'Not evaluated':row.daeloryn_score+'/100'}</td>
+          <td>{row.baseline_score===null?'Pending / unavailable':row.provisional_evidence_lead.replace(/_/g,' ')}<br/><small>{row.evaluation_status.replace(/_/g,' ')}</small></td>
           <td>Not verified · no independent defect or regression-test adjudication</td>
         </tr>):<tr><td colSpan={5} className="table-empty">
           No local evidence comparisons yet. Start and complete an A/B run above, or open a saved run and choose Evaluate saved run.
