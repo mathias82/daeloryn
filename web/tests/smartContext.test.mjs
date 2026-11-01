@@ -27,3 +27,18 @@ test('manual overrides are explicit',()=>{
   assert.equal(routeContext('What observability does my project have?','text-only'), 'none');
   assert.equal(routeContext('Hello','full'), 'full');
 });
+
+test('explicit bug review of selected local project is a full review, even without saying project',()=>{
+ for(const text of ['Can you analyze for bugs?','Can you review for defects?',
+   'Find bugs','Review my code','Please check for security flaws',
+   'Βρες bugs στον κώδικα','Κάνε ανάλυση για σφάλματα']) {
+   assert.equal(routeContext(text), 'full', text);
+ }
+});
+test('general bug-finding education and simple chat do not trigger project review',()=>{
+ for(const text of ['How to find bugs in Spring?','What is a bug?','Explain Kafka',
+   'Hello', 'How do I analyze bugs?', 'What observability is?']) {
+   assert.equal(routeContext(text),'none',text);
+ }
+ assert.equal(routeContext('Can you analyze for bugs?','text-only'),'none');
+});
