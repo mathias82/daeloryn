@@ -55,7 +55,7 @@ For additional information: [Benchmark protocol](benchmark-protocol.md) · [Loca
 
 ## Full-screen Code Inspector and model-highlighted lines
 
-In Chat, the read-only Code Inspector shows file:line references reported by completed review batches. Click a grounded reference to jump to the matching line in the approved snapshot. A model-reported **possible bug** and a **suggested change** have different highlights; ungrounded references remain non-navigable. A highlighted code line is *not* proof of a defect. Select **Full screen** to expand the panel, browse source lines, and use **Esc** or **Exit full screen** to return. This UI never edits a checkout.
+In Chat, the read-only Code Inspector shows file:line references reported by completed review batches. Click a grounded reference to jump to the matching line in the approved snapshot. A model-reported **possible bug** and a **suggested change** have different highlights; ungrounded references remain non-navigable. A highlighted code line is *not* proof of a defect. Select **Full screen** to expand the panel, browse source lines, and use **Esc** or **Exit full screen** to return. Select **Edit suggestion** to draft a source replacement beside the original lines. You can change the proposed code, preview a unified diff, copy the patch, or load an explicit model-proposed code snippet if one was returned near the cited location. Suggestions are never written to project files by this UI. Changing the approved source snapshot clears drafts. This UI never edits a checkout.
 
 ## Source coverage: generic bugs versus explicit full scan
 
