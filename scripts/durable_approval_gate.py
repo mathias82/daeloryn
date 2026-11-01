@@ -11,7 +11,7 @@ import time
 from pathlib import Path
 
 ACTIONS=frozenset(("apply_patch","run_tests","publish_pr"))
-DIGEST=re.compile(r"[0-9a-f]{64}\\Z")
+DIGEST=re.compile(r"[0-9a-f]{64}\Z")
 
 class DurableApprovalGate:
  def __init__(self,db_path,ttl_seconds=120,clock=time.time):
