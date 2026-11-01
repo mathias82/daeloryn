@@ -15,7 +15,7 @@ import uuid
 
 RUN_ID = re.compile(r"[0-9a-f]{32}\Z")
 MAX_RECORDS = 30
-MAX_SAVED_BYTES = 1024 * 1024
+MAX_SAVED_BYTES = 4 * 1024 * 1024
 
 
 def _utc():
@@ -173,14 +173,15 @@ class RunStore:
             if unknown and acknowledge_unknown is not True:
                 raise PermissionError('Unknown in-flight batches '+', '.join(unknown[:12])+
                     '; acknowledge possible duplicate provider usage before retry')
-            record['resume_attempts']=record.get('resume_attempts',0)+1
-            if record['resume_attempts']>5:
+            if record.get('resume_attempts',0)>=5:
                 raise ValueError('maximum five manually approved continuation attempts')
+            record['resume_attempts']=record.get('resume_attempts',0)+1
             record['status']='running'
             record['error']=None
             record['result']=None
             record['updated_at']=_utc()
-            self._save(record)
+            # start() writes the journal under the same lock and creates the
+            # worker. Do not start it if any prior run is still active.
             return self.start(prepared,approved_digest,runner,_resume=(record,completed))
 
     def start(self, prepared, approved_digest, runner, *, _resume=None):
@@ -241,8 +242,10 @@ class RunStore:
                             number=event.get('batch')
                             if isinstance(number,int) and number>0:
                                 full=event['reply']
-                                summary=full[:8000]+('[Output truncated in local receipt]' if len(full)>8000 else '')
-                                row['batches'][str(number)]={'status':'completed','reply':summary}
+                                # A resumed batch must reuse the exact response, not a
+                                # truncated paraphrase. The Copilot CLI already caps a
+                                # response to 64KiB; persist its complete text.
+                                row['batches'][str(number)]={'status':'completed','reply':full}
                             piece = event["reply"][:65536]
                             next_reply = row["reply"] + ("\n\n" if row["reply"] else "") + \
                                 ("Batch %s:\n" % event.get("batch", "?")) + piece
