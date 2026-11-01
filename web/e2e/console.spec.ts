@@ -932,3 +932,26 @@ test('English read classes request prepares source instead of calling text-only 
  await expect(page.getByRole('checkbox',{name:/I inspected the exact source/})).toBeVisible();
  expect(chatCalls).toBe(0);
 });
+
+test('developer replacement appears in Inspector and requires separate local apply consent',async({page})=>{
+ const file='src/App.java',original='class App {}\n',replacement='class App { int x; }\n';let writes=0;
+ await page.route('**/api/copilot/review/prepare',async route=>{const body=route.request().postDataJSON();await route.fulfill({json:{...body,prompt:JSON.stringify({file,line:1,column:1,end_line:1,source:original}),sha256:'a'.repeat(64),files:[file],warning:'Fixture',agent_profile:null,agent_profile_sha256:null,batch_count:1,approval_required:true}});});
+ await page.route('**/api/copilot/review/execute',route=>route.fulfill({json:{status:'completed',completed_batches:1,total_batches:1,review:{reply:'App.java:1 suggested correction'}}}));
+ await page.route('**/api/copilot/developer/**',async route=>{
+  if(route.request().url().endsWith('/execute'))await route.fulfill({json:{status:'proposed',original,replacement,patch:{diff:'-class App {}\n+class App { int x; }',sha256:'c'.repeat(64)},patch_apply_enabled:true}});
+  else await route.fulfill({json:{sha256:'b'.repeat(64),prompt:'Exact source',agent:'java-developer',agent_profile:'Fixture'}});
+ });
+ await page.route('**/api/patch/apply',async route=>{writes++;const body=route.request().postDataJSON();expect(body).toMatchObject({path:file,replacement,approved:true,approved_sha256:'c'.repeat(64)});await route.fulfill({json:{applied:true,branch:body.branch,tests_executed:false}});});
+ await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+ await page.getByLabel(/^Copilot model/).selectOption(models[0]);await page.getByLabel(/^Local repository/).selectOption('demo');
+ await page.getByRole('textbox',{name:'Message',exact:true}).fill('Review bugs in App.java');await page.getByRole('textbox',{name:'Message',exact:true}).press('Enter');
+ await page.getByRole('checkbox',{name:/I inspected the exact source/}).check();await page.getByRole('button',{name:'Approve and analyze project',exact:true}).click();
+ const card=page.getByRole('region',{name:'Reviewer to developer proposal'});
+ await card.getByLabel('Reviewed file path').fill(file);await card.getByRole('button',{name:'Prepare developer handoff'}).click();
+ await card.getByRole('checkbox',{name:'Approve this source, findings, developer and model'}).check();await card.getByRole('button',{name:'Generate proposed patch'}).click();
+ await expect(page.getByRole('region',{name:'Developer proposed source'})).toContainText(replacement.trim());
+ await expect(card.getByRole('button',{name:'Apply approved patch locally'})).toBeDisabled();expect(writes).toBe(0);
+ await card.getByRole('checkbox',{name:/I reviewed this exact diff/}).check();await card.getByRole('button',{name:'Apply approved patch locally'}).click();
+ await expect(card).toContainText('Applied locally; tests have not run.');expect(writes).toBe(1);
+ await expect(page.getByRole('region',{name:'Developer proposed source'})).toContainText('applied locally');
+});

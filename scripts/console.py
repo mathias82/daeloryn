@@ -84,6 +84,7 @@ def main(argv=None):
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--enable-copilot-chat', action='store_true')
     parser.add_argument('--enable-local-chat', action='store_true')
+    parser.add_argument('--enable-patch-apply', action='store_true')
     parser.add_argument('--enable-project-picker', action='store_true')
     parser.add_argument('--enable-github-repositories', action='store_true')
     parser.add_argument('--repository-root', action='append', default=[])
@@ -101,7 +102,7 @@ def main(argv=None):
             raise RuntimeError('Install Node.js and frontend dependencies first: cd web && npm install')
         require_free_ports()
         api = [sys.executable, str(ROOT / 'scripts' / 'console_api.py')]
-        for flag in ('enable_copilot_chat', 'enable_local_chat', 'enable_project_picker', 'enable_github_repositories'):
+        for flag in ('enable_copilot_chat', 'enable_local_chat', 'enable_project_picker', 'enable_github_repositories', 'enable_patch_apply'):
             if getattr(args, flag):
                 api.append('--' + flag.replace('_', '-'))
         for root in args.repository_root:

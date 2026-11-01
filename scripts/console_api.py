@@ -4,6 +4,7 @@
 Optionally accepts bounded chat prompts; never arbitrary commands or credentials.
 """
 from review_developer import prepare as prepare_developer, execute as execute_developer
+from approved_patch_apply import apply as apply_source_patch
 import argparse
 from copilot_chat import copilot_chat
 from copilot_auto import available_models, route_chat
@@ -78,8 +79,9 @@ def benchmark_data(records_dir=None):
     return {**report, "trials": trials}
 
 
-def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repository_roots=(), enable_github_repositories=False, workflow_dir=None, projects_file=None, project_picker_roots=None, benchmark_runs_dir=None):
+def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repository_roots=(), enable_github_repositories=False, workflow_dir=None, projects_file=None, project_picker_roots=None, benchmark_runs_dir=None, enable_patch_apply=False):
     registry = ProjectRegistry(projects_file, project_picker_roots) if projects_file is not None else None
+    patch_apply_lock = Lock()
     benchmark_run_lock = Lock()  # Legacy streaming endpoint.
     run_store = RunStore(benchmark_runs_dir)
 
@@ -117,7 +119,7 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
             try:
                 if path.path == "/api/health":
                     payload = {"status": "ok", "execution_enabled": False,
-                               "provider_connected": False, "local_chat_enabled": enable_chat}
+                               "provider_connected": False, "local_chat_enabled": enable_chat, "patch_apply_enabled": enable_patch_apply}
                 elif path.path == "/api/copilot/status":
                     payload = {"enabled": enable_copilot, "provider": "github-copilot-cli",
                                "model_discovery": "not_verified"}
@@ -444,6 +446,35 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     if acquired:
                         benchmark_run_lock.release()
                 return
+            if self.path == "/api/patch/apply":
+                if not enable_patch_apply:
+                    self.reply(405, {"error": "Restart with --enable-patch-apply to enable approved local writes"})
+                    return
+                length = self.headers.get("Content-Length", "")
+                if self.headers.get("Content-Type", "").split(";")[0].strip() != "application/json":
+                    self.reply(415, {"error": "JSON required"})
+                    return
+                if not length.isdigit() or not 0 < int(length) <= 80000:
+                    self.reply(413, {"error": "invalid request size"})
+                    return
+                if not patch_apply_lock.acquire(blocking=False):
+                    self.reply(409, {"error": "Another patch application is in progress"})
+                    return
+                try:
+                    payload = json.loads(self.rfile.read(int(length)))
+                    expected = {"repository", "path", "replacement", "approved_sha256", "branch", "approved"}
+                    if not isinstance(payload, dict) or set(payload) != expected or payload["approved"] is not True:
+                        raise ValueError("Explicit approval of the exact patch required")
+                    roots = resolve_repository(payload["repository"])
+                    result = apply_source_patch(roots[0], payload["repository"], payload["path"], payload["replacement"], payload["approved_sha256"], payload["branch"])
+                    self.reply(200, result)
+                except (ValueError, TypeError, KeyError, PermissionError, OSError) as exc:
+                    self.reply(400, {"error": str(exc)})
+                except RuntimeError as exc:
+                    self.reply(409, {"error": str(exc)})
+                finally:
+                    patch_apply_lock.release()
+                return
             if self.path in ("/api/copilot/developer/prepare", "/api/copilot/developer/execute"):
                 if not enable_copilot:
                     self.reply(405, {"error": "Copilot disabled"})
@@ -466,6 +497,7 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                         raise ValueError("repository must resolve uniquely")
                     prepared = prepare_developer(roots[0], payload["repository"], payload["path"], payload["findings"], payload["model"])
                     result = execute_developer(prepared, payload["approved_sha256"], roots[0]) if execution else prepared
+                    result["patch_apply_enabled"] = enable_patch_apply
                     if not execution:
                         result = {k: v for k, v in result.items() if k != "source"}
                     self.reply(200, result)
@@ -755,6 +787,7 @@ def main():
     p.add_argument("--workflow-dir", type=Path, help="opt-in local workflow state directory for read-only inspection")
     p.add_argument("--enable-github-repositories", action="store_true")
     p.add_argument("--repository-root", type=Path, action="append", default=[], help="trusted parent directory of local git checkouts (repeatable)")
+    p.add_argument("--enable-patch-apply", action="store_true", help="allow exact-approved patches on clean dedicated local branches")
     p.add_argument("--enable-project-picker", action="store_true", help="allow explicit local project registration and native macOS folder chooser")
     p.add_argument("--projects-file", type=Path, default=Path.home() / ".config" / "daeloryn" / "projects.json", help="local project registry (used only with --enable-project-picker)")
     p.add_argument("--project-picker-root", type=Path, action="append", help="trusted folder boundary for popup selections (repeatable; default ~/IdeaProjects)")
@@ -769,7 +802,7 @@ def main():
         discover(a.repository_root)
     except (OSError, ValueError) as exc:
         p.error("invalid repository roots: " + str(exc))
-    server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(a.records_dir, a.enable_local_chat, a.enable_copilot_chat, a.repository_root, a.enable_github_repositories, a.workflow_dir, a.projects_file if a.enable_project_picker else None, a.project_picker_root))
+    server = ThreadingHTTPServer(("127.0.0.1", a.port), make_handler(a.records_dir, a.enable_local_chat, a.enable_copilot_chat, a.repository_root, a.enable_github_repositories, a.workflow_dir, a.projects_file if a.enable_project_picker else None, a.project_picker_root, enable_patch_apply=a.enable_patch_apply))
     print("Daeloryn local console API listening on http://127.0.0.1:" + str(a.port), flush=True)
     try:
         server.serve_forever()

@@ -57,7 +57,7 @@ def execute(prepared, digest, root, *, transport=copilot_chat):
     if checked['before_sha256'] != hashlib.sha256(prepared['source'].encode()).hexdigest():
         raise PermissionError('Source changed during generation; discard proposal and prepare again')
     return {'status': 'proposed', 'patch': checked, 'replacement': replacement,
-            'agent': prepared['agent'], 'patch_applied': False, 'tests_executed': False}
+            'original': prepared['source'], 'agent': prepared['agent'], 'patch_applied': False, 'tests_executed': False}
 
 
 def parse_replacement(answer):

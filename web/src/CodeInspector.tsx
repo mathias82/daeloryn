@@ -1,3 +1,4 @@
+import type {DeveloperPatch} from './DeveloperPatch';
 import {useEffect,useMemo,useRef,useState} from 'react';
 import {nearbyDeclaration,sourcePreview} from './sourceInspector';
 import {draftPatch,startSuggestion} from './suggestionDraft';
@@ -5,8 +6,8 @@ import type {SuggestionDraft} from './suggestionDraft';
 import type {InspectorSnapshot,SourceReference} from './sourceInspector';
 
 /** Read-only navigation over the exact, approved code snapshot. */
-export function CodeInspector({snapshot,onClose,target,onDeveloper}:{
-  snapshot:InspectorSnapshot;onClose:()=>void;target?:SourceReference;onDeveloper?:(ref:SourceReference)=>void;
+export function CodeInspector({snapshot,onClose,target,onDeveloper,proposal}:{
+  proposal?:DeveloperPatch|null;snapshot:InspectorSnapshot;onClose:()=>void;target?:SourceReference;onDeveloper?:(ref:SourceReference)=>void;
 }){
   const files=useMemo(()=>[...new Set(snapshot.sources.map(s=>s.file))],[snapshot.sources]);
   const [file,setFile]=useState('');
@@ -144,6 +145,7 @@ export function CodeInspector({snapshot,onClose,target,onDeveloper}:{
             </div>;
           }):<p>Source lines unavailable in this approved snapshot.</p>}
         </div>
+        {proposal&&proposal.repository===snapshot.repository&&proposal.path===selected&&<section className="inspector-suggestion-panel" aria-label="Developer proposed source"><h3>{proposal.applied?'Developer patch · applied locally; review snapshot is unchanged':'Developer proposal · not applied'}</h3><div className="inspector-suggestion-grid"><label>Original source<pre>{proposal.original}</pre></label><label>Proposed source<pre>{proposal.replacement}</pre></label></div><button type="button" onClick={()=>void navigator.clipboard.writeText(proposal.replacement).catch(()=>{})}>Copy developer proposed source</button></section>}
         {editMode&&<section className="inspector-suggestion-panel" aria-label="Edit suggestion draft">
           <div className="inspector-suggestion-heading">
             <strong>Edit suggestion · local draft</strong>
