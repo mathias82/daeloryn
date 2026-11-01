@@ -60,9 +60,10 @@ trusted catalog shipped with Daeloryn, not arbitrary profiles from your target
 repository or an existing IDE session. Automatic agent recommendations remain
 advisory; Automatic model routing preserves an explicitly selected agent.
 
-With **GitHub Copilot** and a confirmed local project selected, sending a chat
-message automatically prepares a read-only snapshot of all eligible project source,
-build and README files. The chat shows the exact source manifest, chosen model,
+With **GitHub Copilot** and a confirmed local project selected, only an explicit
+full-project request (or the deliberate Full context override) prepares all eligible
+supported sources. Focused questions prepare a small relevant subset; generic chat
+uses no repository source. The chat shows the exact source manifest, chosen model,
 agent profile, exclusions and potentially billable call count before any source
 is transmitted. Inspect and explicitly approve the SHA-256-bound snapshot to begin;
 the server handles sequential batches and streams completed batch replies and
@@ -199,6 +200,32 @@ New replies are revealed progressively (line boundaries where available), with a
 Show full reply control. This is explicitly **buffered display after provider
 completion**, not live token streaming. Reduced-motion users and restored messages
 show the full text immediately. Complete text is saved before animation finishes.
+
+### Smart Context and readable chat history
+
+Chat defaults to **Smart (recommended)** when a registered local checkout is selected:
+general greetings/questions are **text-only** and cannot trigger a repository
+read or source upload; explicit full-project review requests prepare the existing
+whole-source manifest. Focused project questions use a bounded, filename-ranked
+selection (up to 8 files / 64 KiB, plus no full source-content search), with
+potential omissions clearly disclosed. The selection is conservative and
+heuristic: if a relevant file was not selected, narrow the question or request
+a full review explicitly. Review prepares exact source excerpts for inspection,
+then requires a new per-selection consent before sending any source to Copilot.
+
+In Session configuration, **Context behavior** can be Smart, Text only, or Full
+project for every message. The Full override still requires explicit source
+approval on each request and may invoke numerous model calls. Before approval,
+the UI gives the **exact batch/model-call count**. AI Credit/currency cost is
+marked **unavailable** because this CLI provides no independently verified
+per-request credit usage; the system never derives actual billing from guesses.
+
+New chat messages store UTC ISO timestamps in existing local history and render
+the browser's local date and time. Older saved messages remain readable and
+are labeled without inventing timestamps. The scroll follows a gradually
+revealed answer when the reader is near the bottom, but pauses when the reader
+scrolls up and resumes upon returning to the bottom. The progressive display
+is **not actual provider token streaming**.
 
 ### Whole-project source review
 
