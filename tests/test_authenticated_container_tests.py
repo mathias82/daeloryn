@@ -22,7 +22,7 @@ class AuthenticatedContainerTests(unittest.TestCase):
     return {"verified":True,"containerized":True}
    result=run_approved_tests("Bearer "+"s"*48,auth,"repo",root,"python","a"*64,token,gate,test_runner=runner)
    self.assertTrue(result["verified"])
-   self.assertEqual([(root,"python",True)],calls)
+   self.assertEqual([(root.resolve(),"python",True)],calls)
    with self.assertRaises(PermissionError):
     run_approved_tests("Bearer "+"s"*48,auth,"repo",root,"python","a"*64,token,gate,test_runner=runner)
    self.assertEqual(1,len(calls))
