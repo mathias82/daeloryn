@@ -83,11 +83,15 @@ class ApprovedReviewApiTests(unittest.TestCase):
     {"Origin":"http://127.0.0.1:5173","Content-Type":"application/json","Accept":"application/x-ndjson"})
    response=conn.getresponse()
    self.assertEqual(200,response.status)
-   event=json.loads(response.readline())
-   self.assertEqual("batch_started",event["type"])
+   first=json.loads(response.readline())
+   # Serial and parallel review may emit running-progress and batch-start
+   # in either order; both must flush before the provider has completed.
+   self.assertIn(first["type"],("progress","batch_started"))
    self.assertTrue(entered.wait(1))
    release.set()
-   events=[json.loads(line) for line in response.read().splitlines()]
+   events=[first]+[json.loads(line) for line in response.read().splitlines()]
+   self.assertTrue(any(event.get("phase")=="running" for event in events))
+   self.assertTrue(any(event.get("type")=="batch_started" for event in events))
    completed=[event for event in events if event.get("phase")=="completed_batch"]
    replies=[event for event in events if event.get("type")=="batch_reply"]
    self.assertEqual(1,len(completed))
