@@ -328,8 +328,12 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     payload = json.loads(self.rfile.read(int(length)))
                     is_execute = self.path.endswith("/execute")
                     expected = {"repository", "task", "model", "approved_sha256"} if is_execute else {"repository", "task", "model"}
-                    if not isinstance(payload, dict) or set(payload) not in (expected, expected | {"agent"}):
+                    optional = {"agent", "scope"}
+                    if not isinstance(payload, dict) or not expected.issubset(payload) or not set(payload).issubset(expected | optional):
                         raise ValueError("invalid review payload")
+                    scope = payload.get("scope", "full")
+                    if scope not in ("full", "focused"):
+                        raise ValueError("invalid review scope")
                     # Resolve automatic routing only at preparation time. The UI
                     # submits the resulting concrete model with the approved digest
                     # at execution; no silent re-routing after consent.
@@ -343,8 +347,14 @@ def make_handler(records_dir=None, enable_chat=False, enable_copilot=False, repo
                     matches = resolve_repository(payload["repository"])
                     if len(matches) != 1:
                         raise ValueError("repository must resolve uniquely")
-                    prepared = prepare_ai_review(matches[0], payload["repository"], payload["task"],
-                                                 payload["model"], payload.get("agent"))
+                    # Scope is bound into the approved prompt SHA; execute re-reads
+                    # the same selected subset and rejects changed source/selection.
+                    if scope == "focused":
+                        prepared = prepare_ai_review(matches[0], payload["repository"], payload["task"],
+                                                     payload["model"], payload.get("agent"), scope="focused")
+                    else:
+                        prepared = prepare_ai_review(matches[0], payload["repository"], payload["task"],
+                                                     payload["model"], payload.get("agent"))
                     if is_execute:
                         if self.headers.get("Accept") == "application/x-ndjson":
                             result = execute_ai_review(prepared, payload["model"], payload["approved_sha256"],
