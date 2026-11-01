@@ -4,6 +4,16 @@ export function recommendSpecialist(task:string,technologies:string[],agents:str
   const tech=technologies.join(' ').toLowerCase();
   const has=(name:string)=>agents.includes(name);
   const choose=(name:string,reason:string)=>has(name)?{agent:name,reason}:null;
+  const wantsImplementation=/(?:\b(?:implement|apply(?:\s+the)?\s+patch|fix(?:\s+the)?\s+bug|write\s+(?:the\s+)?code|make\s+the\s+changes)\b|υλοπο(?:ίησε|ιησε|ίηση|ιήσε)|δι[όο]ρθωσε|εφ[άα]ρμοσε|φτι[άα]ξε|κ[άα]νε.{0,25}(?:διορθ[ώω]σ|αλλαγ[ήε]))/iu.test(text);
+  if(wantsImplementation){
+    if(/react|tsx|frontend/.test(text)||/react/.test(tech))
+      return choose('react-developer','explicit React implementation requested');
+    if(/spring|spring-boot/.test(text)||/spring/.test(tech))
+      return choose('spring-boot-engineer','explicit Spring implementation requested')||
+        choose('java-developer','explicit JVM implementation requested');
+    if(/java|jvm|pom|gradle|class|κ[ώω]δικ/.test(text)||/java|maven/.test(tech))
+      return choose('java-developer','explicit Java code changes requested');
+  }
   if(/oauth|jwt|csrf|xss|vulnerab|security|authentication|authorization|ασφάλ/.test(text))
     return choose('security-reviewer','security review requested')||choose('spring-security-engineer','security review requested');
   if(/kubernetes|k8s|helm|container|deployment|aks|docker/.test(text))
