@@ -59,3 +59,19 @@ test('read and list project classes never fall through to plain chat',()=>{
  for(const task of ['read the project class and send me the classes','list the project classes','read my code','list classes in the project','list classes','show methods'])assert.equal(routeContext(task),'focused');
  assert.equal(routeContext('read the project class and send me the classes','text-only'),'none');
 });
+
+
+test('code improvement requests prepare focused source rather than text-only chat',()=>{
+ for(const task of ['προτεινε στο κωδικα βελτιωσεις','Πρότεινε στον κώδικα βελτιώσεις',
+   'Πρότεινέ μου αλλαγές στον κώδικα','Τι βελτιώσεις προτείνεις στην εφαρμογή;',
+   'βελτίωσε τον κώδικα','Suggest improvements to this code',
+   'Propose improvements to my project','Improve this code','Refactor this class']) {
+   assert.equal(routeContext(task),'focused',task);
+   assert.equal(routeContext(task,'text-only'),'none',task);
+   assert.equal(routeContext(task,'docs'),'docs',task);
+ }
+ assert.equal(routeContext('Suggest improvements to my CV'),'none');
+ assert.equal(routeContext('πρότεινε βελτιώσεις στο βιογραφικό μου'),'none');
+ assert.equal(routeContext('Explain code improvement techniques'),'none');
+ assert.equal(routeContext('Suggest improvements across the entire project'),'full');
+});

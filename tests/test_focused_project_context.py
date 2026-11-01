@@ -23,6 +23,17 @@ class FocusedContextTests(unittest.TestCase):
         english = snapshot_focused(self.parent, 'demo', 'read the project class and send me the classes')
         self.assertTrue(any(item['path'].endswith('.java') for item in english['files']))
 
+    def test_improvement_requests_include_program_source(self):
+        for task in ('προτεινε στο κωδικα βελτιωσεις',
+                     'Suggest improvements to this code', 'Improve this code'):
+            with self.subTest(task=task):
+                context = snapshot_focused(self.parent, 'demo', task)
+                paths = [item['path'] for item in context['files']]
+                self.assertIn('src/Inventory.java', paths)
+                self.assertIn('src/TelemetryService.java', paths)
+                self.assertLessEqual(len(paths), 8)
+                self.assertFalse(context['all_eligible_files_included'])
+
     def setUp(self):
         self.temp = TemporaryDirectory()
         self.addCleanup(self.temp.cleanup)
