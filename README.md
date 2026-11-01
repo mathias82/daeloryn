@@ -37,6 +37,23 @@ python3 scripts/agents.py install --target /path/to/project --module all --tool 
 | Platform | Kubernetes, Docker, CI/CD, GitOps, reliability |
 | Shared | Security and integration review |
 
+## Local web console
+
+The Python backend is included at `scripts/console_api.py`. After installing
+frontend dependencies once (`cd web && npm install`), launch both servers from
+the repository root with one command:
+
+```bash
+python3 scripts/console.py --enable-copilot-chat --enable-project-picker --open
+```
+
+Use the same Python environment that has `github-copilot-sdk` installed for model
+discovery. Copilot CLI must already be installed and authenticated. Both servers
+bind loopback; Ctrl+C stops both. Existing services on ports 5173/8765 are never
+killed or reused silently. Without the explicit enable flags, AI and project
+registration stay disabled. See [console setup](web/README.md) and the
+[paired Java review protocol](docs/local-java-review-benchmark.md).
+
 ## Why use it?
 
 **Pros:** reusable specialists, modular installation, common definitions for four tools, testable installer and evaluations.
