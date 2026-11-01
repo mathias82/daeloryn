@@ -36,10 +36,13 @@ function ApprovedCopilotReview({repository,task,enabled,model,agent,onResult}:{r
   const [busy,setBusy] = useState(false);
   const [error,setError] = useState('');
   const [answer,setAnswer] = useState('');
+  const [progress,setProgress] = useState('');
+  const [elapsed,setElapsed] = useState(0);
+  useEffect(()=>{if(!busy)return;setElapsed(0);const timer=window.setInterval(()=>setElapsed(n=>n+1),1000);return()=>window.clearInterval(timer);},[busy]);
   const reviewTask=task.trim() || 'Review code correctness and security';
   const reset=()=>{setPrepared(null);setApproved(false);setAnswer('');setError('');};
   async function prepareReview() {
-    reset();setBusy(true);
+    reset();setProgress('Preparing local source context…');setBusy(true);
     try {
       const response=await fetch('/api/copilot/review/prepare',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(reviewRequest({repository,task:reviewTask,model,agent}))});
       if (!response.ok) {const failure=await response.json();throw new Error(failure.error||'Context preparation failed ('+response.status+')');}
@@ -56,23 +59,41 @@ function ApprovedCopilotReview({repository,task,enabled,model,agent,onResult}:{r
   }
   async function executeReview() {
     if (!prepared || !approved) return;
-    setBusy(true);setError('');setAnswer('');
+    setBusy(true);setError('');setAnswer('');setProgress('Validating approved source before the first model call…');
+    const controller=new AbortController();
+    const timeout=window.setTimeout(()=>controller.abort(),420000);
     try {
-      const response=await fetch('/api/copilot/review/execute',{method:'POST',headers:{'Content-Type':'application/json'},
+      const response=await fetch('/api/copilot/review/execute',{method:'POST',signal:controller.signal,headers:{'Content-Type':'application/json','Accept':'application/x-ndjson'},
         body:JSON.stringify(reviewRequest({repository,task:reviewTask,model,agent},prepared.sha256))});
       if (!response.ok) throw new Error('Approval expired or Copilot unavailable ('+response.status+'). Prepare again.');
-      const data:unknown=await response.json();
+      let data:unknown;
+      if(response.headers.get('content-type')?.includes('application/x-ndjson')) {
+        if(!response.body)throw new Error('Review stream unavailable');
+        const reader=response.body.getReader();const decoder=new TextDecoder();let pending='';
+        while(true){
+          const {value,done}=await reader.read();pending+=decoder.decode(value,{stream:!done});
+          const lines=pending.split('\n');pending=lines.pop()||'';
+          for(const line of lines){if(!line.trim())continue;const event=JSON.parse(line);
+            if(event.type==='progress')setProgress(event.completed+'/'+event.total+' batches completed · '+(event.phase==='running'?'Copilot is processing batch '+event.batch:'Batch '+event.batch+' received'));
+            else if(event.type==='result')data=event.result;
+            else if(event.type==='error')throw new Error(event.error);
+          }
+          if(done)break;
+        }
+        if(!data)throw new Error('Connection ended before the final result. External outcome may be unknown; do not automatically retry.');
+      }else data=await response.json();
       const result=data as {review?:{reply?:string};status?:string;completed_batches?:number;total_batches?:number;failure?:string;coverage?:{all_eligible_files_included:boolean}};
       const summary='Source review: '+(result.status||'completed')+' · '+(result.completed_batches??1)+'/'+(result.total_batches??1)+' batches. Eligible source coverage: '+(result.coverage?.all_eligible_files_included===true?'all included':'see manifest; exclusions/omissions may apply')+'\n'+(result.failure||'')+'\n\n'+(result.review?.reply||JSON.stringify(data,null,2));
       setAnswer(summary);onResult?.(summary);
       setPrepared(null);setApproved(false);
-    } catch(e) {setError(e instanceof Error?e.message:'Review failed');setPrepared(null);setApproved(false);}
-    finally {setBusy(false);}
+    } catch(e) {setError('Review interrupted: '+(e instanceof Error?e.message:'connection failed')+'. External outcome may be unknown; do not automatically retry.');setPrepared(null);setApproved(false);}
+    finally {window.clearTimeout(timeout);setBusy(false);}
   }
   return <section className="surface" aria-label="Approved Copilot source review">
     <h3>Copilot AI source review (opt-in)</h3>
     <p className="muted">Review all supported local project source and build files in approved batches. Inspect coverage and exclusions before sending. No file edits or tests.</p>
     <button type="button" className="outline-button" disabled={!enabled||!model||model==='auto'||busy} onClick={()=>void prepareReview()}>{busy?'Working…':'Prepare AI review context'}</button>
+    {busy&&<p role="status">{progress} · {elapsed}s elapsed. Calls run sequentially; an active call can take up to 90 seconds. The five-minute budget is checked between calls.</p>}
     {!enabled&&<p className="muted">Enable Copilot in the local API and confirm a local repository to use this feature.</p>}
     {model==='auto'&&<p className="muted">Choose a concrete Copilot model before preparing source review.</p>}
     <p className="muted">Requested model: {model||'none'} · Agent: {agent||'generic chat'}</p>

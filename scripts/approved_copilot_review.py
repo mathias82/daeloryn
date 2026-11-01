@@ -89,7 +89,7 @@ def prepare(root, repository, task, model, agent=None):
             'warning': 'Inspect all source before approval. Heuristic redaction is not a secret scanner. Each batch is a separate potentially billable model call. Review stops after 5 minutes or output budget; partial outcomes are reported. Cross-batch reasoning is not guaranteed.'}
 
 
-def execute(prepared, model, approved_digest, *, transport=copilot_chat):
+def execute(prepared, model, approved_digest, *, transport=copilot_chat, progress=None):
     if not isinstance(prepared, dict) or not isinstance(prepared.get('prompt'), str):
         raise ValueError('invalid prepared context')
     prompt = prepared['prompt']
@@ -124,6 +124,9 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat):
         kwargs = {'expected_agent_sha256': profile['sha256']} if profile else {}
         if len(batch) > 3000:
             kwargs['review_context'] = True
+        if progress:
+            progress({'type': 'progress', 'phase': 'running', 'completed': len(replies),
+                      'total': len(prompts), 'batch': attempted + 1})
         attempted += 1
         try:
             response = transport(request, **kwargs)
@@ -133,6 +136,9 @@ def execute(prepared, model, approved_digest, *, transport=copilot_chat):
         except (RuntimeError, TimeoutError, OSError, PermissionError):
             failure = 'Provider call failed; external outcome may be unknown. Remaining batches not invoked; no retry performed.'
             break
+        if progress:
+            progress({'type': 'progress', 'phase': 'completed_batch', 'completed': len(replies),
+                      'total': len(prompts), 'batch': attempted})
     if not failure and not prepared.get('coverage', {}).get('all_eligible_files_included', False):
         failure = 'Some eligible sources were omitted; see coverage. This is not a complete project review.'
     answer = '\n\n'.join(('Batch %d:\n' % (i + 1) if len(prompts) > 1 else '') + row['reply'] for i, row in enumerate(replies))

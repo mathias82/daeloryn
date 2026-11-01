@@ -146,3 +146,21 @@ class ProjectReviewBatchTests(unittest.TestCase):
         validate(request, review_context=True)
         with self.assertRaises(ValueError):
             validate({**request, 'review_context': True})
+
+    def test_progress_precedes_each_call_and_disconnect_stops_future_calls(self):
+        (self.project / 'App.java').write_text('int a;\n' * 8000)
+        prepared = prepare(self.root, 'demo', 'Review', 'sonnet')
+        events = []
+        def transport(request, **kwargs):
+            self.assertEqual('running', events[-1]['phase'])
+            return {'reply': 'Completed finding'}
+        result = execute(prepared, 'sonnet', prepared['sha256'], transport=transport, progress=events.append)
+        self.assertEqual(prepared['batch_count'] * 2, len(events))
+        self.assertEqual(result['completed_batches'], events[-1]['completed'])
+        calls = []
+        def disconnected(event):
+            raise BrokenPipeError('observer disconnected')
+        with self.assertRaises(BrokenPipeError):
+            execute(prepared, 'sonnet', prepared['sha256'],
+                    transport=lambda *a, **kw: calls.append(a), progress=disconnected)
+        self.assertEqual([], calls)
