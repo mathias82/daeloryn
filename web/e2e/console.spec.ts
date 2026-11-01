@@ -658,6 +658,16 @@ test('Smart code review selects Java Reviewer and Inspector receives safe links 
   await expect(link).toBeVisible();
   await link.click();
   await expect(inspector.locator('.inspector-code-target')).toContainText('x.toString()');
+  await expect(inspector.locator('.inspector-code-bug')).toContainText('x.toString()');
+  await expect(inspector.getByText(/Highlighted: possible bug/)).toBeVisible();
+  await inspector.getByRole('button',{name:'Full screen Code Inspector'}).click();
+  await expect(page.getByRole('dialog',{name:'Code Inspector'})).toBeVisible();
+  await expect(page.locator('.code-inspector-fullscreen .inspector-code-bug')).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('complementary',{name:'Code Inspector'})).toBeVisible();
+  await inspector.getByRole('button',{name:'Full screen Code Inspector'}).click();
+  await inspector.getByRole('button',{name:'Exit full screen Code Inspector'}).click();
+  await expect(page.locator('.code-inspector-fullscreen')).toHaveCount(0);
   await page.getByRole('button',{name:'Toggle session details'}).click();
   await expect(page.getByLabel(/^Agent/)).toHaveValue('java-reviewer');
 });
@@ -724,4 +734,21 @@ test('Benchmarks resume same partial run ID and require explicit approval of unk
   await runner.getByRole('button',{name:'Approve & resume saved run'}).click();
   await expect.poll(()=>resumes).toBe(1);
   await expect(runner.getByText(/Resuming dddddddd/)).toBeVisible();
+});
+
+test('Comparison results shows persisted evidence scores and no fabricated verified winner',async({page})=>{
+  const rows=[{run_id:'c'.repeat(32),repository:'demo',mode:'review',model:models[0],
+    agent:'java-reviewer',status:'completed',evaluation_status:'provisional_traceability',
+    provisional_evidence_lead:'daeloryn',baseline_score:0,daeloryn_score:36,verified_winner:null}];
+  await page.route('**/api/benchmarks',route=>route.fulfill({json:{
+    agent_count:22,expected_cells:176,observed_cells:0,verified_trial_count:0,
+    coverage_percent:0,warning:'No independently certified trials',trials:[],
+    paired_comparisons:rows
+  }}));
+  await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
+  const table=page.getByRole('region',{name:'Comparison results'});
+  await expect(table.getByText('36/100')).toBeVisible();
+  await expect(table.getByText('0/100')).toBeVisible();
+  await expect(table.getByText(/Not verified · no independent defect/)).toBeVisible();
+  await expect(table.getByText('daeloryn')).toBeVisible();
 });
