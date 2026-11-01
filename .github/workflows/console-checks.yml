@@ -43,6 +43,7 @@ jobs:
           python3 -m unittest discover -s tests -p 'test_engineering_workflow.py' -v
           python3 -m unittest discover -s tests -p 'test_approved_copilot_review.py' -v
           python3 -m unittest discover -s tests -p 'test_approved_review_api.py' -v
+          python3 -m unittest discover -s tests -p 'test_focused_project_context.py' -v
           python3 -m unittest discover -s tests -p 'test_engineering_pipeline.py' -v
           python3 -m unittest discover -s tests -p 'test_patch_workspace.py' -v
           python3 -m unittest discover -s tests -p 'test_review_context_preflight.py' -v
