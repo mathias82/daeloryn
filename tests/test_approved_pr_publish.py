@@ -15,7 +15,7 @@ class PublishTests(unittest.TestCase):
    with patch("approved_pr_publish._git",side_effect=["daeloryn/fix","a"*40,"",url,""]) as git:
     with patch("approved_pr_publish.subprocess.run",return_value=SimpleNamespace(returncode=0,stdout="https://github.com/org/repo/pull/1")) as gh:
      publish(root,"Title","Body","a"*40,approved=True,
-             expected_repository="org/repo",expected_push_url=url)
+             expected_repository="org/repo",expected_push_url=url,expected_branch="daeloryn/fix")
    git.assert_any_call(root.resolve(),"push",url,"a"*40+":refs/heads/daeloryn/fix")
    self.assertEqual(["gh","pr","create","--draft","--head","daeloryn/fix",
                      "--title","Title","--body","Body","--repo","org/repo"],gh.call_args.args[0])
@@ -27,6 +27,17 @@ class PublishTests(unittest.TestCase):
      with self.assertRaises(PermissionError):
       publish(root,"Title","Body","a"*40,approved=True,
               expected_repository="org/repo",expected_push_url="https://github.com/org/repo.git")
+     gh.assert_not_called()
+   self.assertFalse(any(call.args[1]=="push" for call in git.call_args_list))
+ def test_changed_branch_is_denied_before_network(self):
+  with TemporaryDirectory() as tmp:
+   root=Path(tmp);(root/".git").mkdir()
+   with patch("approved_pr_publish._git",return_value="daeloryn/other") as git:
+    with patch("approved_pr_publish.subprocess.run") as gh:
+     with self.assertRaises(PermissionError):
+      publish(root,"Title","Body","a"*40,approved=True,
+              expected_repository="org/repo",expected_push_url="https://github.com/org/repo.git",
+              expected_branch="daeloryn/fix")
      gh.assert_not_called()
    self.assertFalse(any(call.args[1]=="push" for call in git.call_args_list))
  def test_requires_approval_before_git(self):

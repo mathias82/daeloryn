@@ -35,7 +35,8 @@ class DraftPublicationTests(unittest.TestCase):
    saved=WorkflowStore(Path(d)/"workflows").load("run1")
    self.assertEqual(digest,saved["publication_evidence"]["subject"]["digest"])
    publisher.assert_called_once_with(f.root,"Title","Body",f.commit,approved=True,
-     expected_repository="org/repo",expected_push_url="https://github.com/org/repo.git")
+     expected_repository="org/repo",expected_push_url="https://github.com/org/repo.git",
+     expected_branch="daeloryn/fix")
    with self.assertRaises(RuntimeError):self.publish(f,digest,token,publisher)
    publisher.assert_called_once()
  def test_unverified_workflow_denied(self):

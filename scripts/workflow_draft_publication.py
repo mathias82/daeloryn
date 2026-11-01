@@ -38,7 +38,8 @@ def publish_workflow_draft(store,workflow_id,expected_version,principal,registry
   raise PermissionError("checkout changed during approval")
  result=publisher(checkout,title,body,expected_commit,approved=True,
                   expected_repository=repository,
-                  expected_push_url=state["test_evidence"]["subject"]["snapshot"]["push_url"])
+                  expected_push_url=state["test_evidence"]["subject"]["snapshot"]["push_url"],
+                  expected_branch=state["test_evidence"]["subject"]["snapshot"]["branch"])
  if (not isinstance(result,dict) or result.get("published") is not True
      or result.get("draft_pr_created") is not True
      or result.get("commit")!=expected_commit

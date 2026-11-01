@@ -17,7 +17,7 @@ def _git(root, *args):
     return result.stdout.strip()
 
 def publish(checkout, title, body, expected_commit, *, approved=False, remote="origin",
-            expected_repository=None, expected_push_url=None):
+            expected_repository=None, expected_push_url=None, expected_branch=None):
     if approved is not True:
         raise PermissionError("explicit publication approval required")
     if not isinstance(expected_commit,str) or not SHA.fullmatch(expected_commit):
@@ -26,6 +26,8 @@ def publish(checkout, title, body, expected_commit, *, approved=False, remote="o
         raise ValueError("invalid remote")
     if not isinstance(title,str) or not 1<=len(title)<=120 or not isinstance(body,str) or len(body)>4000:
         raise ValueError("invalid PR metadata")
+    if expected_branch is not None and (not isinstance(expected_branch,str) or not BRANCH.fullmatch(expected_branch)):
+        raise ValueError("invalid expected branch")
     if expected_repository is not None or expected_push_url is not None:
         from workflow_evidence import REPOSITORY
         if not isinstance(expected_repository,str) or not REPOSITORY.fullmatch(expected_repository):
@@ -41,6 +43,8 @@ def publish(checkout, title, body, expected_commit, *, approved=False, remote="o
     branch=_git(root,"branch","--show-current")
     if not BRANCH.fullmatch(branch):
         raise ValueError("dedicated daeloryn branch required")
+    if expected_branch is not None and branch!=expected_branch:
+        raise PermissionError("branch changed since approval")
     if _git(root,"rev-parse","HEAD") != expected_commit:
         raise PermissionError("HEAD changed since approval")
     if _git(root,"status","--porcelain"):

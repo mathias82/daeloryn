@@ -41,7 +41,8 @@ must run approved tests again before publication.
   leave it reserved. Do not automatically retry: inspect GitHub and reconcile first.
 - The default publisher pushes the approved commit object to the approved URL and
   explicitly passes the authorized repository to `gh pr create --draft`. Publisher
-  overrides must accept `expected_repository` and `expected_push_url`, honor these
+  overrides must accept `expected_repository`, `expected_push_url` and
+  `expected_branch`, honor these
   bindings, and report the actual commit and branch in their result.
 - Origin must resolve to one matching GitHub HTTPS/SSH push URL; mirror mode is rejected.
 
