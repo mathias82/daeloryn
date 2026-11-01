@@ -1,4 +1,5 @@
 import {useEffect,useRef,useState} from 'react';
+import type {CampaignSelection} from './AgentCampaign';
 
 type Agent={name:string;scope:string;description:string};
 type Project={name:string;path:string;technologies:string[]};
@@ -40,8 +41,8 @@ function safeError(data:unknown,status:number):string{
   return 'Request failed ('+status+')';
 }
 
-export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
-  projects:Project[];models:string[];agents:Agent[];enabled:boolean;onOpenChat:()=>void;
+export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat,campaignSelection}:{
+  projects:Project[];models:string[];agents:Agent[];enabled:boolean;onOpenChat:()=>void;campaignSelection?:CampaignSelection|null;
 }){
   const [repository,setRepository]=useState('');
   const [mode,setMode]=useState<Mode>('review');
@@ -130,6 +131,17 @@ export function BenchmarkRunner({projects,models,agents,enabled,onOpenChat}:{
     setAssessments(emptyAssessment());setHumanChecked(false);
   }
   function chooseMode(next:Mode){setMode(next);setAgent(defaults[next]);clear();}
+  useEffect(()=>{
+    if(!campaignSelection)return;
+    if(!agents.some(a=>a.name===campaignSelection.agent)||
+       !projects.some(p=>p.name===campaignSelection.repository))return;
+    // This action only selects a domain task; the user must still prepare,
+    // inspect and explicitly approve the paired billable model calls.
+    setRepository(campaignSelection.repository);
+    setMode(campaignSelection.mode);
+    setAgent(campaignSelection.agent);
+    clear();
+  },[campaignSelection?.revision]);
   const selection={repository,mode,model:chosenModel,agent:selectedAgent};
   const canPrepare=Boolean(enabled&&repository&&projects.some(p=>p.name===repository)&&
     chosenModel&&selectedAgent&&!busy&&!inFlight.current&&!savedRuns.some(r=>r.status==='running'||r.status==='stopping'));
