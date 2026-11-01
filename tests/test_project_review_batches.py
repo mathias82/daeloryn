@@ -91,7 +91,7 @@ class ProjectReviewBatchTests(unittest.TestCase):
                 walk.assert_not_called()
 
     def test_unicode_sources_respect_encoded_request_limits_without_losing_tail(self):
-        (self.project / 'App.java').write_text('/* ' + 'α中🙂' * 12000 + ' END */')
+        (self.project / 'App.java').write_text('/* ' + 'α中🙂' * 12000 + ' END */', encoding='utf-8')
         prepared = prepare(self.root, 'demo', 'Review', 'sonnet')
         self.assertIn('END', prepared['prompt'])
         self.assertTrue(prepared['coverage']['all_eligible_files_included'])
