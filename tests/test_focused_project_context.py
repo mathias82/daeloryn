@@ -47,8 +47,8 @@ class FocusedContextTests(unittest.TestCase):
         task = "How does observability work in this project?"
         focused = prepare(self.parent, "demo", task, "test", scope="focused")
         full = prepare(self.parent, "demo", task, "test")
-        self.assertNotIn("src/Inventory.java", focused["files"] and [x["path"] for x in focused["files"]])
-        self.assertIn("src/Inventory.java", [x["path"] for x in full["files"]])
+        self.assertNotIn("src/Inventory.java", focused["files"])
+        self.assertIn("src/Inventory.java", full["files"])
         self.assertNotEqual(focused["sha256"], full["sha256"])
         self.assertEqual("focused", focused["scope"])
         self.assertTrue(all("Inventory.java" not in prompt for prompt in focused["prompts"]))
@@ -107,12 +107,20 @@ class FocusedContextApiTests(FocusedContextTests):
         manifest = json.loads(response.read())
         self.assertEqual("focused", manifest["scope"])
         self.assertNotIn("Inventory.java", manifest["prompt"])
-        with patch("console_api.execute_ai_review") as run:
+        # Use the real digest verifier with an injected no-call provider;
+        # mocking the entire executor would bypass the safety assertion.
+        from approved_copilot_review import execute as real_execute
+        invoked = []
+        def never_provider(*_args, **_kwargs):
+            invoked.append(True)
+            raise AssertionError("provider must not be called")
+        with patch("console_api.execute_ai_review", side_effect=lambda prepared, model, digest, **kwargs:
+                   real_execute(prepared, model, digest, transport=never_provider, **kwargs)):
             response = self.post("/api/copilot/review/execute",
                 {**request, "scope": "full", "approved_sha256": manifest["sha256"]},
                 accept="application/x-ndjson")
             self.assertEqual(400, response.status)
-            run.assert_not_called()
+            self.assertEqual([], invoked)
 
     def test_no_model_is_called_on_invalid_scope(self):
         with patch("console_api.prepare_ai_review") as prepare_mock:
