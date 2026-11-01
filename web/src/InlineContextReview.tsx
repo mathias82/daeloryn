@@ -16,7 +16,7 @@ type ReviewResult = {review?:{reply?:string};status?:string;completed_batches?:n
   total_batches?:number;failure?:string;coverage?:{all_eligible_files_included:boolean}};
 
 export function InlineContextReview({selection,onCompleted,onCancelled,onInspector}:{
-  selection:ReviewSelection;onCompleted:(answer:string)=>void;onCancelled:(unknownOutcome:boolean)=>void;
+  selection:ReviewSelection;onCompleted:(answer:string,model?:string)=>void;onCancelled:(unknownOutcome:boolean)=>void;
   onInspector?:(snapshot:InspectorSnapshot)=>void;
 }) {
   const [prepared,setPrepared]=useState<Manifest|null>(null);
@@ -150,7 +150,7 @@ export function InlineContextReview({selection,onCompleted,onCancelled,onInspect
       const summary=(prepared.scope==='docs'?'Documentation answer: ':prepared.scope==='focused'?'Focused source answer: ':'Full source review: ')+(receipt.status||'unknown')+' · '+String(receipt.completed_batches??0)+'/'+String(receipt.total_batches??prepared.batch_count)+
         ' batches. Eligible source coverage: '+(receipt.coverage?.all_eligible_files_included===true?'all included':'partial or see exclusions')+
         (receipt.failure?'\n'+receipt.failure:'')+'\n\n'+(receipt.review?.reply||'(No reply received)');
-      onCompleted(summary);
+      onCompleted(summary,prepared.model);
     }catch(e){
       if(inspector.current)updateInspector({...inspector.current,status:'Review interrupted · remote outcome unknown'});
       setApproved(false);setPrepared(null);
