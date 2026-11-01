@@ -43,7 +43,7 @@ export function ProgressiveReply({text,animate,onProgress,approvedFiles,onSource
               (segment.range?' lines '+segment.range.line+'–'+segment.range.endLine:
                segment.reference.ranges.length?' cited lines':' entire file')+' in Code Inspector'}
             title={'View '+segment.reference.file+' locally in Code Inspector (no provider call)'}
-            onClick={()=>onSourceSelect(segment.reference,segment.range)}>
+            onClick={()=>onSourceSelect(segment.reference!,segment.range)}>
             {segment.text}</button>:
           <span key={k}>{segment.text}</span>)
         :part.text}
