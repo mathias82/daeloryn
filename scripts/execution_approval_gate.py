@@ -6,6 +6,7 @@ import hashlib
 import hmac
 import secrets
 import time
+import threading
 
 class ApprovalGate:
  def __init__(self, secret=None, ttl_seconds=120, clock=time.monotonic):
@@ -13,6 +14,7 @@ class ApprovalGate:
   self._ttl=ttl_seconds
   self._clock=clock
   self._pending={}
+  self._lock=threading.Lock()
  def prepare(self, action, repository, digest):
   if action not in ("apply_patch","run_tests","publish_pr"):
    raise ValueError("unsupported action")
@@ -20,13 +22,15 @@ class ApprovalGate:
    raise ValueError("invalid approval subject")
   token=secrets.token_urlsafe(32)
   key=hashlib.sha256(token.encode()).hexdigest()
-  self._pending[key]=(action,repository,digest,self._clock()+self._ttl)
+  with self._lock:
+   self._pending[key]=(action,repository,digest,self._clock()+self._ttl)
   return token
  def consume(self,token,action,repository,digest):
   if not isinstance(token,str) or len(token)>256:
    raise PermissionError("invalid token")
   key=hashlib.sha256(token.encode()).hexdigest()
-  record=self._pending.pop(key,None)
+  with self._lock:
+   record=self._pending.pop(key,None)
   if record is None:
    raise PermissionError("approval absent or already used")
   expected=(action,repository,digest)
