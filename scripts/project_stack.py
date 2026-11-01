@@ -83,11 +83,12 @@ def detect_technologies(project):
             except (ValueError, TypeError):
                 pass
         if any((folder / p).is_file() and not (folder / p).is_symlink()
-               for p in PLATFORM_FILES):
-            tags.add("docker" if any((folder / p).is_file() and not (folder / p).is_symlink()
-                                    for p in ("Dockerfile", "docker-compose.yml",
-                                              "docker-compose.yaml", "compose.yml", "compose.yaml"))
-                     else "kubernetes")
+               for p in ("Dockerfile", "docker-compose.yml", "docker-compose.yaml",
+                         "compose.yml", "compose.yaml")):
+            tags.add("docker")
+        if any((folder / p).is_file() and not (folder / p).is_symlink()
+               for p in ("Chart.yaml", "kustomization.yml", "kustomization.yaml")):
+            tags.add("kubernetes")
         for folder_name in ("charts", "helm", "k8s", "kubernetes"):
             item = folder / folder_name
             if not item.is_symlink() and item.is_dir():
