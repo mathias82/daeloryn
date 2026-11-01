@@ -41,7 +41,7 @@ export function LocalComparisons(){
         <tbody>{rows.length?rows.map(row=><tr key={row.run_id}>
           <td>{row.repository}<br/><small>{row.run_id.slice(0,8)} · {row.status}</small></td>
           <td>{row.baseline_score}/100</td><td>{row.daeloryn_score}/100</td>
-          <td>{row.provisional_evidence_lead.replaceAll('_',' ')}<br/><small>{row.evaluation_status.replaceAll('_',' ')}</small></td>
+          <td>{row.provisional_evidence_lead.replace(/_/g,' ')}<br/><small>{row.evaluation_status.replace(/_/g,' ')}</small></td>
           <td>Not verified · no independent defect or regression-test adjudication</td>
         </tr>):<tr><td colSpan={5} className="table-empty">
           No local evidence comparisons yet. Start and complete an A/B run above, or open a saved run and choose Evaluate saved run.
