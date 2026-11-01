@@ -150,7 +150,7 @@ export function CodeInspector({snapshot,onClose}:{
           {draft&&draft.snapshotSha256===snapshot.sha256&&<>
             <div className="inspector-suggestion-grid">
               <label>Original source (read-only)
-                <pre aria-label="Original source lines">{draft.original}</pre>
+                <pre role="region" aria-label="Original source lines">{draft.original}</pre>
               </label>
               <label>Suggested replacement (editable)
                 <textarea aria-label="Suggested replacement" value={draft.replacement} rows={6}
@@ -167,7 +167,7 @@ export function CodeInspector({snapshot,onClose}:{
             </div>
             <div className="inspector-diff" aria-label="Suggested diff preview">
               <strong>Diff preview · source unchanged</strong>
-              <pre>{patch||'No changes proposed yet. Edit the replacement code to preview a patch.'}</pre>
+              <pre role="region" aria-label="Suggested diff preview content">{patch||'No changes proposed yet. Edit the replacement code to preview a patch.'}</pre>
             </div>
           </>}
           {draftMessage&&<p role="status">{draftMessage}</p>}
