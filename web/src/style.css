@@ -42,3 +42,66 @@
 .benchmark-adjudication .benchmark-arm label{display:grid;gap:6px;font-size:12px;color:#aab6cc}
 .benchmark-adjudication input:not([type=checkbox]),.benchmark-adjudication textarea{width:100%;min-width:0;background:#182236;color:#eff1ff;border:1px solid #3b4760;border-radius:8px;padding:9px}
 .benchmark-adjudication p{font-size:12px}
+
+/* Local message timestamps and progressive reply follower. */
+.bubble-time{display:block;color:#8d9ab2;font-size:10px;margin:-2px 0 9px;font-variant-numeric:tabular-nums}
+.bubble.user .bubble-time{text-align:right;color:#c6bef0}
+.chat-messages{overflow-anchor:none;overscroll-behavior:contain}
+
+.history-row{display:grid;grid-template-columns:minmax(0,1fr) 28px;align-items:center;gap:2px;min-width:0}
+.history-row .history-item{min-width:0;width:100%}
+.history-delete{border:0;background:transparent;color:#9aa5bf;border-radius:7px;font-size:18px;line-height:1;padding:4px 6px}
+.history-delete:hover,.history-delete:focus-visible{background:#422b3b;color:#ffb3bd}
+.history-delete:disabled{opacity:.3;cursor:not-allowed}
+.history-confirm{grid-column:1/-1;border:1px solid #79576c;border-radius:9px;margin:3px 4px 9px;padding:10px;background:#211c2b;color:#f4d3dc;font-size:11px;line-height:1.5}
+.history-confirm>div{display:flex;flex-wrap:wrap;gap:5px;margin-top:9px}
+.history-confirm button{background:#36243b;border:1px solid #8a5d78;color:#f3d9e3;border-radius:7px;font-size:11px;padding:5px 8px}
+.history-confirm button:disabled{opacity:.4}
+
+
+/* Workflow: compact, receipt-driven timeline rather than six large cards. */
+.workflow-surface{padding:20px 22px;display:grid;gap:16px}
+.workflow-heading,.workflow-progress-top,.workflow-run-bar,.workflow-footer{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.workflow-heading h2{font-size:18px}
+.workflow-heading p{font-size:11px;margin-top:5px}
+.workflow-execution-bar{background:#151d2e;border:1px solid #303a52;border-radius:11px;padding:14px 16px;display:grid;gap:8px}
+.workflow-progress-top{font-size:12px}
+.workflow-progress-top span{font-size:11px;color:#abb5cc;font-variant-numeric:tabular-nums}
+.workflow-progress-track{width:100%;height:6px;border-radius:8px;background:#32384f;overflow:hidden}
+.workflow-progress-track>div{height:100%;background:#9382ef;border-radius:8px;transition:width 250ms ease}
+.workflow-execution-bar p{font-size:11px}
+.workflow-run-bar{align-items:end}
+.workflow-selector{display:grid;gap:6px;font-size:11px;color:#aeb9ce;flex:1;min-width:min(100%,290px)}
+.workflow-selector select{min-width:0;width:100%;background:#182338;color:#e8eefa;border:1px solid #46516b;padding:10px 12px;border-radius:8px;font-size:12px}
+.workflow-run-caption{color:#99a6c1;font-size:11px;overflow-wrap:anywhere}
+.workflow-empty{font-size:11px}
+.workflow-timeline{margin:0;padding:0;list-style:none;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:9px}
+.workflow-step{min-width:0;min-height:66px;display:flex;gap:11px;align-items:center;padding:11px 13px;border:1px solid #313c53;border-radius:10px;background:#161f31}
+.workflow-step-number{display:grid;place-items:center;flex:0 0 30px;width:30px;height:30px;border-radius:9px;background:#292540;color:#b6a9ff;font-weight:700;font-size:11px;font-variant-numeric:tabular-nums}
+.workflow-step-copy{flex:1;min-width:0;display:grid;gap:5px}
+.workflow-step-copy strong{font-size:12px;font-weight:600;color:#dce5f6;line-height:1.3}
+.workflow-step-copy small{color:#939fb6;font-size:10px;line-height:1.4;overflow-wrap:anywhere}
+.workflow-status{font-size:10px;font-weight:600;line-height:1.25;padding:5px 8px;border:1px solid #46516a;border-radius:7px;white-space:nowrap;color:#abb7cf;background:#222c41}
+.workflow-complete{border-color:#37675f;background:#162e31}
+.workflow-complete .workflow-step-number,.workflow-status-complete{color:#98edc6;background:#174539;border-color:#356d57}
+.workflow-running{border-color:#685bb1;background:#222241}
+.workflow-running .workflow-step-number,.workflow-status-running{color:#d1c7ff;background:#393062;border-color:#7667bb}
+.workflow-failed{border-color:#8b5268}
+.workflow-failed .workflow-step-number,.workflow-status-failed{color:#ffadb9;background:#4a2939;border-color:#8b5268}
+.workflow-locked{opacity:.7;background:#131b28}
+.workflow-locked .workflow-step-number{color:#8794ab;background:#222a3a}
+.workflow-status-locked{color:#9ba6bb;background:#202735;border-color:#3c455b}
+.workflow-footer{justify-content:flex-start}
+.workflow-limitation{border-top:1px solid #29364b;padding-top:12px;font-size:11px}
+.workflow-error{font-size:11px;color:#efb2bc;overflow-wrap:anywhere}
+.workflow-tools{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));align-items:start;gap:14px;margin-top:15px}
+.workflow-tools>.surface{padding:18px;min-width:0}
+.workflow-tools>.surface h3{font-size:14px}
+.workflow-tools>.surface p{margin:8px 0;font-size:11px}
+.workflow-tools textarea,.workflow-tools select,.workflow-tools input{max-width:100%;background:#182338;border:1px solid #46516b;border-radius:8px;padding:10px;color:#e8eefa}
+.workflow-tools textarea{display:block;width:100%;min-height:95px;resize:vertical}
+.workflow-tools label{font-size:11px;color:#aeb9ce}
+.workflow-tools button{margin-top:7px}
+.workflow-tools .workflow-stage{padding:11px;min-height:0}
+@media(max-width:1100px){.workflow-timeline{grid-template-columns:1fr}.workflow-tools{grid-template-columns:1fr}}
+@media(max-width:650px){.workflow-surface{padding:15px}.workflow-step{flex-wrap:wrap;gap:8px}.workflow-step-copy{flex-basis:calc(100% - 45px)}.workflow-status{margin-left:41px}.workflow-run-bar>.outline-button{width:100%}}

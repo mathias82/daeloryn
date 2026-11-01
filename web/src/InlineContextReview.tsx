@@ -4,6 +4,7 @@ import type {ReviewSelection} from './copilotRequests';
 
 type Manifest = {
   repository:string; model:string; agent:string|null; prompt:string; sha256:string;
+  scope:'focused'|'full';estimated_provider_calls?:number;verified_usage_credits?:number|null;
   files:string[]; batch_count:number; warning:string; approval_required:boolean;
   agent_profile:string|null; agent_profile_sha256:string|null;
   coverage?:{all_eligible_files_included:boolean;scope:string;
@@ -39,6 +40,7 @@ export function InlineContextReview({selection,onCompleted,onCancelled}:{
           !/^[0-9a-f]{64}$/.test(data.sha256)||!('prompt' in data)||typeof data.prompt!=='string'||
           !('repository' in data)||data.repository!==selection.repository||
           !('model' in data)||typeof data.model!=='string'||data.model==='auto'||
+          !('scope' in data)||data.scope!==(selection.scope||'full')||
           (selection.model!=='auto'&&data.model!==selection.model)||
           !('agent' in data)||data.agent!==(selection.agent||null)||
           !('files' in data)||!Array.isArray(data.files)||
@@ -55,7 +57,7 @@ export function InlineContextReview({selection,onCompleted,onCancelled}:{
     // microtask so the first (cleaned-up) effect never reaches the API.
     queueMicrotask(()=>{if(!controller.signal.aborted)void prepare();});
     return()=>controller.abort();
-  },[selection.repository,selection.task,selection.model,selection.agent]);
+  },[selection.repository,selection.task,selection.model,selection.agent,selection.scope]);
   useEffect(()=>()=>{active.current?.abort();},[]);
   useEffect(()=>{
     if(!busy)return;
@@ -109,7 +111,7 @@ export function InlineContextReview({selection,onCompleted,onCancelled}:{
         !data.review||typeof data.review!=='object'||!('reply' in data.review)||
         typeof data.review.reply!=='string')throw new Error('Invalid final review receipt');
       const receipt=data as ReviewResult;
-      const summary='Source review: '+(receipt.status||'unknown')+' · '+String(receipt.completed_batches??0)+'/'+String(receipt.total_batches??prepared.batch_count)+
+      const summary=(prepared.scope==='focused'?'Focused source answer: ':'Full source review: ')+(receipt.status||'unknown')+' · '+String(receipt.completed_batches??0)+'/'+String(receipt.total_batches??prepared.batch_count)+
         ' batches. Eligible source coverage: '+(receipt.coverage?.all_eligible_files_included===true?'all included':'partial or see exclusions')+
         (receipt.failure?'\n'+receipt.failure:'')+'\n\n'+(receipt.review?.reply||'(No reply received)');
       onCompleted(summary);
@@ -119,13 +121,14 @@ export function InlineContextReview({selection,onCompleted,onCancelled}:{
     }finally{window.clearTimeout(timer);setBusy(false);setExecuting(false);}
   }
   return <section className="surface inline-context-review" aria-label="Chat project context approval">
-    <h3>Project context · {selection.repository}</h3>
-    <p className="muted">Your chat request is ready for a read-only whole-project review. Daeloryn handles source batches automatically after your approval. No edits, commands or tests.</p>
+    <h3>{selection.scope==='focused'?'Focused project context':'Full project review'} · {selection.repository}</h3>
+    <p className="muted">{selection.scope==='focused'?'Only relevant filename-matched excerpts and top-level build documentation are prepared. This is not full-project coverage.':'All eligible project sources are prepared within explicit safety limits.'} You approve source transmission before any model calls. No edits, commands or tests.</p>
     {busy&&<p role="status">{status} · {elapsed}s elapsed</p>}
     {prepared&&!executing&&<div>
       <p><strong>{prepared.files.length} source files · {prepared.batch_count} potentially billable model calls</strong> · {prepared.model}</p>
+      <p className="muted">Estimated AI Credit charge: unavailable (model-dependent). Actual verified credits: {typeof prepared.verified_usage_credits==='number'?String(prepared.verified_usage_credits):'not supplied by Copilot CLI'}. The batch count is exact; no currency estimate is fabricated.</p>
       <p className="muted">{prepared.warning}</p>
-      {prepared.coverage?.all_eligible_files_included===false&&<p role="alert">Partial coverage: some eligible files were omitted.</p>}
+      {prepared.coverage?.all_eligible_files_included===false&&<p role="status">{selection.scope==='focused'?'Focused selection only. Other files were not inspected.':'Partial coverage: some eligible files were omitted.'}</p>}
       <details><summary>Inspect exact source, approval SHA-256 and exclusions</summary>
         <p>SHA-256: <code>{prepared.sha256}</code></p>
         <p>{prepared.coverage?.scope||'Selected local project'}</p>
@@ -134,7 +137,7 @@ export function InlineContextReview({selection,onCompleted,onCancelled}:{
         {prepared.agent_profile&&<pre style={{whiteSpace:'pre-wrap',maxHeight:240,overflowY:'auto'}}>{prepared.agent_profile}</pre>}
         <pre style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere',maxHeight:300,overflowY:'auto'}}>{prepared.prompt}</pre>
       </details>
-      <label><input type="checkbox" checked={approved} disabled={busy} onChange={e=>setApproved(e.target.checked)}/> I inspected the exact source context, model and selected agent, and approve sending them to Copilot.</label>
+      <label><input type="checkbox" checked={approved} disabled={busy} onChange={e=>setApproved(e.target.checked)}/> I inspected the exact source context, model, agent and call count, and approve sending them to Copilot.</label>
       <button type="button" disabled={!approved||busy} onClick={()=>void execute()}>Approve and analyze project</button>
     </div>}
     {partial&&<div className="inline-context-partial"><strong>Completed batch results (live)</strong><p style={{whiteSpace:'pre-wrap',overflowWrap:'anywhere'}}>{partial}</p></div>}

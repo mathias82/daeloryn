@@ -46,7 +46,9 @@ class ProjectReviewBatchTests(unittest.TestCase):
         package.mkdir(parents=True)
         body = 'int a;\n' * 16000
         for index in range(8):
-            (package / ('ExampleSourceClass%d.java' % index)).write_text(body)
+            # Explicit LF bytes: Windows text defaults expand every newline to CRLF,
+            # making this near-budget fixture exceed the same 64-batch budget.
+            (package / ('ExampleSourceClass%d.java' % index)).write_bytes(body.encode('utf-8'))
         prepared = prepare(self.root, 'demo', 'Review Java', 'sonnet')
         self.assertEqual(8, len(prepared['files']))
         self.assertTrue(prepared['coverage']['all_eligible_files_included'])

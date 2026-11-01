@@ -1,5 +1,5 @@
 export type ChatMessage = {role:'user'|'assistant';content:string};
-export type ReviewSelection = {repository:string;task:string;model:string;agent?:string};
+export type ReviewSelection = {repository:string;task:string;model:string;agent?:string;scope?:'focused'|'full'};
 
 // The preview recommendation does not silently activate a specialist.
 export function selectedAgent(agent:string):string|undefined {

@@ -10,6 +10,7 @@ test.beforeEach(async({page})=>{
       '/api/health':{execution_enabled:false},
       '/api/agents':{agents:[{name:'java-reviewer',scope:'java',description:'Fixture reviewer'}]},
       '/api/benchmarks':{agent_count:1,expected_cells:8,observed_cells:1,verified_trial_count:0,coverage_percent:12.5,warning:'Fixture data; identities unverified',trials},
+      '/api/benchmark/runs':{runs:[],persistence:'local-private-disk',verified_trial:false},
       '/api/models':{models:[],chat_enabled:false},
       '/api/copilot/status':{enabled:true},
       '/api/copilot/models':{models},
@@ -205,8 +206,8 @@ test('Send prepares project context in chat, waits for approval, then runs batch
   await page.route('**/api/copilot/review/prepare',async route=>{
     requests.push('prepare');
     const body=route.request().postDataJSON();
-    expect(body).toMatchObject({repository:'demo',task:'Review the project',model:'auto'});
-    await route.fulfill({json:{repository:'demo',model:models[0],agent:null,
+    expect(body).toMatchObject({repository:'demo',task:'Review the entire project',model:'auto',scope:'full'});
+    await route.fulfill({json:{repository:'demo',model:models[0],agent:null,scope:'full',
       prompt:'Fixture source snapshot',sha256:'a'.repeat(64),files:['App.java'],
       batch_count:2,warning:'Fixture review has 2 potentially billable calls',
       approval_required:true,agent_profile:null,agent_profile_sha256:null,
@@ -215,7 +216,7 @@ test('Send prepares project context in chat, waits for approval, then runs batch
   await page.route('**/api/copilot/review/execute',async route=>{
     requests.push('execute');
     expect(route.request().postDataJSON()).toMatchObject({
-      repository:'demo',task:'Review the project',model:models[0],approved_sha256:'a'.repeat(64)});
+      repository:'demo',task:'Review the entire project',model:models[0],scope:'full',approved_sha256:'a'.repeat(64)});
     await route.fulfill({contentType:'application/x-ndjson',body:[
       {type:'progress',phase:'running',completed:0,total:2,batch:1},
       {type:'progress',phase:'completed_batch',completed:1,total:2,batch:1},
@@ -228,7 +229,7 @@ test('Send prepares project context in chat, waits for approval, then runs batch
   });
   await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
   await page.getByLabel(/^Local repository/).selectOption('demo');
-  await page.getByRole('textbox',{name:'Message',exact:true}).fill('Review the project');
+  await page.getByRole('textbox',{name:'Message',exact:true}).fill('Review the entire project');
   await page.getByRole('button',{name:/Send message/}).click();
   await expect(page.getByRole('region',{name:'Chat project context approval'})).toBeVisible();
   await expect(page.getByText('1 source files · 2 potentially billable model calls')).toBeVisible();
@@ -242,7 +243,7 @@ test('Send prepares project context in chat, waits for approval, then runs batch
 test('Changing the model invalidates pending in-chat source approval',async({page})=>{
   let executed=0;
   await page.route('**/api/copilot/review/prepare',route=>route.fulfill({json:{
-    repository:'demo',model:models[0],agent:null,prompt:'Fixture snapshot',sha256:'a'.repeat(64),
+    repository:'demo',model:models[0],agent:null,scope:'focused',prompt:'Fixture snapshot',sha256:'a'.repeat(64),
     files:['App.java'],batch_count:1,warning:'One provider call',approval_required:true,
     agent_profile:null,agent_profile_sha256:null}}));
   page.on('request',r=>{if(r.url().endsWith('/api/copilot/review/execute'))executed++;});
@@ -277,27 +278,34 @@ test('Benchmarks runs approved paired read-only Copilot A/B and never invents a 
         coverage:{scope:'fixture',all_eligible_files_included:true,omitted:[],excluded:[]}}
     }});
   });
-  await page.route('**/api/benchmark/execute',async route=>{
-    calls.push('execute');
+  await page.route('**/api/benchmark/start',async route=>{
+    calls.push('start');
     expect(route.request().postDataJSON()).toMatchObject({
       repository:'demo',model:models[0],agent:'java-reviewer',approved_sha256:'a'.repeat(64)});
-    await route.fulfill({contentType:'application/x-ndjson',body:[
-      {type:'arm_started',arm:'baseline',total_batches:1},
-      {type:'progress',arm:'baseline',phase:'completed_batch',completed:1,total:1,batch:1},
-      {type:'batch_reply',arm:'baseline',batch:1,reply:'Baseline found A'},
-      {type:'arm_finished',arm:'baseline',status:'completed'},
-      {type:'arm_started',arm:'daeloryn',total_batches:1},
-      {type:'batch_reply',arm:'daeloryn',batch:1,reply:'Daeloryn found A and B'},
-      {type:'result',result:{kind:'paired-source-review-observation',
-        status:'completed',model:models[0],agent:'java-reviewer',
-        source_sha256:'b'.repeat(64),winner:'not_determined',
-        independent_checks_executed:false,model_identity_verified:false,
-        agent_selection_verified:false,warning:'Requires human review.',
-        arms:{baseline:{status:'completed',completed_batches:1,total_batches:1,
-          review:{reply:'Baseline found A'}},daeloryn:{status:'completed',
-          completed_batches:1,total_batches:1,review:{reply:'Daeloryn found A and B'}}}}}
-    ].map(x=>JSON.stringify(x)).join('\n')+'\n'});
+    await route.fulfill({status:202,json:{
+      run_id:'f'.repeat(32),status:'running',created_at:'2026-11-01T18:00:00+00:00'}});
   });
+  await page.route('**/api/benchmark/runs',route=>route.fulfill({json:{runs:[{
+    run_id:'f'.repeat(32),status:'completed',repository:'demo',mode:'review',
+    model:models[0],agent:'java-reviewer',created_at:'2026-11-01T18:00:00+00:00',
+    updated_at:'2026-11-01T18:01:00+00:00'}]}}));
+  await page.route('**/api/benchmark/runs/*',route=>route.fulfill({json:{
+    run_id:'f'.repeat(32),status:'completed',repository:'demo',mode:'review',
+    model:models[0],agent:'java-reviewer',created_at:'2026-11-01T18:00:00+00:00',
+    updated_at:'2026-11-01T18:01:00+00:00',
+    arms:{
+      baseline:{status:'completed',completed_batches:1,total_batches:1,reply:'Baseline found A',failure:null},
+      daeloryn:{status:'completed',completed_batches:1,total_batches:1,reply:'Daeloryn found A and B',failure:null}
+    },
+    result:{kind:'paired-source-review-observation',status:'completed',
+      model:models[0],agent:'java-reviewer',source_sha256:'b'.repeat(64),
+      winner:'not_determined',independent_checks_executed:false,
+      model_identity_verified:false,agent_selection_verified:false,
+      warning:'Requires human review.',
+      arms:{baseline:{status:'completed',completed_batches:1,total_batches:1,review:{reply:''}},
+        daeloryn:{status:'completed',completed_batches:1,total_batches:1,review:{reply:''}}}}
+  }}));
+
   await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
   const runner=page.getByRole('region',{name:'Paired benchmark runner'});
   await runner.getByLabel('Benchmark project').selectOption('demo');
@@ -308,8 +316,12 @@ test('Benchmarks runs approved paired read-only Copilot A/B and never invents a 
   await runner.getByRole('button',{name:'Approve & run A/B'}).click();
   await expect(runner.getByText('Winner: Not determined')).toBeVisible();
   await expect(runner.getByText('Daeloryn found A and B')).toBeVisible();
+  await page.getByRole('navigation').getByRole('button',{name:/Overview/}).click();
+  await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
+  await expect(page.getByRole('region',{name:'Saved benchmark runs'}).getByLabel('Saved benchmark run')).toHaveValue('f'.repeat(32));
+  await expect(page.getByText('Daeloryn found A and B')).toBeVisible();
   await expect(runner.getByText('Baseline found A')).toBeVisible();
-  expect(calls).toEqual(['prepare','execute']);
+  expect(calls).toEqual(['prepare','start']);
   await expect(runner.getByText('No reviewed result yet')).toBeVisible();
   await runner.getByLabel('baseline confirmed defects').fill('1');
   await runner.getByLabel('baseline false positives').fill('2');
@@ -324,7 +336,7 @@ test('Benchmarks runs approved paired read-only Copilot A/B and never invents a 
 
 test('Benchmarks cannot call Copilot before explicit approval',async({page})=>{
   let executions=0;
-  page.on('request',request=>{if(request.url().endsWith('/api/benchmark/execute'))executions++;});
+  page.on('request',request=>{if(request.url().endsWith('/api/benchmark/start'))executions++;});
   await page.getByRole('navigation').getByRole('button',{name:/Benchmarks/}).click();
   const runner=page.getByRole('region',{name:'Paired benchmark runner'});
   await expect(runner.getByRole('button',{name:'Prepare A/B benchmark'})).toBeDisabled();
@@ -332,4 +344,139 @@ test('Benchmarks cannot call Copilot before explicit approval',async({page})=>{
   await runner.getByLabel('Benchmark type').selectOption('fix-plan');
   await expect(runner.getByText(/Patches, builds and regression tests are not executed/)).toBeVisible();
   expect(executions).toBe(0);
+});
+
+
+test('Smart Context keeps greetings text-only with local per-message timestamps',async({page})=>{
+  let prepared=0,chats=0;
+  page.on('request',r=>{
+    if(r.url().endsWith('/api/copilot/review/prepare'))prepared++;
+    if(r.url().endsWith('/api/copilot/chat'))chats++;
+  });
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await page.getByLabel(/^Local repository/).selectOption('demo');
+  await page.getByLabel(/^Context behavior/).selectOption('smart');
+  await page.getByRole('textbox',{name:'Message',exact:true}).fill('Hello');
+  await page.getByRole('button',{name:/Send message/}).click();
+  await expect(page.locator('.bubble.assistant')).toContainText('Fixture reply');
+  expect(chats).toBe(1);
+  expect(prepared).toBe(0);
+  const userTime=page.locator('.bubble.user time').last();
+  const assistantTime=page.locator('.bubble.assistant time').last();
+  await expect(userTime).toHaveAttribute('datetime',/^\d{4}-\d{2}-\d{2}T/);
+  await expect(assistantTime).toHaveAttribute('datetime',/^\d{4}-\d{2}-\d{2}T/);
+  const timestamp=await assistantTime.getAttribute('datetime');
+  await page.reload();
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await expect(page.locator('.bubble.assistant time').last()).toHaveAttribute('datetime',timestamp!);
+});
+
+test('Smart Context prepares focused project excerpts for scoped questions',async({page})=>{
+  const requests:string[]=[];
+  await page.route('**/api/copilot/review/prepare',route=>{
+    const selection=route.request().postDataJSON();
+    requests.push(selection.scope);
+    expect(selection).toMatchObject({repository:'demo',scope:'focused',task:'What observability does this project have?'});
+    return route.fulfill({json:{...selection,model:models[0],
+      prompt:'Only README + TelemetryService',sha256:'a'.repeat(64),
+      agent:null,agent_profile:null,agent_profile_sha256:null,
+      files:['README.md','TelemetryService.java'],batch_count:1,
+      approval_required:true,warning:'One model call',
+      verified_usage_credits:null,coverage:{scope:'Focused context only',all_eligible_files_included:false,omitted:[],excluded:[]}}});
+  });
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await page.getByLabel(/^Local repository/).selectOption('demo');
+  await page.getByRole('textbox',{name:'Message',exact:true}).fill('What observability does this project have?');
+  await page.getByRole('button',{name:/Send message/}).click();
+  await expect(page.getByRole('heading',{name:/Focused project context/})).toBeVisible();
+  await expect(page.getByText('Estimated AI Credit charge: unavailable', {exact:false})).toBeVisible();
+  expect(requests).toEqual(['focused']);
+});
+
+test('Progressive answers auto-scroll while near bottom but respect manual scroll up',async({page})=>{
+  await page.route('**/api/copilot/chat',route=>route.fulfill({json:{
+    reply:Array.from({length:230},(_,i)=>'Long response line '+i+' · testing line by line scrolling').join('\n')
+  }}));
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await page.getByLabel(/^Copilot model/).selectOption(models[0]);
+  await page.getByRole('textbox',{name:'Message',exact:true}).fill('Explain the Java collections API');
+  await page.getByRole('button',{name:/Send message/}).click();
+  const scroll=page.locator('.chat-messages');
+  await expect(page.getByText('Displaying completed provider response…')).toBeVisible();
+  await expect.poll(async()=>scroll.evaluate(el=>el.scrollHeight-el.clientHeight)).toBeGreaterThan(100);
+  await expect.poll(async()=>scroll.evaluate(el=>el.scrollHeight-el.scrollTop-el.clientHeight)).toBeLessThan(110);
+  await scroll.evaluate(el=>{el.scrollTop=0;el.dispatchEvent(new Event('scroll'));});
+  await page.waitForTimeout(250);
+  const afterManual=await scroll.evaluate(el=>el.scrollTop);
+  expect(afterManual).toBeLessThan(30);
+  await scroll.evaluate(el=>{el.scrollTop=el.scrollHeight;el.dispatchEvent(new Event('scroll'));});
+  await expect.poll(async()=>scroll.evaluate(el=>el.scrollHeight-el.scrollTop-el.clientHeight)).toBeLessThan(110);
+});
+
+
+test('delete exactly one selected chat with confirmation; preserve other conversations',async({page})=>{
+  await page.getByRole('navigation').getByRole('button',{name:/Chat/}).click();
+  await page.getByRole('button',{name:/New chat/i}).click();
+  await page.getByRole('button',{name:/New chat/i}).click();
+  const before=await page.locator('.history-row').count();
+  expect(before).toBeGreaterThan(2);
+  await page.locator('.history-row').first().getByRole('button',{name:/Delete chat/}).click();
+  await expect(page.getByText(/Delete this chat permanently/)).toBeVisible();
+  await page.locator('.history-row').first().getByRole('button',{name:'Cancel'}).click();
+  expect(await page.locator('.history-row').count()).toBe(before);
+  await page.locator('.history-row').first().getByRole('button',{name:/Delete chat/}).click();
+  await page.locator('.history-row').first().getByRole('button',{name:'Confirm delete'}).click();
+  expect(await page.locator('.history-row').count()).toBe(before-1);
+  await page.reload();
+  expect(await page.locator('.history-row').count()).toBe(before-1);
+  await expect(page.getByRole('navigation').getByRole('button',{name:/Benchmarks/})).toBeVisible();
+});
+
+test('Overview uses discovered models, never hardcodes connected sessions',async({page})=>{
+  await expect(page.getByText('Discovered models',{exact:true})).toBeVisible();
+  const metric=page.locator('.metric').filter({hasText:'Discovered models'});
+  await expect(metric).toContainText('2');
+  await expect(metric).toContainText('Copilot: 2');
+  await page.getByRole('navigation').getByRole('button',{name:/Models/}).click();
+  await expect(page.getByText('Discovered model catalogs')).toBeVisible();
+  await expect(page.getByText(models.join(', '))).toBeVisible();
+});
+
+test('Workflow shows real recorded batches and never checks off unsupported patch/publish stages',async({page})=>{
+  const run='e'.repeat(32);
+  await page.route('**/api/benchmark/runs',route=>route.fulfill({json:{runs:[{
+    run_id:run,status:'partial',repository:'demo',mode:'review',model:models[0],agent:'java-reviewer',
+    created_at:'2026-11-01T18:00:00+00:00',updated_at:'2026-11-01T18:01:00+00:00'}]}}));
+  await page.route('**/api/benchmark/runs/*',route=>route.fulfill({json:{
+    run_id:run,status:'partial',repository:'demo',mode:'review',model:models[0],agent:'java-reviewer',
+    source_sha256:'a'.repeat(64),approved_sha256:'b'.repeat(64),
+    created_at:'2026-11-01T18:00:00+00:00',updated_at:'2026-11-01T18:01:00+00:00',
+    error:'Partial benchmark, pending manual investigation',
+    arms:{baseline:{status:'completed',completed_batches:2,total_batches:2,reply:'baseline',failure:null},
+      daeloryn:{status:'partial',completed_batches:1,total_batches:2,reply:'partial',
+        failure:'Provider call failed, no retry'}},
+    result:{status:'partial',independent_checks_executed:false}
+  }}));
+  await page.getByRole('navigation').getByRole('button',{name:/Workflows/}).click();
+  const guide=page.getByRole('region',{name:'Engineering workflow',exact:true});
+  await expect(guide.getByText('Completed 2/2 batches')).toBeVisible();
+  await expect(guide.getByText('Partial / failed 1/2 batches')).toBeVisible();
+  await expect(guide.getByText('Not available in read-only pilot')).toBeVisible();
+  await expect(guide.getByText('Not executed by this workflow')).toBeVisible();
+  await expect(guide.getByRole('checkbox')).toHaveCount(0);
+  await expect(guide.getByRole('list',{name:'Workflow execution stages'}).getByRole('listitem')).toHaveCount(6);
+  await expect(guide.getByRole('progressbar',{name:'Verified source review stages'})).toHaveAttribute('aria-valuenow','2');
+  // New layout is a compact timeline, rather than six tall 3-column boxes.
+  const desktopRows=await guide.locator('.workflow-step').first().boundingBox();
+  expect(desktopRows).not.toBeNull();
+  expect(desktopRows!.height).toBeLessThan(110);
+  await page.setViewportSize({width:760,height:900});
+  await expect(guide.getByRole('list',{name:'Workflow execution stages'}).getByRole('listitem')).toHaveCount(6);
+  const layout=await guide.locator('.workflow-timeline').evaluate(element=>{
+    const style=getComputedStyle(element);
+    return {columns:style.gridTemplateColumns,
+      overflowing:element.scrollWidth>element.clientWidth+1};
+  });
+  expect(layout.overflowing).toBe(false);
+  expect(layout.columns.trim().split(/\s+/).length).toBe(1);
 });

@@ -60,9 +60,10 @@ trusted catalog shipped with Daeloryn, not arbitrary profiles from your target
 repository or an existing IDE session. Automatic agent recommendations remain
 advisory; Automatic model routing preserves an explicitly selected agent.
 
-With **GitHub Copilot** and a confirmed local project selected, sending a chat
-message automatically prepares a read-only snapshot of all eligible project source,
-build and README files. The chat shows the exact source manifest, chosen model,
+With **GitHub Copilot** and a confirmed local project selected, only an explicit
+full-project request (or the deliberate Full context override) prepares all eligible
+supported sources. Focused questions prepare a small relevant subset; generic chat
+uses no repository source. The chat shows the exact source manifest, chosen model,
 agent profile, exclusions and potentially billable call count before any source
 is transmitted. Inspect and explicitly approve the SHA-256-bound snapshot to begin;
 the server handles sequential batches and streams completed batch replies and
@@ -115,6 +116,42 @@ Do not use confidential customer checkouts, host credentials or an untrusted
 development workstation without external isolation and authorization. For a
 real **Bug Fix + Regression Tests** contest, use the separately documented
 frozen-test/isolated evaluator protocol until the secure runner is integrated.
+
+## Persistent A/B benchmarks and live workflow progress
+
+- **Overview → Discovered models** counts the provider-advertised Copilot and
+  Ollama catalog entries separately. These are *not* verified sessions or proof
+  of availability for inference.
+- **Benchmarks → Prepare → Approve & run A/B** now starts a durable loopback
+  background worker, not an HTTP response-owned run. Each approved attempt gets
+  a new ID. **Saved A/B runs** lists up to 30 runs; selecting one restores
+  transcripts, batch counts, status and per-arm failure details across page
+  navigation and refresh.
+- Private run receipts are stored under
+  `~/.daeloryn/benchmark-runs/*.json` with restricted file permissions.
+  Model responses may contain confidential content. The source snapshot and
+  exact user approval prompts are **not** written to run receipts. Back up or
+  protect the directory accordingly. The UI provides no deletion of benchmark
+  receipts yet; chat deletion does not delete them.
+- If the server crashes/restarts mid-run, the saved status is marked
+  **interrupted**, not successful. A partially completed baseline or specialist
+  is preserved without automatic retry. Source approval, model and batch limits
+  are still validated before the run starts. History storage is bounded to 30
+  runs (new attempts are rejected when full rather than silently deleting data).
+- **Workflows** is now an evidence-based view of these recorded A/B runs:
+  source approval, baseline and specialist progress and failure receipts. Steps
+  requiring independent defect review, patch writes, tests and GitHub publication
+  remain explicitly pending/not available; no boxes can manufacture completed
+  stages. The review pipeline remains **read-only**.
+- **Chat → Recent chats** supports deleting one selected conversation with
+  confirmation. The remaining conversations persist in browser localStorage;
+  when deleting the last one, an empty replacement chat is created. Pending
+  source approval or model calls block deletion to avoid orphaned outcomes.
+
+Previous in-memory benchmark results that disappeared before this feature
+cannot be recovered. A brand-new approved run is required to populate the
+new durable history; do not repeat an uncertain prior run without reconciling
+its external provider usage.
 
 ## Production integration requirements
 
@@ -199,6 +236,32 @@ New replies are revealed progressively (line boundaries where available), with a
 Show full reply control. This is explicitly **buffered display after provider
 completion**, not live token streaming. Reduced-motion users and restored messages
 show the full text immediately. Complete text is saved before animation finishes.
+
+### Smart Context and readable chat history
+
+Chat defaults to **Smart (recommended)** when a registered local checkout is selected:
+general greetings/questions are **text-only** and cannot trigger a repository
+read or source upload; explicit full-project review requests prepare the existing
+whole-source manifest. Focused project questions use a bounded, filename-ranked
+selection (up to 8 files / 64 KiB, plus no full source-content search), with
+potential omissions clearly disclosed. The selection is conservative and
+heuristic: if a relevant file was not selected, narrow the question or request
+a full review explicitly. Review prepares exact source excerpts for inspection,
+then requires a new per-selection consent before sending any source to Copilot.
+
+In Session configuration, **Context behavior** can be Smart, Text only, or Full
+project for every message. The Full override still requires explicit source
+approval on each request and may invoke numerous model calls. Before approval,
+the UI gives the **exact batch/model-call count**. AI Credit/currency cost is
+marked **unavailable** because this CLI provides no independently verified
+per-request credit usage; the system never derives actual billing from guesses.
+
+New chat messages store UTC ISO timestamps in existing local history and render
+the browser's local date and time. Older saved messages remain readable and
+are labeled without inventing timestamps. The scroll follows a gradually
+revealed answer when the reader is near the bottom, but pauses when the reader
+scrolls up and resumes upon returning to the bottom. The progressive display
+is **not actual provider token streaming**.
 
 ### Whole-project source review
 
